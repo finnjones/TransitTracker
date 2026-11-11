@@ -36,8 +36,14 @@ interface GtfsSource {
 }
 
 /**
- * Fetches bundles from the TfNSW Open Data Hub with `Authorization: apikey <key>` and
- * conditional requests (`If-None-Match` / `If-Modified-Since`). The key is never logged.
+ * Fetches bundles from the TfNSW Open Data Hub with `Authorization: apikey <key>`. The key is
+ * never logged.
+ *
+ * No conditional GET: TfNSW's gateway answers `502` instead of `304` to `If-Modified-Since` or
+ * `If-None-Match` when the bundle has not changed (checked on 11 Nov 2026, every bundle, every
+ * time). So with [validators][fetch] a `HEAD` asks for the bundle's `Last-Modified` / `ETag`
+ * first: the same as remembered is [FetchResult.NotModified]; anything else, or a failed `HEAD`,
+ * downloads the bundle with a plain `GET`.
  *
  * A temporary failure (`5xx`, `429`, or the connection dropping) is tried again after each of
  * [retryDelays]: TfNSW's gateway sometimes answers `502` to one request and serves the next.
@@ -59,10 +65,11 @@ class HttpGtfsSource(
     private val log = LoggerFactory.getLogger(HttpGtfsSource::class.java)
 
     override suspend fun fetch(path: String, validators: CacheValidators?, target: Path): FetchResult {
+        if (validators != null && unchanged(path, validators)) return FetchResult.NotModified
         var attempt = 0
         while (true) {
             try {
-                return fetchOnce(path, validators, target)
+                return fetchOnce(path, target)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
@@ -74,24 +81,48 @@ class HttpGtfsSource(
         }
     }
 
-    private suspend fun fetchOnce(path: String, validators: CacheValidators?, target: Path): FetchResult {
-        val request = HttpRequest.newBuilder(URI.create(baseUrl.trimEnd('/') + "/" + path.trimStart('/')))
-            .timeout(requestTimeout)
+    /**
+     * True when a `HEAD` shows the bundle still carries [validators] (its `ETag`, else its
+     * `Last-Modified`). False when it differs, the server gives neither, or the `HEAD` fails.
+     */
+    private suspend fun unchanged(path: String, validators: CacheValidators): Boolean {
+        val response = try {
+            client.sendAsync(
+                request(path).timeout(Duration.ofSeconds(60)).method("HEAD", HttpRequest.BodyPublishers.noBody()).build(),
+                HttpResponse.BodyHandlers.discarding(),
+            ).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            log.warn("HEAD of GTFS {} failed ({}); downloading it", path, e.message)
+            return false
+        }
+        if (response.statusCode() !in 200..299) {
+            log.warn("HEAD of GTFS {} answered HTTP {}; downloading it", path, response.statusCode())
+            return false
+        }
+        val etag = response.headers().firstValue("ETag").orElse(null)
+        val lastModified = response.headers().firstValue("Last-Modified").orElse(null)
+        return when {
+            etag != null && validators.etag != null -> etag == validators.etag
+            lastModified != null && validators.lastModified != null -> lastModified == validators.lastModified
+            else -> false
+        }
+    }
+
+    private fun request(path: String): HttpRequest.Builder =
+        HttpRequest.newBuilder(URI.create(baseUrl.trimEnd('/') + "/" + path.trimStart('/')))
             .header("Authorization", "apikey $apiKey")
             .header("User-Agent", "TransitTracker-server")
+
+    private suspend fun fetchOnce(path: String, target: Path): FetchResult {
+        val request = request(path)
+            .timeout(requestTimeout)
             .header("Accept", "application/zip, application/octet-stream, */*")
-            .apply {
-                validators?.etag?.let { header("If-None-Match", it) }
-                validators?.lastModified?.let { header("If-Modified-Since", it) }
-            }
             .GET()
             .build()
         val response = client.sendAsync(request, HttpResponse.BodyHandlers.ofFile(target)).await()
         return when (val status = response.statusCode()) {
-            304 -> {
-                Files.deleteIfExists(target)
-                FetchResult.NotModified
-            }
             in 200..299 -> FetchResult.Downloaded(
                 CacheValidators(
                     etag = response.headers().firstValue("ETag").orElse(null),

@@ -186,10 +186,28 @@ class PipelineTimetableRepositoryTest {
         val again = r.refresh()
         assertEquals("GTFS unchanged since the last failed build", again.failed["mini-rail"])
 
-        // A network failure is reported, too.
+        // A network failure falls back to the archived (bad) bundle: still not rebuilt.
         source.failNext = IOException("connection reset")
-        assertEquals("connection reset", r.refresh().failed["mini-rail"])
+        assertEquals("GTFS unchanged since the last failed build", r.refresh().failed["mini-rail"])
         assertEquals(good, r.packs().single())
+    }
+
+    @Test
+    fun aNetworkFailureWithNothingArchivedIsReported() = runTest {
+        source.put(path, fixtureZip, "\"v1\"")
+        source.failNext = IOException("connection reset")
+        assertEquals("connection reset", repo().refresh().failed["mini-rail"])
+    }
+
+    @Test
+    fun anArchivedBundleIsBuiltWhenTheSourceFails() = runTest {
+        // Downloaded once but never built (the server stopped, say), then TfNSW answers 502.
+        source.put(path, fixtureZip, "\"v1\"")
+        GtfsArchive(config.gtfsArchiveDir, options.archiveRetentionDays, clock).fetch(source, path)
+        source.failNext = IOException("HTTP 502 fetching GTFS $path")
+        val r = repo()
+        assertEquals(listOf("mini-rail"), r.refresh().rebuilt)
+        assertNotNull(r.current.value)
     }
 
     @Test

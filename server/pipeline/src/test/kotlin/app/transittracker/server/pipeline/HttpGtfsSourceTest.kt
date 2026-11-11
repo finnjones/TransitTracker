@@ -16,10 +16,23 @@ import kotlin.time.Duration.Companion.milliseconds
 class HttpGtfsSourceTest {
     private val requests = AtomicInteger()
     private var statuses = ArrayDeque<Int>()
+    private val methods = java.util.Collections.synchronizedList(ArrayList<String>())
+    private var lastModified = "Wed, 11 Nov 2026 09:52:40 GMT"
+    private var headStatus = 200
+
+    /** Like TfNSW's gateway: Last-Modified on every answer, and 502 (not 304) to any conditional GET. */
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { ex ->
+            methods += ex.requestMethod
+            ex.responseHeaders.add("Last-Modified", lastModified)
+            if (ex.requestMethod == "HEAD") {
+                ex.sendResponseHeaders(headStatus, -1)
+                ex.close()
+                return@createContext
+            }
             requests.incrementAndGet()
-            val status = statuses.removeFirstOrNull() ?: 200
+            val conditional = ex.requestHeaders.containsKey("If-Modified-Since") || ex.requestHeaders.containsKey("If-None-Match")
+            val status = if (conditional) 502 else statuses.removeFirstOrNull() ?: 200
             val body = if (status == 200) "zip bytes".toByteArray() else "Bad Gateway".toByteArray()
             ex.sendResponseHeaders(status, body.size.toLong())
             ex.responseBody.use { it.write(body) }
@@ -60,6 +73,29 @@ class HttpGtfsSourceTest {
         val e = assertFailsWith<HttpStatusException> { source.fetch("/x", null, target) }
         assertTrue("Bad Gateway" in e.message.orEmpty(), e.message)
         assertTrue("key" !in e.message.orEmpty().replace("Bad Gateway", ""), "the API key never appears")
+    }
+
+    @Test
+    fun anUnchangedBundleIsNotDownloadedAgain() = runTest {
+        val result = source.fetch("/v1/gtfs/schedule/buses", CacheValidators(null, lastModified), target)
+        assertIs<FetchResult.NotModified>(result)
+        assertEquals(listOf("HEAD"), methods.toList())
+    }
+
+    @Test
+    fun aChangedBundleIsDownloadedWithAPlainGet() = runTest {
+        val result = source.fetch("/v1/gtfs/schedule/buses", CacheValidators(null, "Tue, 10 Nov 2026 09:52:40 GMT"), target)
+        assertIs<FetchResult.Downloaded>(result)
+        assertEquals(lastModified, result.validators.lastModified)
+        assertEquals(listOf("HEAD", "GET"), methods.toList())
+        assertEquals(1, requests.get(), "no conditional GET, so no 502 and no retry")
+    }
+
+    @Test
+    fun aFailedHeadStillDownloads() = runTest {
+        headStatus = 502
+        assertIs<FetchResult.Downloaded>(source.fetch("/x", CacheValidators(null, lastModified), target))
+        assertEquals(listOf("HEAD", "GET"), methods.toList())
     }
 
     @Test

@@ -71,7 +71,8 @@ class GtfsArchive(private val dir: Path, private val retentionDays: Int, private
 
     /**
      * Conditionally fetches [path] from [source]. Returns the newest archived copy, flagged
-     * [ArchivedBundle.changed] when new bytes were stored.
+     * [ArchivedBundle.changed] when new bytes were stored. When the source fails but a copy is
+     * archived, that copy is returned (unchanged), so a pack can still be built from it.
      */
     suspend fun fetch(source: GtfsSource, path: String): ArchivedBundle {
         val previous = latest(path)
@@ -80,7 +81,14 @@ class GtfsArchive(private val dir: Path, private val retentionDays: Int, private
         Files.createDirectories(folder)
         val tmp = folder.resolve(".download-${UUID.randomUUID()}.tmp")
         try {
-            when (val result = source.fetch(path, validators, tmp)) {
+            val result = try {
+                source.fetch(path, validators, tmp)
+            } catch (e: IOException) {
+                if (previous == null) throw e
+                log.warn("Fetching GTFS {} failed ({}); using the archived copy {}", path, e.message, previous.file.name)
+                return previous
+            }
+            when (result) {
                 FetchResult.NotModified -> {
                     return previous ?: throw IOException("Source said $path is not modified but no archived copy exists")
                 }

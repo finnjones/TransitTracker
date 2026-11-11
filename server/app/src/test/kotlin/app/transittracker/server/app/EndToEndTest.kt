@@ -422,7 +422,7 @@ class EndToEndTest {
         val core = phoneCore(this, kv, files)
         core.start()
         assertIs<JoinResult.Joined>(core.join(newInvite()))
-        assertNotNull(core.checkForUpdates())
+        assertNotNull(core.updatePacks())
         core.onForeground()
         val detail = withTimeout(10_000) {
             core.service(app.transittracker.model.ServiceRef("M1.N.0705", DAY)).first { d -> d.calls.any { it.expectedArrivalMs != it.scheduledArrivalMs } }
@@ -494,7 +494,7 @@ class EndToEndTest {
             val core = phoneCore(this)
             core.start()
             assertIs<JoinResult.Joined>(core.join(newInvite()))
-            assertNotNull(core.checkForUpdates())
+            assertNotNull(core.updatePacks())
             core.saveTrip(
                 SavedTrip("late", "Central", "Chatswood", listOf(TripLeg(setOf("CEN_P1"), setOf("CHA_P1"), routeIds = setOf("T1")))),
             )
@@ -532,7 +532,7 @@ class EndToEndTest {
         val core = phoneCore(app)
         core.start()
         assertIs<JoinResult.Joined>(core.join(newInvite()))
-        val report = assertNotNull(core.checkForUpdates())
+        val report = assertNotNull(core.updatePacks())
         assertTrue(
             report.single().let { it is PackUpdateResult.Updated || it is PackUpdateResult.UpToDate },
             report.toString(),

@@ -120,7 +120,7 @@ class DefaultTransitCore internal constructor(
         poller.start()
         scope.launch {
             while (true) {
-                checkForUpdates()
+                updatePacks()
                 delay(config.packCheckIntervalMs)
             }
         }
@@ -134,7 +134,7 @@ class DefaultTransitCore internal constructor(
      * Fetches `/v1/config`, applies poll intervals and installs newer packs. Runs on start, every
      * [CoreConfig.packCheckIntervalMs] and after joining. Returns null when not joined or offline.
      */
-    suspend fun checkForUpdates(): List<PackUpdateResult>? = checkMutex.withLock {
+    suspend fun updatePacks(): List<PackUpdateResult>? = checkMutex.withLock {
         if (loadToken() == null) return null
         sendPendingPushToken()
         val result = api.config()
@@ -174,7 +174,7 @@ class DefaultTransitCore internal constructor(
                 tokenState.value = result.value.deviceToken
                 tokenLoaded.value = true
                 scope.launch {
-                    checkForUpdates()
+                    updatePacks()
                     refreshWatches()
                 }
                 JoinResult.Joined(result.value.deviceId)
@@ -376,7 +376,7 @@ class DefaultTransitCore internal constructor(
         .filterNotNull()
 
     /** Reloads watches from the server into the offline cache. Returns false if that failed. */
-    suspend fun refreshWatches(): Boolean {
+    override suspend fun refreshWatches(): Boolean {
         if (loadToken() == null) return false
         val result = api.watches()
         if (result !is ApiResult.Success) return false
@@ -470,6 +470,11 @@ class DefaultTransitCore internal constructor(
     override fun openFromNotification(data: Map<String, String>): ServiceRef? = parseNotification(data)
 
     // ---- Alarms ----
+
+    override suspend fun checkForUpdates(): Boolean = updatePacks() != null
+
+    // PART C: placeholder until alertsFor is implemented.
+    override fun alertsFor(tripId: String): Flow<List<Alert>> = TODO("alertsFor")
 
     override suspend fun nextAlarmTimes(alarm: AlarmSpec, count: Int): List<Long> {
         val trip = tripStore.get(alarm.savedTripId) ?: return emptyList()

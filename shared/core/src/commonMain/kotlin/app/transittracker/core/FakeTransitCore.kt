@@ -230,6 +230,11 @@ class FakeTransitCore(
 
     override fun openFromNotification(data: Map<String, String>): ServiceRef? = parseNotification(data)
 
+    // PART C: placeholders until implemented.
+    override fun alertsFor(tripId: String): Flow<List<Alert>> = TODO("alertsFor")
+    override suspend fun checkForUpdates(): Boolean = true
+    override suspend fun refreshWatches(): Boolean = true
+
     override suspend fun nextAlarmTimes(alarm: AlarmSpec, count: Int): List<Long> {
         val trip = tripsState.value.firstOrNull { it.id == alarm.savedTripId } ?: return emptyList()
         return alarmTimes(timetableData, trip, alarm, clock.nowMillis(), count)

@@ -1,0 +1,23 @@
+stop_id,stop_code,stop_name,stop_lat,stop_lon,location_type,parent_station,wheelchair_boarding,platform_code
+CEN,,Central Station,-33.8832,151.2063,1,,1,
+CEN_P1,,Central Station Platform 1,-33.8831,151.2064,0,CEN,,1
+CEN_P2,,Central Station Platform 2,-33.8833,151.2064,0,CEN,,2
+CEN_M1,,Central Station Metro Platform 1,-33.8831,151.2065,0,CEN,,M1
+CEN_M2,,Central Station Metro Platform 2,-33.8833,151.2065,0,CEN,,M2
+THL,,Town Hall Station,-33.8737,151.2069,1,,1,
+THL_P1,,Town Hall Station Platform 1,-33.8736,151.2070,0,THL,,1
+THL_P2,,Town Hall Station Platform 2,-33.8738,151.2070,0,THL,2,2
+WYN,,"Wynyard Station, York St",-33.8659,151.2059,1,,1,
+WYN_P1,,"Wynyard Station, York St Platform 1",-33.8658,151.2060,0,WYN,,1
+WYN_P2,,"Wynyard Station, York St Platform 2",-33.8660,151.2060,0,WYN,,2
+MPL,,Martin Place Station,-33.8677,151.2101,1,,1,
+MPL_P1,,Martin Place Station Platform 1,-33.8676,151.2102,0,MPL,,1
+MPL_P2,,Martin Place Station Platform 2,-33.8678,151.2102,0,MPL,,2
+NSY,,North Sydney Station,-33.8406,151.2073,1,,1,
+NSY_P1,,North Sydney Station Platform 1,-33.8405,151.2074,0,NSY,,1
+NSY_P2,,North Sydney Station Platform 2,-33.8407,151.2074,0,NSY,,2
+CHA,,Chatswood Station,-33.7969,151.1803,1,,1,
+CHA_P1,,Chatswood Station Platform 1,-33.7968,151.1804,0,CHA,,1
+CHA_P2,,Chatswood Station Platform 2,-33.7970,151.1804,0,CHA,,2
+CHA_M1,,Chatswood Station Metro Platform 1,-33.7968,151.1805,0,CHA,,M1
+CHA_M2,,Chatswood Station Metro Platform 2,-33.7970,151.1805,0,CHA,,M2

@@ -246,3 +246,6 @@ Patterns to adopt from TripView:
 - Which modes and regions are in the first release?
 - Is on-device journey search needed, or are saved stop-to-stop trips enough
   for version one?
+
+The detailed backend design (cloud service and shared on-device core) is in
+[transittracker-backend-plan.md](transittracker-backend-plan.md).

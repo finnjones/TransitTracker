@@ -1,0 +1,62 @@
+// Transport for NSW extensions to GTFS-Realtime (extension number 1007).
+//
+// PROVENANCE (read proto/README.md): the TfNSW dataset page that links the official
+// extension file was not reachable from the build environment. The declarations below
+// were transcribed from two independent public copies of the TfNSW file, which agree on
+// every field number and wire type used here:
+//   - jaboles/DVA5 PlasmaCommon/src/jb/plasma/gtfs/gtfs-realtime_1007_extension.proto
+//     (a copy of TfNSW's own "gtfs-realtime_1007_extension.proto")
+//   - ksharma-xyz/KRAIL-BFF server/src/main/proto/nsw/tfnsw-gtfs-realtime.proto
+//     (field numbers verified empirically against live NSW feeds)
+// Only the extensions this project reads are declared. `position_in_consist` is declared
+// optional (TfNSW marks it required) so a missing value cannot fail the whole feed.
+// VERIFY against the file on the TfNSW "Public Transport - Realtime Vehicle Positions v2"
+// dataset page before relying on it; field numbers are the contract, names are not.
+
+syntax = "proto2";
+
+package transit_realtime;
+
+import "gtfs-realtime.proto";
+
+option java_package = "com.google.transit.realtime";
+
+// Extra vehicle attributes published by TfNSW.
+message TfnswVehicleDescriptor {
+  optional bool air_conditioned = 1 [default = false];
+  optional int32 wheelchair_accessible = 2 [default = 0];
+  optional string vehicle_model = 3;
+  optional bool performing_prior_trip = 4 [default = false];
+  optional int32 special_vehicle_attributes = 5 [default = 0];
+}
+
+// One carriage of a train consist (Sydney Trains / Metro vehicle positions).
+message CarriageDescriptor {
+  optional string name = 1;
+  optional int32 position_in_consist = 2;
+  enum OccupancyStatus {
+    EMPTY = 0;
+    MANY_SEATS_AVAILABLE = 1;
+    FEW_SEATS_AVAILABLE = 2;
+    STANDING_ROOM_ONLY = 3;
+    CRUSHED_STANDING_ROOM_ONLY = 4;
+    FULL = 5;
+  }
+  optional OccupancyStatus occupancy_status = 3;
+  optional bool quiet_carriage = 4 [default = false];
+  enum ToiletStatus {
+    NONE = 0;
+    NORMAL = 1;
+    ACCESSIBLE = 2;
+  }
+  optional ToiletStatus toilet = 5;
+  optional bool luggage_rack = 6 [default = false];
+}
+
+extend transit_realtime.VehiclePosition {
+  repeated CarriageDescriptor consist = 1007;
+}
+
+extend transit_realtime.VehicleDescriptor {
+  optional TfnswVehicleDescriptor tfnsw_vehicle_descriptor = 1007;
+}

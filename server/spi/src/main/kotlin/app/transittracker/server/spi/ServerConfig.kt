@@ -42,6 +42,12 @@ data class ServerConfig(
      * (local development without an API key). See `ReplayFetcher` in `:server:live`.
      */
     val replayDir: Path? = null,
+    /**
+     * Reverse proxy in front of tt-server whose client-address header can be trusted.
+     * [TrustedProxy.CLOUDFLARE]: requests arrive only through a Cloudflare Tunnel (cloudflared),
+     * so `CF-Connecting-IP` holds the real client address.
+     */
+    val trustedProxy: TrustedProxy = TrustedProxy.NONE,
 ) {
     val dbPath: Path get() = dataDir.resolve("tt-server.db")
     val packsDir: Path get() = dataDir.resolve("packs")
@@ -73,8 +79,22 @@ data class ServerConfig(
                 recordIntervalMinutes = env["TT_RECORD_INTERVAL_MIN"]?.toInt() ?: d.recordIntervalMinutes,
                 recordRetentionDays = env["TT_RECORD_RETENTION_DAYS"]?.toInt() ?: d.recordRetentionDays,
                 replayDir = env["TT_REPLAY_DIR"]?.let { Paths.get(it) },
+                trustedProxy = env["TT_TRUSTED_PROXY"]?.let { TrustedProxy.parse(it) } ?: d.trustedProxy,
             )
         }
+    }
+}
+
+/** See [ServerConfig.trustedProxy]. */
+enum class TrustedProxy {
+    NONE,
+    CLOUDFLARE,
+    ;
+
+    companion object {
+        fun parse(value: String): TrustedProxy =
+            entries.firstOrNull { it.name.equals(value.trim(), ignoreCase = true) }
+                ?: throw IllegalArgumentException("TT_TRUSTED_PROXY must be one of ${entries.joinToString { it.name.lowercase() }}")
     }
 }
 

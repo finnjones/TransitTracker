@@ -28,6 +28,7 @@ import app.transittracker.server.spi.NotificationLog
 import app.transittracker.server.spi.PushResult
 import app.transittracker.server.spi.ServerConfig
 import app.transittracker.server.spi.TimetableRepository
+import app.transittracker.server.spi.TrustedProxy
 import app.transittracker.server.spi.WatchService
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -273,18 +274,27 @@ private fun ApplicationCall.livePollHeaders(config: ServerConfig) {
 }
 
 /**
- * The client IP for per-IP limits. tt-server sits behind Tailscale Funnel (a reverse proxy on
- * the same network namespace), which sets `X-Forwarded-For`; it is only trusted when the direct
- * peer is loopback.
+ * The client IP for per-IP limits.
+ *
+ * - Behind Cloudflare Tunnel (`TT_TRUSTED_PROXY=cloudflare`) every request reaches tt-server from
+ *   the cloudflared container, and Cloudflare sets `CF-Connecting-IP` to the real client address.
+ *   This is only safe because tt-server publishes no ports: the tunnel is the only way in.
+ * - Behind a reverse proxy on loopback (e.g. Tailscale Funnel in the same network namespace),
+ *   `X-Forwarded-For` is trusted only when the direct peer is loopback.
  */
-fun ApplicationCall.clientIp(): String {
+fun ApplicationCall.clientIp(trustedProxy: TrustedProxy = TrustedProxy.NONE): String {
     val peer = request.local.remoteAddress
+    if (trustedProxy == TrustedProxy.CLOUDFLARE) {
+        request.header(CF_CONNECTING_IP)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+    }
     if (isLoopback(peer)) {
         request.header(HttpHeaders.XForwardedFor)?.split(',')?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
             ?.let { return it }
     }
     return peer
 }
+
+const val CF_CONNECTING_IP = "CF-Connecting-IP"
 
 /**
  * True if the request came straight from this machine, not through a proxy such as Tailscale
@@ -296,7 +306,7 @@ fun ApplicationCall.isDirectLocalRequest(): Boolean {
     if (!isLoopback(request.local.remoteAddress)) return false
     val proxied = listOf(
         HttpHeaders.XForwardedFor, HttpHeaders.XForwardedHost, HttpHeaders.Forwarded, "X-Real-IP",
-        "Tailscale-Funnel-Request",
+        "Tailscale-Funnel-Request", CF_CONNECTING_IP, "CF-Ray",
     ).any { request.header(it) != null }
     if (proxied) return false
     val host = request.header(HttpHeaders.Host)?.substringBeforeLast(':')?.removeSurrounding("[", "]") ?: return true
@@ -309,7 +319,7 @@ private fun isLoopback(address: String): Boolean =
 // ---- handlers --------------------------------------------------------------------------------
 
 private suspend fun join(call: ApplicationCall, deps: ApiDependencies) {
-    call.rateLimit(deps.limits.join, call.clientIp())
+    call.rateLimit(deps.limits.join, call.clientIp(deps.config.trustedProxy))
     val request = call.receivePayload(JoinRequest.serializer())
     val response = io { deps.devices.join(request.inviteCode, request.platform, request.appVersion) }
     call.respondPayload(JoinResponse.serializer(), response)

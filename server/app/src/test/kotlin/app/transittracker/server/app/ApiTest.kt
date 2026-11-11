@@ -20,6 +20,7 @@ import app.transittracker.model.WatchDto
 import app.transittracker.model.WatchesResponse
 import app.transittracker.server.spi.PushResult
 import app.transittracker.server.spi.ServerConfig
+import app.transittracker.server.spi.TrustedProxy
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -162,6 +163,39 @@ class ApiTest {
             assertNotNull(it.headers[HttpHeaders.RetryAfter])
         }
         assertEquals(HttpStatusCode.Forbidden, join("203.0.113.6").status)
+    }
+
+    @Test
+    fun `behind cloudflare tunnel join is rate limited per CF-Connecting-IP`() = testApplication {
+        val cloudflare = config.copy(trustedProxy = TrustedProxy.CLOUDFLARE)
+        application { transitTrackerApi(ApiDependencies(cloudflare, devices, notifications, timetables, live, watches, clock)) }
+        suspend fun join(ip: String) = client.post("/v1/join") {
+            header(CF_CONNECTING_IP, ip)
+            contentType(ContentType.Application.Json)
+            setBody("""{"inviteCode":"ZZZZ-ZZZZ"}""")
+        }
+        repeat(5) { assertEquals(HttpStatusCode.Forbidden, join("198.51.100.7").status) }
+        assertEquals(HttpStatusCode.TooManyRequests, join("198.51.100.7").status)
+        // A different person behind the same tunnel is not affected.
+        assertEquals(HttpStatusCode.Forbidden, join("198.51.100.8").status)
+    }
+
+    @Test
+    fun `CF-Connecting-IP is ignored unless cloudflare is the trusted proxy`() = api {
+        suspend fun join(ip: String) = client.post("/v1/join") {
+            header(CF_CONNECTING_IP, ip)
+            contentType(ContentType.Application.Json)
+            setBody("""{"inviteCode":"ZZZZ-ZZZZ"}""")
+        }
+        repeat(5) { i -> assertEquals(HttpStatusCode.Forbidden, join("198.51.100.${i + 20}").status) }
+        // Spoofed addresses don't create fresh buckets: all six requests share the peer's bucket.
+        assertEquals(HttpStatusCode.TooManyRequests, join("198.51.100.99").status)
+    }
+
+    @Test
+    fun `status is not treated as local when it arrives through cloudflare`() = api {
+        val response = client.get("/status") { header(CF_CONNECTING_IP, "198.51.100.7") }
+        assertEquals(HttpStatusCode.Forbidden, response.status)
     }
 
     @Test

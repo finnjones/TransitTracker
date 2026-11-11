@@ -110,6 +110,7 @@ SeatPips(occupancy, modifier, showWords = true)  // nothing for UNKNOWN
 CarCount(cars, modifier, diagram = true)
 Countdown(text: CountdownText, modifier, size = CountdownSize.XL76, color)
 CountBadge(count)
+DataChipBox(kind: DataChipKind /* LIVE | STALE | TIMETABLE | OFFLINE */, ageMs = null, modifier)   // header chip
 PixelIcon(icon: PixelIconData, modifier, tint, size: Dp? = null /* null: 1 dot per cell */, contentDescription = null)
 PixelIcons.{LampCircle, LampTriangle, LampCross, LampPlus, LampRing, Plus, Minus, Swap, Locate,
             ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Train, MapPin, Warning, Bell, Sliders, Info, House, Briefcase, Pin}

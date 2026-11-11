@@ -45,6 +45,8 @@ import app.transittracker.ui.components.BadgeStyle
 import app.transittracker.ui.components.ButtonKind
 import app.transittracker.ui.components.Countdown
 import app.transittracker.ui.components.CountdownSize
+import app.transittracker.ui.components.DataChipBox
+import app.transittracker.ui.components.DataChipKind
 import app.transittracker.ui.components.DashedDivider
 import app.transittracker.ui.components.Digits
 import app.transittracker.ui.components.Label
@@ -191,33 +193,11 @@ private fun HomeHeader(state: HomeUiState, actions: HomeActions, modifier: Modif
 }
 
 @Composable
-private fun DataChipView(chip: DataChip) {
-    val c = TtTheme.colors
-    val dot = TtTheme.dot
-    val (lamp, role, word, extra, spoken) = when (chip) {
-        is DataChip.Live -> {
-            val age = chip.ageMs?.let { if (it < 5_000) "NOW" else ageWords(it) }
-            ChipLook(Lamp.CIRCLE, ColorRole.GO, "LIVE", age, "Live data" + (chip.ageMs?.let { ", updated ${ageSpoken(it)} ago" } ?: ""))
-        }
-        DataChip.Stale -> ChipLook(Lamp.RING, ColorRole.SECONDARY, "STALE", null, "Live data is stale")
-        DataChip.Offline -> ChipLook(Lamp.RING, ColorRole.INFO, "OFFLINE", null, "Offline, showing the timetable")
-    }
-    Row(
-        Modifier
-            .clearAndSetSemantics { contentDescription = spoken }
-            .pixelFill(c.panel)
-            .pixelBorder(c.divider)
-            .padding(horizontal = dot.dp + 8.dp, vertical = dot.dp + 7.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        StatusLamp(lamp, c.of(role), size = 12.dp)
-        Label(word, color = c.of(role), bold = true)
-        if (extra != null) Label(extra, color = c.textSecondary)
-    }
+private fun DataChipView(chip: DataChip) = when (chip) {
+    is DataChip.Live -> DataChipBox(DataChipKind.LIVE, chip.ageMs)
+    DataChip.Stale -> DataChipBox(DataChipKind.STALE)
+    DataChip.Offline -> DataChipBox(DataChipKind.OFFLINE)
 }
-
-private data class ChipLook(val lamp: Lamp, val role: ColorRole, val word: String, val extra: String?, val spoken: String)
 
 // ---------------------------------------------------------------- banners
 

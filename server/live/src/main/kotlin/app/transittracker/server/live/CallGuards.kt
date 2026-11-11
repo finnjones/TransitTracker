@@ -182,11 +182,19 @@ class TfnswQuota(
         /** File in [ServerConfig.dataDir] holding today's TfNSW call count (all endpoints). */
         const val CALL_COUNTER_FILE: String = "live-calls-today.txt"
 
+        /**
+         * The per-second limiter for TfNSW: evenly spaced calls, no burst. TfNSW's gateway enforces
+         * its 5/s like a spike arrest (one call per 200 ms), not per calendar second: on 11 Nov 2026
+         * a burst of three calls within 60 ms got HTTP 429 although only six were made that second.
+         */
+        fun rateLimiter(perSecond: Int, nanoTime: () -> Long = System::nanoTime): RateLimiter =
+            RateLimiter(perSecond, burst = 1, nanoTime = nanoTime)
+
         /** The quota from [config]: [ServerConfig.dailyCallBudget] and [ServerConfig.maxCallsPerSecond]. */
         fun fromConfig(
             config: ServerConfig,
             clock: WallClock,
-            rateLimiter: RateLimiter = RateLimiter(config.maxCallsPerSecond),
+            rateLimiter: RateLimiter = rateLimiter(config.maxCallsPerSecond),
         ): TfnswQuota = TfnswQuota(
             budget = DailyCallBudget(config.dailyCallBudget, config.dataDir.resolve(CALL_COUNTER_FILE), clock),
             rateLimiter = rateLimiter,

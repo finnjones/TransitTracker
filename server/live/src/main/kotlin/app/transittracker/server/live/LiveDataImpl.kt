@@ -71,7 +71,7 @@ class LiveDataImpl(
     private val recorder: FeedRecorder? = config.recordIntervalMinutes.takeIf { it > 0 }?.let {
         FeedRecorder(config.recordingsDir, clock, minIntervalMs = it * 60_000L, retentionDays = config.recordRetentionDays)
     },
-    rateLimiter: RateLimiter = RateLimiter(config.maxCallsPerSecond),
+    rateLimiter: RateLimiter = TfnswQuota.rateLimiter(config.maxCallsPerSecond),
     private val quota: TfnswQuota = TfnswQuota.fromConfig(config, clock, rateLimiter),
     private val backoff: BackoffPolicy = BackoffPolicy(),
     private val retryDelayMs: Long = 5_000,
@@ -311,7 +311,7 @@ class LiveDataImpl(
             }
             is FetchResult.Success -> {
                 val message = try {
-                    FeedMessage.ADAPTER.decode(result.bytes)
+                    FeedMessage.ADAPTER.decode(TfnswWireFixes.normalise(result.bytes))
                 } catch (e: Exception) {
                     onFailure(source, 200, "undecodable feed: $e", fetchedAt)
                     return Refresh.FAILED

@@ -174,8 +174,8 @@ private fun RouteCard(row: RouteRow, actions: ManageRoutesActions, modifier: Mod
                 }
             }
             Column {
-                PixelIconButton(MoveIcons.Up, row.upWords + ": " + row.spokenName, { actions.move(row.id, -1) }, enabled = row.canMoveUp, iconSize = 14.dp)
-                PixelIconButton(MoveIcons.Down, row.downWords + ": " + row.spokenName, { actions.move(row.id, 1) }, enabled = row.canMoveDown, iconSize = 14.dp)
+                PixelIconButton(PixelIcons.ChevronUp, row.upWords + ": " + row.spokenName, { actions.move(row.id, -1) }, enabled = row.canMoveUp, iconSize = 14.dp)
+                PixelIconButton(PixelIcons.ChevronDown, row.downWords + ": " + row.spokenName, { actions.move(row.id, 1) }, enabled = row.canMoveDown, iconSize = 14.dp)
             }
         }
     }

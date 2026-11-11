@@ -200,8 +200,8 @@ private fun ReorderCard(card: PlaceCard, canUp: Boolean, canDown: Boolean, actio
                 PixelText(card.name, style = TtTheme.type.name17, maxLines = 1)
                 PixelText(card.address, style = TtTheme.type.reading15, color = c.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            PixelIconButton(MoveIcons.Up, "Move ${card.name} up", { actions.move(card.id, -1) }, enabled = canUp, iconSize = 14.dp)
-            PixelIconButton(MoveIcons.Down, "Move ${card.name} down", { actions.move(card.id, 1) }, enabled = canDown, iconSize = 14.dp)
+            PixelIconButton(PixelIcons.ChevronUp, "Move ${card.name} up", { actions.move(card.id, -1) }, enabled = canUp, iconSize = 14.dp)
+            PixelIconButton(PixelIcons.ChevronDown, "Move ${card.name} down", { actions.move(card.id, 1) }, enabled = canDown, iconSize = 14.dp)
         }
     }
 }

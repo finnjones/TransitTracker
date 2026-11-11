@@ -1,0 +1,227 @@
+{
+ "version": "10.6.21.17",
+ "locations": [
+  {
+   "id": "CEN",
+   "isGlobalId": true,
+   "name": "Central Station, Sydney",
+   "disassembledName": "Central Station",
+   "coord": [
+    -33.8832,
+    151.2063
+   ],
+   "type": "stop",
+   "matchQuality": 950,
+   "isBest": true,
+   "modes": [
+    1,
+    2
+   ],
+   "productClasses": [
+    1,
+    2
+   ],
+   "parent": {
+    "id": "placeID:95301160:1",
+    "name": "Sydney",
+    "type": "locality"
+   },
+   "properties": {
+    "stopId": "10101100"
+   }
+  },
+  {
+   "id": "CHA",
+   "isGlobalId": true,
+   "name": "Chatswood Station, Chatswood",
+   "disassembledName": "Chatswood Station",
+   "coord": [
+    -33.7969,
+    151.1803
+   ],
+   "type": "stop",
+   "matchQuality": 940,
+   "isBest": false,
+   "modes": [
+    1,
+    2
+   ],
+   "productClasses": [
+    1,
+    2
+   ],
+   "parent": {
+    "id": "placeID:95301849:1",
+    "name": "Chatswood",
+    "type": "locality"
+   },
+   "properties": {
+    "stopId": "10101100"
+   }
+  },
+  {
+   "id": "NSY",
+   "isGlobalId": true,
+   "name": "North Sydney Station, North Sydney",
+   "disassembledName": "North Sydney Station",
+   "coord": [
+    -33.8406,
+    151.2073
+   ],
+   "type": "stop",
+   "matchQuality": 930,
+   "isBest": false,
+   "modes": [
+    1,
+    5
+   ],
+   "productClasses": [
+    1,
+    5
+   ],
+   "parent": {
+    "id": "placeID:95301771:1",
+    "name": "North Sydney",
+    "type": "locality"
+   },
+   "properties": {
+    "stopId": "10101100"
+   }
+  },
+  {
+   "id": "THL",
+   "isGlobalId": true,
+   "name": "Town Hall Station, Sydney",
+   "disassembledName": "Town Hall Station",
+   "coord": [
+    -33.8737,
+    151.2069
+   ],
+   "type": "stop",
+   "matchQuality": 920,
+   "isBest": false,
+   "modes": [
+    1
+   ],
+   "productClasses": [
+    1
+   ],
+   "parent": {
+    "id": "placeID:95301160:1",
+    "name": "Sydney",
+    "type": "locality"
+   },
+   "properties": {
+    "stopId": "10101100"
+   }
+  },
+  {
+   "id": "WYN",
+   "isGlobalId": true,
+   "name": "Wynyard Station, York St, Sydney",
+   "disassembledName": "Wynyard Station",
+   "coord": [
+    -33.8659,
+    151.2059
+   ],
+   "type": "stop",
+   "matchQuality": 910,
+   "isBest": false,
+   "modes": [
+    1
+   ],
+   "productClasses": [
+    1
+   ],
+   "parent": {
+    "id": "placeID:95301160:1",
+    "name": "Sydney",
+    "type": "locality"
+   },
+   "properties": {
+    "stopId": "10101100"
+   }
+  },
+  {
+   "id": "MPL",
+   "isGlobalId": true,
+   "name": "Martin Place Station, Sydney",
+   "disassembledName": "Martin Place Station",
+   "coord": [
+    -33.8677,
+    151.2101
+   ],
+   "type": "stop",
+   "matchQuality": 900,
+   "isBest": false,
+   "modes": [
+    2
+   ],
+   "productClasses": [
+    2
+   ],
+   "parent": {
+    "id": "placeID:95301160:1",
+    "name": "Sydney",
+    "type": "locality"
+   },
+   "properties": {
+    "stopId": "10101100"
+   }
+  },
+  {
+   "id": "streetID:1500000001:0:95301001:-1:Eddy Ave:Haymarket",
+   "isGlobalId": false,
+   "name": "Eddy Ave, Haymarket",
+   "disassembledName": "Eddy Ave",
+   "coord": [
+    -33.8843,
+    151.2073
+   ],
+   "type": "street",
+   "matchQuality": 800,
+   "isBest": false,
+   "parent": {
+    "id": "placeID:95302480:1",
+    "name": "Haymarket",
+    "type": "locality"
+   }
+  },
+  {
+   "id": "streetID:1500000002:0:95308100:-1:Miller St:Cammeray",
+   "isGlobalId": false,
+   "name": "Miller St, Cammeray",
+   "disassembledName": "Miller St",
+   "coord": [
+    -33.822,
+    151.211
+   ],
+   "type": "street",
+   "matchQuality": 790,
+   "isBest": false,
+   "parent": {
+    "id": "placeID:95302070:1",
+    "name": "Cammeray",
+    "type": "locality"
+   }
+  },
+  {
+   "id": "poiID:50001:95301001:-1:Central Park Mall:Chippendale",
+   "isGlobalId": false,
+   "name": "Central Park Mall, Chippendale",
+   "disassembledName": "Central Park Mall",
+   "coord": [
+    -33.8844,
+    151.2006
+   ],
+   "type": "poi",
+   "matchQuality": 700,
+   "isBest": false,
+   "parent": {
+    "id": "placeID:95302156:1",
+    "name": "Chippendale",
+    "type": "locality"
+   }
+  }
+ ]
+}

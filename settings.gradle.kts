@@ -23,4 +23,5 @@ include(":server:spi")        // server-internal interfaces and config shared by
 include(":server:pipeline")   // nightly GTFS fetch/validate -> timetable pack builder
 include(":server:live")       // fetch-on-demand GTFS-R cache, decoding, matching
 include(":server:watch")      // watch engine + FCM sender
+include(":server:planner")    // journey planning via TfNSW's Trip Planner: /v1/places, /v1/plan
 include(":server:app")        // Ktor HTTP API, SQLite state, invites, tt-admin, wiring

@@ -69,6 +69,7 @@ class SettingsActions(
     val allow: () -> Unit = {},
     val openPhoneSettings: () -> Unit = {},
     val sendTest: () -> Unit = {},
+    val checkNow: () -> Unit = {},
     val openLicences: () -> Unit = {},
     val closeLicences: () -> Unit = {},
     val openDebugGallery: () -> Unit = {},
@@ -98,6 +99,7 @@ fun SettingsScreen() {
             allow = holder::allowNotifications,
             openPhoneSettings = holder::openPhoneSettings,
             sendTest = holder::sendTest,
+            checkNow = holder::checkNow,
             openLicences = { licences = true },
             closeLicences = { licences = false },
             openDebugGallery = { nav.push(Route.DebugGallery) },
@@ -130,7 +132,7 @@ fun SettingsContent(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             item(key = "places") { Group(SettingsGroup.PLACES, 1) { PlacesGroup(state, actions) } }
-            item(key = "data") { Group(SettingsGroup.DATA, 2) { DataGroup(state) } }
+            item(key = "data") { Group(SettingsGroup.DATA, 2) { DataGroup(state, actions) } }
             item(key = "display") { Group(SettingsGroup.DISPLAY, 3) { DisplayGroup(state, actions) } }
             item(key = "notifications") { Group(SettingsGroup.NOTIFICATIONS, 4) { NotificationsGroup(state, actions) } }
             item(key = "about") { Group(SettingsGroup.ABOUT, 5) { AboutGroup(state, actions) } }
@@ -228,7 +230,7 @@ fun countWords(n: Int, noun: String): String = when (n) {
 // ---------------------------------------------------------------- data
 
 @Composable
-private fun DataGroup(state: SettingsUiState) {
+private fun DataGroup(state: SettingsUiState, actions: SettingsActions) {
     val c = TtTheme.colors
     val data = state.data
     StateLine(data.live.lamp, data.live.role, data.live.headline, data.live.lastUpdate)
@@ -256,6 +258,14 @@ private fun DataGroup(state: SettingsUiState) {
             }
             PixelText("${pack.version}. ${pack.validTo}.", style = TtTheme.type.reading15, color = c.textSecondary)
         }
+    }
+    if (data.problem != null || data.packs.any { it.state == PackState.MISSING || it.state == PackState.OUT_OF_DATE }) {
+        DashedDivider()
+        data.problem?.let { PixelText(it, Modifier.padding(top = 8.dp, bottom = 8.dp), TtTheme.type.reading15, c.caution) }
+        PixelButton(
+            if (data.checking) "CHECKING..." else "CHECK NOW", actions.checkNow,
+            Modifier.fillMaxWidth(), enabled = !data.checking, kind = ButtonKind.SECONDARY, style = TtTheme.type.label11Bold,
+        )
     }
     if (data.attribution.isNotBlank()) {
         DashedDivider()

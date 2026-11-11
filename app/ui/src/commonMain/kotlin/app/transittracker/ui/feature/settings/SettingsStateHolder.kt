@@ -37,6 +37,10 @@ data class DataSectionState(
     val attribution: String = "",
     /** The server's own message, if it has one. */
     val message: String? = null,
+    /** Why the timetable has not arrived (server has none, download failed, not joined...). */
+    val problem: String? = null,
+    /** CHECK NOW is running. */
+    val checking: Boolean = false,
 )
 
 /** SEND TEST: nothing yet, working, or the result line. */
@@ -77,6 +81,7 @@ class SettingsStateHolder(
     private val tickMs: Long = 15_000,
 ) : StateHolder<SettingsUiState>(scope) {
     private val test = MutableStateFlow(TestState())
+    private val checking = MutableStateFlow(false)
 
     private val ticker: Flow<Long> = flow {
         while (true) {
@@ -100,7 +105,7 @@ class SettingsStateHolder(
         platform.notificationPermission, platform.batterySaver, platform.systemReduceMotion, platform.deviceId,
     ) { p, b, m, id -> Phone(p, b, m, id) }
 
-    override val state: StateFlow<SettingsUiState> = combine(dataInputs, settings.settings, phone, test) { d, ui, ph, t ->
+    override val state: StateFlow<SettingsUiState> = combine(dataInputs, settings.settings, phone, test, checking) { d, ui, ph, t, chk ->
         val status = d.status
         SettingsUiState(
             loaded = true,
@@ -111,6 +116,9 @@ class SettingsStateHolder(
                 packs = status?.packs.orEmpty().map { packRow(it, today(d.now, zone)) },
                 attribution = status?.attribution.orEmpty(),
                 message = status?.statusMessage?.takeIf { it.isNotBlank() },
+                problem = status?.timetableProblem?.takeIf { it.isNotBlank() }
+                    ?: if (status != null && !status.joined) "This phone has not joined a server yet, so there is no timetable to download." else null,
+                checking = chk,
             ),
             display = ui,
             systemReduceMotion = ph.systemMotion,
@@ -124,6 +132,19 @@ class SettingsStateHolder(
     }.distinctUntilChanged().stateIn(
         scope, SharingStarted.Eagerly, SettingsUiState(appVersion = platform.appVersion, debugBuild = platform.isDebugBuild),
     )
+
+    /** CHECK NOW: ask the server for the timetable again. */
+    fun checkNow() {
+        if (checking.value) return
+        scope.launch {
+            checking.value = true
+            try {
+                core.checkForUpdates()
+            } finally {
+                checking.value = false
+            }
+        }
+    }
 
     // ---- display: every change is stored at once
 

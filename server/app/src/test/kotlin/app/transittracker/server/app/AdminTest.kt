@@ -64,11 +64,39 @@ class AdminTest {
     }
 
     @Test
-    fun `bad usage exits with 2 and import-gtfs is a placeholder`() {
+    fun `bad usage exits with 2`() {
         assertEquals(2, run().first)
         assertEquals(2, run("frobnicate").first)
         assertEquals(2, run("invite", "--expires-days", "soon").first)
         assertEquals(2, run("import-gtfs").first)
-        assertEquals(3, run("import-gtfs", "syd-rail", "a.zip").first)
+        assertEquals(2, run("import-gtfs", "../evil", "a.zip").first)
+        assertEquals(1, run("import-gtfs", "syd-rail", dir.resolve("missing.zip").toString()).first)
+    }
+
+    @Test
+    fun `import-gtfs builds and publishes a pack from a GTFS directory`() {
+        clock.now = java.time.Instant.parse("2026-11-10T16:00:00Z").toEpochMilli() // 03:00 Wed 11 Nov, Sydney
+        val (code, output) = run("import-gtfs", "syd-rail", Fixtures.miniRail.toString())
+        assertEquals(0, code, output)
+        assertContains(output, "Published timetable pack syd-rail/20261111T0300")
+        assertTrue(config.packsDir.resolve("syd-rail").exists())
+
+        // Importing the same input again publishes a new version next to it.
+        val (again, output2) = run("import-gtfs", "syd-rail", Fixtures.miniRail.toString())
+        assertEquals(0, again, output2)
+        assertContains(output2, "syd-rail/20261111T0300-2")
+    }
+
+    @Test
+    fun `import-gtfs reports invalid GTFS and publishes nothing`() {
+        val broken = createTempDirectory("tt-broken-gtfs")
+        try {
+            java.nio.file.Files.writeString(broken.resolve("agency.txt"), "agency_id,agency_name\nX,Broken\n")
+            val (code, output) = run("import-gtfs", "syd-rail", broken.toString())
+            assertEquals(1, code, output)
+            assertContains(output, "syd-rail")
+        } finally {
+            broken.toFile().deleteRecursively()
+        }
     }
 }

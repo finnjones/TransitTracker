@@ -2,8 +2,13 @@ package app.transittracker.server.app
 
 import app.transittracker.model.WallClock
 import app.transittracker.model.WatchKind
+import app.transittracker.server.pipeline.PackBuildException
+import app.transittracker.server.pipeline.PackStore
+import app.transittracker.server.pipeline.PipelineOptions
+import app.transittracker.server.pipeline.PipelineTimetableRepository
 import app.transittracker.server.spi.ServerConfig
 import java.io.PrintStream
+import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.system.exitProcess
 
@@ -18,9 +23,11 @@ Commands:
   notifications [--limit N]                 Recent push notifications (default 50)
   prune                                     Delete devices unseen for 90 days, old logs and invites
   backup <file>                             Write a consistent copy of the database to <file>
-  import-gtfs <pack> <zip...>               Build a timetable pack from local GTFS zips (not yet available)
+  import-gtfs <pack> <zip-or-dir...>        Build and publish a timetable pack from local GTFS zips or
+                                            directories of GTFS .txt files (e.g. syd-rail)
 
-Reads TT_DATA_DIR like tt-server; safe to run while the server is running."""
+Reads TT_DATA_DIR like tt-server; safe to run while the server is running (a running server
+loads a pack imported this way at its next start)."""
 
 /** `tt-admin` entry point. Operates directly on the SQLite database. */
 fun main(args: Array<String>) {
@@ -42,7 +49,7 @@ fun runAdmin(
     }
     val rest = args.drop(1)
     return try {
-        if (command == "import-gtfs") return importGtfs(rest, err)
+        if (command == "import-gtfs") return importGtfs(rest, config, out, err, clock)
         Database.open(config.dbPath).use { db -> runDbCommand(command, rest, db, out, clock) }
     } catch (e: UsageException) {
         err.println("tt-admin: ${e.message}")
@@ -135,12 +142,33 @@ private fun runDbCommand(command: String, args: List<String>, db: Database, out:
     return 0
 }
 
-private fun importGtfs(args: List<String>, err: PrintStream): Int {
-    if (args.size < 2) throw UsageException("import-gtfs needs a pack name and at least one GTFS zip")
-    // INTEGRATION: call the :server:pipeline pack builder here once merged, e.g.
-    //   PackBuilder(config).buildFromZips(packName = args[0], zips = args.drop(1).map(Paths::get))
-    err.println("import-gtfs is not available in this build yet")
-    return 3
+private fun importGtfs(args: List<String>, config: ServerConfig, out: PrintStream, err: PrintStream, clock: WallClock): Int {
+    if (args.size < 2) throw UsageException("import-gtfs needs a pack name and at least one GTFS zip or directory")
+    val packName = args[0]
+    if (!PackStore.isSafeComponent(packName)) throw UsageException("bad pack name '$packName'")
+    val inputs = args.drop(1).map { Paths.get(it) }
+    inputs.firstOrNull { !Files.isRegularFile(it) && !Files.isDirectory(it) }?.let {
+        err.println("tt-admin: no such file or directory: $it")
+        return 1
+    }
+    Files.createDirectories(config.packsDir)
+    // No GTFS source: this only builds from the given local files and never calls TfNSW.
+    val repository = PipelineTimetableRepository(config, source = null, options = PipelineOptions.fromEnv(), clock = clock)
+    return repository.use {
+        try {
+            val info = it.importLocal(packName, inputs)
+            out.println("Published timetable pack ${info.name}/${info.version}")
+            out.println("Valid:       ${info.validFrom} to ${info.validTo}")
+            out.println("Size:        ${info.sizeBytes} bytes compressed")
+            out.println("SHA-256:     ${info.sha256}")
+            out.println("Location:    ${config.packsDir.toAbsolutePath()}")
+            0
+        } catch (e: PackBuildException) {
+            err.println("tt-admin: ${e.message}")
+            e.report?.errors?.take(20)?.forEach { issue -> err.println("  $issue") }
+            1
+        }
+    }
 }
 
 private fun parseOptions(args: List<String>, known: Set<String>): Map<String, String> {

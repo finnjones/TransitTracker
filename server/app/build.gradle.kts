@@ -14,8 +14,7 @@ application {
 
 dependencies {
     implementation(project(":server:spi"))
-    // INTEGRATION: the real TimetableRepository / LiveData / WatchService / PushSender live in these
-    // modules; Wiring.kt switches from its stubs to them after the branches are merged.
+    // The real TimetableRepository / LiveData / WatchService / PushSender, wired in Wiring.kt.
     implementation(project(":server:pipeline"))
     implementation(project(":server:live"))
     implementation(project(":server:watch"))
@@ -29,6 +28,11 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.coroutines.test)
+    // End-to-end tests: the phone engine against the real server, and synthetic GTFS-Realtime
+    // built with the Wire classes generated in :server:live.
+    testImplementation(project(":shared:core"))
+    testImplementation(project(":shared:timetable"))
+    testImplementation(libs.wire.runtime)
 }
 
 /** Second start script so the image has both `bin/tt-server` and `bin/tt-admin`. */
@@ -48,4 +52,9 @@ distributions {
     }
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+    useJUnitPlatform()
+    // The synthetic GTFS fixture lives at the repository root.
+    systemProperty("tt.testdata", rootProject.layout.projectDirectory.dir("testdata").asFile.absolutePath)
+    inputs.dir(rootProject.layout.projectDirectory.dir("testdata"))
+}

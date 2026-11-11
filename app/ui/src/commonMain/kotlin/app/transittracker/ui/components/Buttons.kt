@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -66,15 +67,29 @@ fun PixelButton(
     faceHeight: Dp = 48.dp,
     contentDescription: String? = null,
     content: @Composable (contentColor: Color) -> Unit,
+) = PixelButtonImpl(onClick, modifier, kind, enabled, faceHeight, contentDescription, false, content)
+
+/** [forcePressed] draws the pressed face (galleries). */
+@Composable
+internal fun PixelButtonImpl(
+    onClick: () -> Unit,
+    modifier: Modifier,
+    kind: ButtonKind,
+    enabled: Boolean,
+    faceHeight: Dp,
+    contentDescription: String?,
+    forcePressed: Boolean,
+    content: @Composable (contentColor: Color) -> Unit,
 ) {
     val dot = TtTheme.dot
     val colors = buttonColors(TtTheme.colors, kind, enabled)
     val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
+    val pressedNow by source.collectIsPressedAsState()
+    val pressed = pressedNow || forcePressed
     val haptics = LocalHapticFeedback.current
     val hapticsOn = TtTheme.motion.haptics
-    LaunchedEffect(pressed) {
-        if (pressed && hapticsOn) haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
+    LaunchedEffect(pressedNow) {
+        if (pressedNow && hapticsOn) haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
     }
     // FLAT buttons have no lip: they keep their place and darken when pressed instead.
     val lipped = kind != ButtonKind.FLAT
@@ -97,13 +112,14 @@ fun PixelButton(
                 drawRect(fill, Offset(b, faceTop + b), Size(size.width - 2 * b, faceH - 2 * b))
                 drawPixelBorder(colors.border, b, top = faceTop, height = faceH)
             },
+        contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
-                .matchParentSize()
+                .fillMaxHeight()
                 .padding(bottom = if (lipped) dot * 2 else 0.dp)
                 .offset { IntOffset(0, if (down) lip.toInt() else 0) }
-                .padding(horizontal = dot.dp + 8.dp),
+                .padding(horizontal = dot.dp + 6.dp),
             contentAlignment = Alignment.Center,
         ) { content(colors.content) }
     }
@@ -123,7 +139,7 @@ fun PixelButton(
     style: TextStyle = TtTheme.type.label12Bold,
 ) {
     PixelButton(onClick, modifier.widthIn(min = 48.dp), kind, enabled) { color ->
-        PixelText(text, style = style, color = color, textAlign = TextAlign.Center, maxLines = 2)
+        PixelText(text, style = style, color = color, textAlign = TextAlign.Center, maxLines = 1)
     }
 }
 

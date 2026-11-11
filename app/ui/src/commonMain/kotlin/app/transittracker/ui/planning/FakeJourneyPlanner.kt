@@ -18,10 +18,17 @@ import app.transittracker.model.PlanTimeKind
 import app.transittracker.model.WallClock
 
 /**
- * A [JourneyPlanner] with canned answers for previews, screenshots and tests: whatever is asked,
- * it plans the Home (Albert Rd, Strathfield) to Bondi Beach example of the Options and Journey
- * mockups: three journeys (train, train, bus with walks and changes; train, train, bus; train,
- * train and a long walk), timed from the request time (or [clock]) as if it were 07:38.
+ * A [JourneyPlanner] with canned answers for previews, screenshots and tests.
+ *
+ * - Between two places that are each within walking distance of a different station of the fake
+ *   core ([FakeNetwork]: Strathfield, Central, Town Hall, Parramatta, Chatswood, Tallawong), for
+ *   example Home to Work, it plans direct rides on the fake core's own T1 / T9 / M1 services
+ *   (walk, ride, walk), matched to the fake timetable (trip id, service date, route id, platform
+ *   stop ids), so the phone applies its own live data and the journey can be saved as a route.
+ * - Anything else gets the Home (Albert Rd, Strathfield) to Bondi Beach example of the Options and
+ *   Journey mockups: three journeys (train, train, bus with walks and changes; train, train, bus;
+ *   train, train and a long walk), timed from the request time (or [clock]) as if it were 07:38.
+ *   Those rides are not matched: the planner's own times, the bus timetabled.
  *
  * [answer] switches the answer: offline, planner unavailable, nothing found, or an error.
  */
@@ -33,16 +40,22 @@ class FakeJourneyPlanner(private val clock: WallClock) : JourneyPlanner {
     /** Requests received, newest last (for tests). */
     val requests = mutableListOf<PlanRequest>()
 
-    override suspend fun searchPlaces(query: String, near: LatLng?, limit: Int): PlacesResult = when (answer) {
-        Answer.OFFLINE -> PlacesResult.Offline
-        Answer.UNAVAILABLE -> PlacesResult.Unavailable
-        Answer.FAILED -> PlacesResult.Failed("The planner had a problem")
-        else -> {
-            val q = query.trim().lowercase()
-            val found = if (q.isEmpty()) emptyList() else PLACES.filter { p ->
-                p.name.lowercase().contains(q) || p.detail.lowercase().contains(q)
+    /** Place searches received, newest last (for tests). */
+    val searches = mutableListOf<String>()
+
+    override suspend fun searchPlaces(query: String, near: LatLng?, limit: Int): PlacesResult {
+        searches += query
+        return when (answer) {
+            Answer.OFFLINE -> PlacesResult.Offline
+            Answer.UNAVAILABLE -> PlacesResult.Unavailable
+            Answer.FAILED -> PlacesResult.Failed("The planner had a problem")
+            else -> {
+                val q = query.trim().lowercase()
+                val found = if (q.isEmpty()) emptyList() else PLACES.filter { p ->
+                    p.name.lowercase().contains(q) || p.detail.lowercase().contains(q)
+                }
+                PlacesResult.Found(found.take(limit))
             }
-            PlacesResult.Found(found.take(limit))
         }
     }
 
@@ -55,6 +68,10 @@ class FakeJourneyPlanner(private val clock: WallClock) : JourneyPlanner {
             Answer.NOTHING_FOUND -> PlanResult.Found(PlanResponse(clock.nowMillis(), emptyList(), "fake-1", LIVE_MODES))
             Answer.NORMAL -> {
                 val t = request.timeMs ?: clock.nowMillis()
+                val direct = FakeNetwork.plan(request, t, PLACES)
+                if (direct != null) {
+                    return PlanResult.Found(PlanResponse(clock.nowMillis(), direct.take(request.maxItineraries), "fake-1", LIVE_MODES))
+                }
                 // "07:38" of the sample is the request time rounded down to the minute; for
                 // ARRIVE_BY, the first journey arrives at the requested time.
                 val base = (t / MIN) * MIN
@@ -74,6 +91,7 @@ class FakeJourneyPlanner(private val clock: WallClock) : JourneyPlanner {
         val BONDI_JUNCTION = LatLng(-33.8914, 151.2478)
         val BONDI_BEACH = LatLng(-33.8915, 151.2767)
         val CAMPBELL_PDE = LatLng(-33.8910, 151.2780)
+        val PITT_ST = LatLng(-33.8810, 151.2065)
 
         /** Places the fake search knows. */
         val PLACES: List<Place> = listOf(
@@ -84,7 +102,7 @@ class FakeJourneyPlanner(private val clock: WallClock) : JourneyPlanner {
             Place("fake:central", PlaceKind.STOP, "Central Station", "Haymarket", CENTRAL, "200060", listOf(Mode.TRAIN)),
             Place("fake:bondi-junction", PlaceKind.STOP, "Bondi Junction Station", "Bondi Junction", BONDI_JUNCTION, null, listOf(Mode.TRAIN, Mode.BUS)),
             Place("fake:chatswood", PlaceKind.STOP, "Chatswood Station", "Chatswood", LatLng(-33.7969, 151.1803), "206710", listOf(Mode.TRAIN, Mode.METRO)),
-            Place("fake:pitt-st", PlaceKind.ADDRESS, "Pitt St", "Haymarket", LatLng(-33.8810, 151.2065)),
+            Place("fake:pitt-st", PlaceKind.ADDRESS, "Pitt St", "Haymarket", PITT_ST),
         )
 
         private fun point(name: String, pos: LatLng, at: Long, expected: Long? = null, platform: String? = null) =
@@ -102,16 +120,21 @@ class FakeJourneyPlanner(private val clock: WallClock) : JourneyPlanner {
             mode = mode, routeName = line, headsign = headsign, routeColor = color, stopCount = stops, realtime = realtime,
         )
 
-        /** The three sample journeys, with 07:38 at [t0]. */
-        fun itineraries(t0: Long): List<Itinerary> {
+        /**
+         * The three sample journeys, with 07:38 at [t0]. [t9DelayMin] is how late the first
+         * journey's T9 runs: 4 in the mockups (3 minutes to spare at Central), 6 makes that change
+         * tight, 9 misses it.
+         */
+        fun itineraries(t0: Long, t9DelayMin: Int = 4): List<Itinerary> {
             fun at(min: Int) = t0 + min * MIN
             val train = Mode.TRAIN
             val bus = Mode.BUS
+            val d = t9DelayMin
             // 1. 07:39 - 08:33: walk, T9 (4 min late), walk, T4, walk, 333 (timetable), walk.
-            val home1 = point("Home", HOME, at(1))
-            val strath1 = point("Strathfield", STRATHFIELD, at(4), platform = "3")
-            val t9From = point("Strathfield", STRATHFIELD, at(0), at(4), "3")
-            val t9To = point("Central", CENTRAL, at(14), at(18), "16")
+            val home1 = point("Home", HOME, at(d - 3))
+            val strath1 = point("Strathfield", STRATHFIELD, at(d), platform = "3")
+            val t9From = point("Strathfield", STRATHFIELD, at(0), at(d), "3")
+            val t9To = point("Central", CENTRAL, at(14), at(14 + d), "16")
             val t4From = point("Central", CENTRAL, at(25), at(25), "24")
             val t4To = point("Bondi Junction", BONDI_JUNCTION, at(36), at(36))
             val busFrom = point("Bondi Junction", BONDI_JUNCTION, at(42), platform = "Stand B")
@@ -121,7 +144,7 @@ class FakeJourneyPlanner(private val clock: WallClock) : JourneyPlanner {
                 listOf(
                     walk(home1, strath1, 3, 250),
                     ride(t9From, t9To, train, "T9", "Gordon", "D11F2F", 2, realtime = true),
-                    walk(point("Central", CENTRAL, at(18), platform = "16"), point("Central", CENTRAL, at(22), platform = "24"), 4, 280),
+                    walk(point("Central", CENTRAL, at(14 + d), platform = "16"), point("Central", CENTRAL, at(18 + d), platform = "24"), 4, 280),
                     ride(t4From, t4To, train, "T4", "Bondi Junction", "005AA3", 5, realtime = true),
                     walk(point("Bondi Junction", BONDI_JUNCTION, at(36)), point("Bondi Junction", BONDI_JUNCTION, at(39), platform = "Stand B"), 3, 200),
                     ride(busFrom, busTo, bus, "333", "North Bondi", "00B5EF", 6, realtime = false),

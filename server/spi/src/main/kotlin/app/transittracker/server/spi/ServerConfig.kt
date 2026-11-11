@@ -37,6 +37,11 @@ data class ServerConfig(
     val recordIntervalMinutes: Int = 10,
     /** Days of raw feed recordings to keep. */
     val recordRetentionDays: Int = 7,
+    /**
+     * Serve live feeds from recorded / fixture files under this directory instead of calling TfNSW
+     * (local development without an API key). See `ReplayFetcher` in `:server:live`.
+     */
+    val replayDir: Path? = null,
 ) {
     val dbPath: Path get() = dataDir.resolve("tt-server.db")
     val packsDir: Path get() = dataDir.resolve("packs")
@@ -67,6 +72,7 @@ data class ServerConfig(
                 adminToken = env["TT_ADMIN_TOKEN"]?.takeIf { it.isNotBlank() },
                 recordIntervalMinutes = env["TT_RECORD_INTERVAL_MIN"]?.toInt() ?: d.recordIntervalMinutes,
                 recordRetentionDays = env["TT_RECORD_RETENTION_DAYS"]?.toInt() ?: d.recordRetentionDays,
+                replayDir = env["TT_REPLAY_DIR"]?.let { Paths.get(it) },
             )
         }
     }

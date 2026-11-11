@@ -31,6 +31,16 @@ jobs:
       - name: Build
         run: ./gradlew build --console=plain
 
+      # The runner has an Android SDK, so `build` also assembles :androidApp. The debug APKs
+      # (demo and live) are kept for installing by hand; see androidApp/README.md.
+      - name: Upload Android debug APKs
+        uses: actions/upload-artifact@v5
+        with:
+          name: android-debug-apks
+          path: androidApp/build/outputs/apk/*/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v5

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pixel art: a 16 x 16 train front, one path per colour. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7,2h10v1.25h-10zM5.75,3.25h2.5v1.25h-2.5zM15.75,3.25h2.5v1.25h-2.5zM4.5,4.5h15v1.25h-15zM4.5,5.75h1.25v1.25h-1.25zM10.75,5.75h2.5v1.25h-2.5zM18.25,5.75h1.25v1.25h-1.25zM4.5,7h1.25v1.25h-1.25zM10.75,7h2.5v1.25h-2.5zM18.25,7h1.25v1.25h-1.25zM4.5,8.25h1.25v1.25h-1.25zM10.75,8.25h2.5v1.25h-2.5zM18.25,8.25h1.25v1.25h-1.25zM4.5,9.5h1.25v1.25h-1.25zM10.75,9.5h2.5v1.25h-2.5zM18.25,9.5h1.25v1.25h-1.25zM4.5,10.75h15v1.25h-15zM4.5,12h15v1.25h-15zM4.5,13.25h15v1.25h-15zM4.5,14.5h15v1.25h-15zM4.5,15.75h15v1.25h-15zM4.5,17h15v1.25h-15zM5.75,18.25h2.5v1.25h-2.5zM15.75,18.25h2.5v1.25h-2.5zM3.25,20.75h17.5v1.25h-17.5z" />
+</vector>

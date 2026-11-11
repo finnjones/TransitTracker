@@ -49,6 +49,7 @@ object PlanShots {
     /** A planner that never answers (loading). */
     private object Waiting : JourneyPlanner {
         override suspend fun searchPlaces(query: String, near: LatLng?, limit: Int): PlacesResult = awaitCancellation()
+        override suspend fun stopsNear(position: LatLng, radiusMeters: Int): PlacesResult = awaitCancellation()
         override suspend fun plan(request: PlanRequest): PlanResult = awaitCancellation()
     }
 

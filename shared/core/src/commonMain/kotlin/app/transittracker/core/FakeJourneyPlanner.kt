@@ -98,6 +98,23 @@ class FakeJourneyPlanner(
         return PlacesResult.Found(ordered.take(limit.coerceIn(1, RemoteJourneyPlanner.MAX_PLACES)))
     }
 
+    /** The sample stations and the bus stand within [radiusMeters] of [position], nearest first. */
+    override suspend fun stopsNear(position: LatLng, radiusMeters: Int): PlacesResult {
+        when (simulate) {
+            Simulate.OFFLINE -> return PlacesResult.Offline
+            Simulate.UNAVAILABLE -> return PlacesResult.Unavailable
+            Simulate.FAILED -> return PlacesResult.Failed(PlannerMessages.TOO_MANY)
+            Simulate.NOTHING_FOUND -> return PlacesResult.Found(emptyList())
+            Simulate.NONE -> Unit
+        }
+        val near = PLACES.filter { it.kind == PlaceKind.STOP }
+            .map { it to distanceMeters(position, it.position) }
+            .filter { it.second <= radiusMeters }
+            .sortedBy { it.second }
+            .map { it.first }
+        return PlacesResult.Found(near)
+    }
+
     override suspend fun plan(request: PlanRequest): PlanResult {
         val now = clock.nowMillis()
         when (simulate) {

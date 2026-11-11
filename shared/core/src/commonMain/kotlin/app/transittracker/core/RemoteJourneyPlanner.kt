@@ -7,7 +7,8 @@ import app.transittracker.model.PlanRequest
 import app.transittracker.model.PlanResult
 
 /**
- * The real [JourneyPlanner]: asks tt-server (`GET /v1/places`, `POST /v1/plan`), which asks
+ * The real [JourneyPlanner]: asks tt-server (`GET /v1/places`, `GET /v1/stops/near`,
+ * `POST /v1/plan`), which asks
  * Transport for NSW's Trip Planner. The phone never talks to TfNSW.
  *
  * Outcomes:
@@ -35,6 +36,15 @@ class RemoteJourneyPlanner(private val api: ApiClient) : JourneyPlanner {
                 if (result.reachedServer) PlacesResult.Failed(PlannerMessages.UNREADABLE) else PlacesResult.Offline
         }
     }
+
+    override suspend fun stopsNear(position: LatLng, radiusMeters: Int): PlacesResult =
+        when (val result = api.stopsNear(position, radiusMeters.coerceIn(1, MAX_NEAR_RADIUS_M))) {
+            is ApiResult.Success -> PlacesResult.Found(result.value.places)
+            is ApiResult.HttpFailure ->
+                if (isUnavailable(result)) PlacesResult.Unavailable else PlacesResult.Failed(httpMessage(result, PLACES))
+            is ApiResult.NetworkFailure ->
+                if (result.reachedServer) PlacesResult.Failed(PlannerMessages.UNREADABLE) else PlacesResult.Offline
+        }
 
     override suspend fun plan(request: PlanRequest): PlanResult {
         val sent = request.copy(maxItineraries = request.maxItineraries.coerceIn(1, MAX_ITINERARIES))
@@ -70,6 +80,9 @@ class RemoteJourneyPlanner(private val api: ApiClient) : JourneyPlanner {
 
         /** Most places one search may ask for. */
         const val MAX_PLACES = 20
+
+        /** Widest stops-near lookup the server answers, in metres. */
+        const val MAX_NEAR_RADIUS_M = 2_000
 
         /** Most itineraries one plan request may ask for. */
         const val MAX_ITINERARIES = 6

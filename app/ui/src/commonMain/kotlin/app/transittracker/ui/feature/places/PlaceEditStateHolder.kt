@@ -3,7 +3,9 @@ package app.transittracker.ui.feature.places
 import app.transittracker.model.JourneyPlanner
 import app.transittracker.model.LatLng
 import app.transittracker.model.Place
+import app.transittracker.model.PlaceKind
 import app.transittracker.model.PlacesResult
+import app.transittracker.model.Stop
 import app.transittracker.model.TransitCore
 import app.transittracker.ui.places.PlaceIcon
 import app.transittracker.ui.places.PlaceStop
@@ -15,6 +17,8 @@ import app.transittracker.ui.state.StateHolder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -74,6 +78,8 @@ data class PlaceEditState(
     val stops: List<StopRow> = emptyList(),
     val stopsLoading: Boolean = false,
     val stopsProblem: String? = null,
+    /** Some stops were found, but the planner's lookup (bus, light rail, ferry) failed: said under the list. */
+    val stopsNote: String? = null,
     /** The stop whose walk time is open for correction. */
     val editingWalk: String? = null,
     val saving: Boolean = false,
@@ -176,7 +182,7 @@ class PlaceEditStateHolder(
         val q = text.trim()
         mutable.update {
             it.copy(
-                query = text, position = null, stops = emptyList(), stopsLoading = false, stopsProblem = null,
+                query = text, position = null, stops = emptyList(), stopsLoading = false, stopsProblem = null, stopsNote = null,
                 locationProblem = null, editingWalk = null,
                 search = if (q.length >= MIN_QUERY_LENGTH) AddressSearch.Searching else AddressSearch.Idle,
             )
@@ -262,37 +268,68 @@ class PlaceEditStateHolder(
             mutable.update {
                 it.copy(
                     locating = false, query = HERE_ADDRESS, position = position, stops = emptyList(),
-                    stopsProblem = null, editingWalk = null,
+                    stopsProblem = null, stopsNote = null, editingWalk = null,
                 )
             }
             loadStops(position, fromLocation = true)
         }
     }
 
+    /**
+     * The stops near [position]: the phone's timetable (trains and metro) and the planner's
+     * stops-near lookup (every mode) are asked together and merged. Without the planner the
+     * timetable's stations are still offered, with a note; with neither, a problem and TRY AGAIN.
+     */
     private fun loadStops(position: LatLng, fromLocation: Boolean) {
         stopsJob?.cancel()
         // Loading is shown at once, not when the lookup starts: no flash of "no stations".
-        mutable.update { it.copy(stopsLoading = true, stopsProblem = null) }
+        mutable.update { it.copy(stopsLoading = true, stopsProblem = null, stopsNote = null) }
         stopsJob = scope.launch {
-            val candidates = try {
-                core.stopsNear(position, STATION_RADIUS_M)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                mutable.update {
-                    it.copy(stopsLoading = false, stops = emptyList(), stopsProblem = "Could not look up the stations near here. Try again in a moment.")
+            val (local, remote) = coroutineScope {
+                val remote = async { plannerStopsNear(position) }
+                val local = try {
+                    core.stopsNear(position, STATION_RADIUS_M)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
                 }
+                local to remote.await()
+            }
+            if (local == null && remote == null) {
+                mutable.update { it.copy(stopsLoading = false, stops = emptyList(), stopsProblem = STOPS_LOOKUP_FAILED) }
                 return@launch
             }
-            val found = keepChoices(walkingStops(position, candidates), known)
+            val found = keepChoices(walkingStops(position, local.orEmpty() + remote.orEmpty()), known)
+            if (found.isEmpty() && remote == null) {
+                // Only the trains and metro were looked up: "nothing near" might not be true.
+                mutable.update { it.copy(stopsLoading = false, stops = emptyList(), stopsProblem = STOPS_LOOKUP_FAILED) }
+                return@launch
+            }
             val rows = found.map { StopRow(it, linesOf(it)) }
             mutable.update {
                 it.copy(
                     stopsLoading = false, stops = rows,
+                    stopsNote = if (remote == null) LOCAL_STOPS_MISSING else null,
                     // Where-I-am has no address text of its own: name it after the nearest stop.
                     query = if (fromLocation && it.query == HERE_ADDRESS && found.isNotEmpty()) "Near ${found.first().name}" else it.query,
                 )
             }
+        }
+    }
+
+    /** The planner's stops near [position] as timetable-like stops, or null if it could not be asked. */
+    private suspend fun plannerStopsNear(position: LatLng): List<Stop>? {
+        val result = try {
+            planner.stopsNear(position, STATION_RADIUS_M.toInt())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return null
+        }
+        return (result as? PlacesResult.Found)?.places?.filter { it.kind == PlaceKind.STOP }?.map { p ->
+            // A station the timetable knows keeps its timetable id, so it merges with the phone's own.
+            Stop(id = p.stopId ?: p.id, name = p.name, position = p.position, modes = p.modes.toSet())
         }
     }
 
@@ -393,5 +430,9 @@ class PlaceEditStateHolder(
     private companion object {
         /** Stands in the address box until the nearest stop is known. */
         const val HERE_ADDRESS = "Where I am now"
+
+        const val STOPS_LOOKUP_FAILED = "Could not look up the stops near here. Check the connection and try again."
+
+        const val LOCAL_STOPS_MISSING = "Only train and metro stations are shown: the bus, light rail and ferry stops could not be looked up."
     }
 }

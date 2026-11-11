@@ -14,12 +14,13 @@ import java.time.Duration
 import java.util.concurrent.CompletionException
 
 /**
- * The two Trip Planner endpoints tt-server uses, under `/v1/tp/` (paths from the Trip Planner
+ * The Trip Planner endpoints tt-server uses, under `/v1/tp/` (paths from the Trip Planner
  * Swagger `tripplanner_v1_swag_efa11_20251002.yml`, `basePath: /v1/tp`).
  */
 enum class PlannerEndpoint(val path: String, val fileStem: String) {
     STOP_FINDER("/v1/tp/stop_finder", "stop_finder"),
     TRIP("/v1/tp/trip", "trip"),
+    COORD("/v1/tp/coord", "coord"),
 }
 
 /** Outcome of one Trip Planner call. */

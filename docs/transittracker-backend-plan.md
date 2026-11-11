@@ -277,14 +277,16 @@ rate from the server.
 | `DELETE /v1/watches/{id}` | Remove a watch | P5 |
 | `POST /v1/watches/{id}/test` | Send a test notification | P5 |
 | `GET /v1/places?q=…&lat=…&lon=…&limit=…` | Address, stop and place search for journey planning (`PlacesResponse`); nearer results first when a position is given | Planner |
+| `GET /v1/stops/near?lat=…&lon=…&radius=…` | Stops of every mode (train, metro, light rail, bus, ferry, coach) within `radius` metres (1–2000, default 1500), nearest first, as `STOP` places; the phone's timetable has only trains and metro, so adding a place asks this too | Planner |
 | `POST /v1/plan` | Journeys from A to B (`PlanRequest` → `PlanResponse`): rides, changes and walks, rides matched to timetable trips | Planner |
 | `GET /status` | Your own page: feed ages, calls used today, errors, devices, notifications sent | P3 |
 
 ### 5.0 Journey planning
 
-The phone never talks to TfNSW. `/v1/places` and `/v1/plan` (contract:
+The phone never talks to TfNSW. `/v1/places`, `/v1/stops/near` and `/v1/plan` (contract:
 `shared/model/.../Planning.kt`) are answered by `:server:planner`, which asks TfNSW's Trip
-Planner (`/v1/tp/stop_finder`, `/v1/tp/trip`) with the server's key and trims the answer:
+Planner (`/v1/tp/stop_finder`, `/v1/tp/coord`, `/v1/tp/trip`) with the server's key and trims the
+answer:
 
 - **Mapping.** Walking legs become `WALK`, public transport legs `RIDE`; a walk TfNSW gives as
   foot-path information on a ride becomes its own `WALK`, so every change has its minutes;
@@ -300,8 +302,9 @@ Planner (`/v1/tp/stop_finder`, `/v1/tp/trip`) with the server's key and trims th
   (one `TfnswQuota` per server), back off on 401/403/429/503, and answer
   `503 planner_unavailable` meanwhile, when the budget is used up or with no key;
   `502 planner_upstream` when TfNSW answers with something unusable. Per device: `/v1/plan` 30 an
-  hour (burst 5), `/v1/places` 60 a minute (burst 20). Identical plans are cached 60 s, searches
-  5 minutes (bounded, in memory).
+  hour (burst 5), `/v1/places` and `/v1/stops/near` together 60 a minute (burst 20). Identical
+  plans are cached 60 s, searches 5 minutes, stops near a position (rounded to about 11 m) an hour
+  (bounded, in memory).
 - **Privacy.** Positions, place ids and search text go only to TfNSW, are not stored and are never
   logged; logs carry counts, status and duration.
 - **Without a key** `TT_REPLAY_DIR/planner/` answers from fixture files

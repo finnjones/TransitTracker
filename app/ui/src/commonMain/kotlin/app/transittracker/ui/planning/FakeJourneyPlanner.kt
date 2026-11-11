@@ -16,6 +16,7 @@ import app.transittracker.model.PlanResponse
 import app.transittracker.model.PlanResult
 import app.transittracker.model.PlanTimeKind
 import app.transittracker.model.WallClock
+import app.transittracker.ui.feature.places.distanceMeters
 
 /**
  * A [JourneyPlanner] with canned answers for previews, screenshots and tests.
@@ -43,6 +44,15 @@ class FakeJourneyPlanner(private val clock: WallClock) : JourneyPlanner {
     /** Place searches received, newest last (for tests). */
     val searches = mutableListOf<String>()
 
+    /**
+     * What [stopsNear] knows: none by default, so places get their stations from the fake core
+     * alone. Tests put bus or light rail stops here.
+     */
+    var nearStops: List<Place> = emptyList()
+
+    /** Stops-near lookups received, newest last (for tests). */
+    val nearLookups = mutableListOf<LatLng>()
+
     override suspend fun searchPlaces(query: String, near: LatLng?, limit: Int): PlacesResult {
         searches += query
         return when (answer) {
@@ -56,6 +66,18 @@ class FakeJourneyPlanner(private val clock: WallClock) : JourneyPlanner {
                 }
                 PlacesResult.Found(found.take(limit))
             }
+        }
+    }
+
+    override suspend fun stopsNear(position: LatLng, radiusMeters: Int): PlacesResult {
+        nearLookups += position
+        return when (answer) {
+            Answer.OFFLINE -> PlacesResult.Offline
+            Answer.UNAVAILABLE -> PlacesResult.Unavailable
+            Answer.FAILED -> PlacesResult.Failed("The planner had a problem")
+            else -> PlacesResult.Found(
+                nearStops.map { it to distanceMeters(position, it.position) }.filter { it.second <= radiusMeters }.sortedBy { it.second }.map { it.first },
+            )
         }
     }
 

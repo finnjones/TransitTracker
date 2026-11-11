@@ -3,6 +3,7 @@ package app.transittracker.server.planner
 import app.transittracker.model.Itinerary
 import app.transittracker.model.LatLng
 import app.transittracker.model.Mode
+import app.transittracker.model.Place
 import app.transittracker.model.PlacesResponse
 import app.transittracker.model.PlanEndpoint
 import app.transittracker.model.PlanRequest
@@ -26,8 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToLong
 
 /**
- * Journey planning through TfNSW's Trip Planner (`/v1/tp/stop_finder` and `/v1/tp/trip`), trimmed to
- * the contract in `Planning.kt` and matched to the loaded timetable.
+ * Journey planning through TfNSW's Trip Planner (`/v1/tp/stop_finder`, `/v1/tp/coord` and
+ * `/v1/tp/trip`), trimmed to the contract in `Planning.kt` and matched to the loaded timetable.
  *
  * - Every call draws on the server-wide [quota] (the same daily budget and per-second limiter as the
  *   live feeds); replay fetchers do not.
@@ -35,7 +36,8 @@ import kotlin.math.roundToLong
  *   the budget is used up or nothing is configured, requests fail with 503 `planner_unavailable`.
  *   Anything else unusable from TfNSW is 502 `planner_upstream`.
  * - Identical plans are cached for 60 s (positions rounded to 5 decimal places, time to the minute),
- *   identical searches for 5 minutes; both caches are bounded and in memory only.
+ *   identical searches for 5 minutes, stops near a position for an hour (positions rounded to 4
+ *   decimal places, about 11 m); the caches are bounded and in memory only.
  * - Privacy: places, positions and search text are sent only to TfNSW, never stored beyond those
  *   caches and never logged; logs carry counts, status and duration.
  *
@@ -52,11 +54,13 @@ class TfnswPlanner(
     private val backoff: BackoffPolicy = BackoffPolicy(),
     planCacheTtlMs: Long = 60_000,
     placesCacheTtlMs: Long = 5 * 60_000,
+    nearCacheTtlMs: Long = 60 * 60_000,
     cacheEntries: Int = 500,
 ) : Planner {
 
     private val planCache = TtlCache<PlanKey, List<Itinerary>>(cacheEntries, planCacheTtlMs, clock)
     private val placesCache = TtlCache<String, List<RankedPlace>>(cacheEntries, placesCacheTtlMs, clock)
+    private val nearCache = TtlCache<NearKey, List<Place>>(cacheEntries, nearCacheTtlMs, clock)
 
     private val placesRequests = AtomicInteger()
     private val planRequests = AtomicInteger()
@@ -94,6 +98,23 @@ class TfnswPlanner(
         val places = PlaceRanking.rank(ranked, text, near, limit)
         log.info("Place search: {} result(s) of {} (limit {})", places.size, ranked.size, limit)
         return PlacesResponse(serverTimeMs = clock.nowMillis(), places = places)
+    }
+
+    // ---- stops near a position ----
+
+    override suspend fun stopsNear(position: LatLng, radiusMeters: Int): PlacesResponse {
+        requireInArea(position, "Position")
+        if (radiusMeters !in 1..MAX_NEAR_RADIUS_M) throw badRequest("radius must be 1 to $MAX_NEAR_RADIUS_M metres")
+        placesRequests.incrementAndGet()
+        val key = NearKey((position.lat * 1e4).roundToLong(), (position.lon * 1e4).roundToLong(), radiusMeters)
+        val stops = nearCache.get(key)?.also { cacheHits.incrementAndGet() } ?: run {
+            val body = call(PlannerEndpoint.COORD, TripPlannerRequests.coord(position, radiusMeters))
+            val response = decode(body, StopFinderResponseDto.serializer())
+            response.error?.message?.let { rejected() }
+            withContext(Dispatchers.IO) { NearStopMapper(timetable.value).map(response, MAX_NEAR_STOPS) }.also { nearCache.put(key, it) }
+        }
+        log.info("Stops near a position: {} stop(s) within {} m", stops.size, radiusMeters)
+        return PlacesResponse(serverTimeMs = clock.nowMillis(), places = stops)
     }
 
     // ---- plan ----
@@ -253,6 +274,8 @@ class TfnswPlanner(
         return RideMatcher(tt).also { matcherFor = tt to it }
     }
 
+    private data class NearKey(val lat: Long, val lon: Long, val radius: Int)
+
     private data class EndpointKey(val lat: Long, val lon: Long, val placeId: String?)
 
     private data class PlanKey(
@@ -274,6 +297,9 @@ class TfnswPlanner(
         const val MIN_DISTANCE_M = 50.0
         const val MAX_ITINERARIES = 6
         const val MAX_PLACES = 20
+        const val MAX_NEAR_RADIUS_M = 2_000
+        /** Most stops one `stopsNear` answer holds; a city block can have dozens of bus stops within 2 km. */
+        const val MAX_NEAR_STOPS = 200
         const val MAX_PAST_MS = 7L * 24 * 3600_000
         const val MAX_FUTURE_MS = 60L * 24 * 3600_000
 

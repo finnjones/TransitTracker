@@ -692,8 +692,17 @@ Rules:
 - **Walk times come from the planner** where it has them, and from
   straight-line distance otherwise. Either can be corrected, and estimates are
   labelled on the add-a-place screen.
-- **Walking distance:** stations within 1.5 km, nearest three at most, plus
-  bus, light rail and ferry stops within 500 m.
+- **Walking distance:** train and metro stations within 1.5 km, nearest three
+  at most; light rail stops and ferry wharves within 1 km, nearest two; bus and
+  coach stops within 500 m, nearest five. (Light rail and ferry were first put
+  with buses at 500 m; that left out Randwick Light Rail, 529 m from a home in
+  Coogee St, Randwick.)
+- **Where the stops come from:** the phone's timetable has only trains and
+  metro, so the server is also asked for the stops near the address
+  (`GET /v1/stops/near`, from TfNSW's Trip Planner). Without the server, the
+  timetable's stations are still offered with a note saying buses, light rail
+  and ferries could not be looked up; if that leaves nothing, the app says the
+  lookup failed rather than that nothing is near.
 
 One limit:
 

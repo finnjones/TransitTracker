@@ -96,3 +96,53 @@ internal object PlaceRanking {
 
     private fun band(metres: Double): Int = BANDS.indexOfFirst { metres <= it }.let { if (it < 0) BANDS.size else it }
 }
+
+/**
+ * Turns a `/v1/tp/coord` answer (`type_1=STOP`) into [PlaceKind.STOP] places, nearest first.
+ *
+ * Checked on the live API (11 Nov 2026, see `testdata/planner/live/coord-central.json`): every
+ * location is a `stop` whose `name` is "undefined, undefined"; the real name is the property
+ * `STOP_NAME_WITH_PLACE` ("Central Station, Sydney", "Carrington Rd at Coogee St, Randwick"), the
+ * walking-free distance in metres is the property `distance`, and `productClasses` lists what calls
+ * there. Ids are TfNSW global stop ids: stations as their GTFS id ("200060"), many bus stops with a
+ * `G` in front ("G203199"). Stops served only by classes the app does not show (on-demand) are
+ * dropped.
+ */
+internal class NearStopMapper(private val timetable: Timetable?) {
+
+    fun map(response: StopFinderResponseDto, limit: Int): List<Place> =
+        response.locations.mapNotNull { location -> map(location)?.let { it to (location.properties.string("distance")?.toDoubleOrNull() ?: Double.MAX_VALUE) } }
+            .distinctBy { it.first.id }
+            .sortedWith(compareBy({ it.second }, { it.first.id }))
+            .take(limit)
+            .map { it.first }
+
+    private fun map(location: StopFinderLocationDto): Place? {
+        if (location.type?.lowercase() !in STOP_TYPES) return null
+        val id = location.id?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val position = TripMapper.latLng(location.coord) ?: return null
+        val modes = (location.productClasses ?: location.modes).orEmpty().mapNotNull(ProductClasses::mode).distinct()
+        if (modes.isEmpty()) return null
+        val long = listOfNotNull(location.properties.string("STOP_NAME_WITH_PLACE"), location.name, location.disassembledName)
+            .map { it.trim() }
+            .firstOrNull { it.isNotEmpty() && !it.startsWith("undefined") }
+            ?: return null
+        val parts = long.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        val name = Names.withoutPlatform(parts.first()) ?: parts.first()
+        return Place(
+            id = id,
+            kind = PlaceKind.STOP,
+            name = name,
+            detail = parts.drop(1).lastOrNull()?.takeIf { it != name }.orEmpty(),
+            position = position,
+            stopId = timetable?.let { tt ->
+                listOfNotNull(id, id.removePrefix("G"), location.properties.string("stopId")).firstOrNull { tt.stop(it) != null }
+            },
+            modes = modes,
+        )
+    }
+
+    private companion object {
+        val STOP_TYPES = setOf("stop", "platform")
+    }
+}

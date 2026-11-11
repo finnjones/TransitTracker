@@ -5,7 +5,9 @@ static analysis of the shipped app. It exists as design reference for
 TransitTracker. It is not a specification of TripView's private server API,
 and TransitTracker must not call TripView's servers. See
 [tripview-purpose-and-plan.md](tripview-purpose-and-plan.md) for what the app
-does and how TransitTracker should approach the same problem.
+does and how TransitTracker should approach the same problem. Backend hosts,
+paths, headers and code addresses are in
+[tripview-low-level-notes.md](tripview-low-level-notes.md).
 
 ## 1. Scope and method
 

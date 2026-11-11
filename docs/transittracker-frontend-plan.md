@@ -39,7 +39,7 @@ drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
 | F8 | Saved places | **Decided** | **Addresses can be saved** (Home, Work and others), kept on the phone only, and used as the start or end of a saved trip (section 5.7) |
 | F9 | How an address is found | To confirm | **TfNSW's lookup through the server, plus "use where I am now".** The server is needed for journey planning anyway, so the phone's own lookup is no longer the simpler choice (section 5.7) |
 | F10 | Journey planning | **Decided** | **The app recommends ways to get from A to B**, including changes between modes and the walking time between them (section 5.6) |
-| F11 | What works the journeys out | To confirm | **TfNSW's Trip Planner, through tt-server.** Alternatives: a planner on the phone, or OpenTripPlanner on the home server (section 8.5) |
+| F11 | What works the journeys out | To confirm | **TfNSW's Trip Planner, through tt-server.** Assessed as acceptable for this use. Google Maps was assessed and is not recommended. A planner on the phone and OpenTripPlanner on the home server remain alternatives (section 8.5) |
 
 ---
 
@@ -878,8 +878,29 @@ so something has to work the journeys out.
 | Option | How | For | Against |
 |---|---|---|---|
 | **TfNSW's Trip Planner, through tt-server** (recommended) | The server passes a journey request to TfNSW's Trip Planner API with the key it already holds, and returns a trimmed result | Covers every mode today, including those whose timetables are not on the phone yet; walks follow real footpaths; little to build; nothing new to run | Needs a connection; each search is a call against the daily quota; the choice of journeys is TfNSW's |
+| Google Maps (Routes API) | The server asks Google for public transport routes | Strong address search and walking directions; works anywhere in the world; free at this scale | Its terms do not allow the results to be used with a non-Google map, which rules out our own line map; results may not be stored, apart from coordinates for 30 days, which conflicts with saved routes; rides carry no trip ID, so they cannot be tied to our live data, tracking or push watches; needs a Google billing account |
 | A planner on the phone | Search the timetable packs on the device | Works offline; no quota | Weeks of work; needs every mode's timetable on the phone (the bus pack is large); walks would be straight-line guesses |
 | OpenTripPlanner on the home server | Run the open-source planner with TfNSW timetables and OpenStreetMap | Full control; real street walking; no quota | A heavy service to run and keep fed with data; the most upkeep |
+
+**Is TfNSW's Trip Planner acceptable?** Yes, on what could be checked.
+
+| Question | Finding |
+|---|---|
+| May it be used this way? | The Open Data Hub's FAQ says data and APIs under the Creative Commons Attribution 4.0 licence may be reused and redistributed, with attribution, which the app already shows. API keys are to be kept private, which the server design does. Confirm the licence shown on the Trip Planner dataset page itself before building |
+| Limits | 60,000 calls a day and 5 a second on the default plan, shared with the live feeds |
+| Does it do the job? | It returns whole journeys with walking legs, changes and times, and has its own address and stop search |
+| Known weaknesses | Its trip IDs do not always match the live feeds, so matching needs a fallback; the API changed in August 2025; live feeds have occasional outages, so timetabled times are always the fallback |
+
+**Why not Google Maps?** It would cost nothing at this scale: public transport
+requests are billed at the lowest tier, with 10,000 free a month and US$5 per
+1,000 after that (asking for real-time transit data moves to the next tier:
+5,000 free, then US$10 per 1,000). The obstacles are its terms and its data,
+not its price, as set out in the table above. It would suit a different app:
+one that uses Google's own map as its map and does not save routes.
+
+These findings come from search results quoting the official pages. The pages
+themselves could not be opened from the session that wrote this plan, so read
+the two sets of terms once before building.
 
 What the recommended option adds to the server:
 
@@ -908,7 +929,16 @@ Notes:
 Sources: [Trip Planner APIs dataset](https://opendata.transport.nsw.gov.au/dataset/trip-planner-apis),
 [Trip Planner API manual v3.2](https://developer.transport.nsw.gov.au/sites/default/files/2023-08/Trip%20Planner%20API%20manual-opendataproduction%20v3.2.pdf),
 [forum: RealtimeTripID differences for the same journey](https://opendataforum.transport.nsw.gov.au/t/realtimetripid-differences-for-the-same-journey/2032),
-[forum: walking legs in the trip API](https://opendataforum.transport.nsw.gov.au/t/trip-api-requires-walking-with-no-walking-leg/7930).
+[forum: walking legs in the trip API](https://opendataforum.transport.nsw.gov.au/t/trip-api-requires-walking-with-no-walking-leg/7930),
+[Open Data Hub FAQs](https://opendata.transport.nsw.gov.au/faqs),
+[Open Data Hub API basics](https://opendata.transport.nsw.gov.au/developers/api-basics),
+[Open Data Hub terms](https://opendata.transport.nsw.gov.au/sites/default/files/2024-09/TfNSW-Open-Data-Portal-Terms.pdf),
+[Open Data Hub acceptable use policy](https://opendata.transport.nsw.gov.au/sites/default/files/2024-09/TfNSW-Acceptable-Use-Policy.pdf),
+[Google Routes API usage and billing](https://developers.google.com/maps/documentation/routes/usage-and-billing),
+[Google Maps Platform pricing list](https://developers.google.com/maps/billing-and-pricing/pricing),
+[Google Maps Platform service specific terms](https://cloud.google.com/maps-platform/terms/maps-service-terms),
+[Google Routes API policies](https://developers.google.com/maps/documentation/routes/policies),
+[Google Routes API: get a transit route](https://developers.google.com/maps/documentation/routes/transit-route).
 
 ---
 

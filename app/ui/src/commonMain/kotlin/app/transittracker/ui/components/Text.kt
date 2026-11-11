@@ -5,19 +5,29 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.em
 import app.transittracker.ui.theme.TtTheme
 
 /**
  * Text in the design system. [style] is one of `TtTheme.type.*`; [color] defaults to Text.
  * [strike] draws the line-through used for timetabled times and cancelled rows.
+ *
+ * Numerals are always legible: in Pixelify and Silkscreen styles every digit (and the `:` `.` `,`
+ * inside a number) is set in the numeral face, sized to match the surrounding letters. Doto styles
+ * are left alone. Screens do nothing for this; pass plain strings.
  */
 @Composable
 fun PixelText(
@@ -33,7 +43,41 @@ fun PixelText(
     var s = style.copy(color = color)
     if (strike) s = s.copy(textDecoration = TextDecoration.LineThrough)
     if (textAlign != null) s = s.copy(textAlign = textAlign)
-    BasicText(text, modifier, s, maxLines = maxLines, overflow = overflow, softWrap = maxLines != 1)
+    val type = TtTheme.type
+    val shown = if (style.fontFamily == type.digits30.fontFamily) {
+        remember(text) { AnnotatedString(text) }
+    } else {
+        remember(text, type.numerals) { withNumerals(text, type.numerals) }
+    }
+    BasicText(text = shown, modifier = modifier, style = s, overflow = overflow, softWrap = maxLines != 1, maxLines = maxLines)
+}
+
+/** Jersey 15's digits are shorter than Pixelify's and Silkscreen's at the same size; this evens them out. */
+private const val NUMERAL_SCALE = 1.15f
+
+/** True for a character that belongs to a number: a digit, or `:` `.` `,` with a digit on both sides. */
+internal fun isNumeralAt(text: String, i: Int): Boolean {
+    val c = text[i]
+    if (c in '0'..'9') return true
+    if (c != ':' && c != '.' && c != ',') return false
+    return i > 0 && i < text.length - 1 && text[i - 1] in '0'..'9' && text[i + 1] in '0'..'9'
+}
+
+/** [text] with every run of numerals set in [numerals]. */
+internal fun withNumerals(text: String, numerals: FontFamily): AnnotatedString {
+    val builder = AnnotatedString.Builder(text)
+    val span = SpanStyle(fontFamily = numerals, fontWeight = FontWeight.Normal, fontSize = NUMERAL_SCALE.em)
+    var i = 0
+    while (i < text.length) {
+        if (!isNumeralAt(text, i)) {
+            i++
+            continue
+        }
+        val start = i
+        while (i < text.length && isNumeralAt(text, i)) i++
+        builder.addStyle(span, start, i)
+    }
+    return builder.toAnnotatedString()
 }
 
 /** Silkscreen label (status words, small captions). [bold] for status words and button labels. */

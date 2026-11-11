@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import app.transittracker.ui.res.Res
 import app.transittracker.ui.res.doto_black
+import app.transittracker.ui.res.jersey15_regular
 import app.transittracker.ui.res.pixelify_sans_400
 import app.transittracker.ui.res.pixelify_sans_600
 import app.transittracker.ui.res.pixelify_sans_700
@@ -18,7 +19,7 @@ import app.transittracker.ui.res.silkscreen_bold
 import app.transittracker.ui.res.silkscreen_regular
 import org.jetbrains.compose.resources.Font
 
-/** The three faces (plan 2.5). All SIL OFL; licences in composeResources/files/licenses. */
+/** The faces (plan 2.5). All SIL OFL; licences in composeResources/files/licenses. */
 @Immutable
 data class TtFonts(
     /** Doto Black: dot-matrix numerals (countdowns, the clock, time pickers). */
@@ -27,6 +28,12 @@ data class TtFonts(
     val pixelify: FontFamily,
     /** Silkscreen 400 / 700: small capital labels, status words, button labels. */
     val silkscreen: FontFamily,
+    /**
+     * Jersey 15: every numeral that is not a dot-matrix countdown. Pixelify's 5 reads as an S and
+     * Silkscreen Bold's 4 closes up, so [app.transittracker.ui.components.PixelText] sets digits
+     * in this face whatever the surrounding style.
+     */
+    val numerals: FontFamily,
 )
 
 @Composable
@@ -37,8 +44,9 @@ fun rememberTtFonts(): TtFonts {
     val p7 = Font(Res.font.pixelify_sans_700, FontWeight.Bold)
     val s4 = Font(Res.font.silkscreen_regular, FontWeight.Normal)
     val s7 = Font(Res.font.silkscreen_bold, FontWeight.Bold)
-    return remember(doto, p4, p6, p7, s4, s7) {
-        TtFonts(FontFamily(doto), FontFamily(p4, p6, p7), FontFamily(s4, s7))
+    val n = Font(Res.font.jersey15_regular, FontWeight.Normal)
+    return remember(doto, p4, p6, p7, s4, s7, n) {
+        TtFonts(FontFamily(doto), FontFamily(p4, p6, p7), FontFamily(s4, s7), FontFamily(n))
     }
 }
 
@@ -71,6 +79,8 @@ data class TtType(
     val label13Bold: TextStyle,
     /** Section headings ("TO WORK"): Silkscreen 11 with 1 sp tracking, drawn in secondary text. */
     val section: TextStyle,
+    /** The face for numerals inside Pixelify and Silkscreen text; applied by `PixelText`, not by screens. */
+    val numerals: FontFamily,
 )
 
 private val tight = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None)
@@ -103,4 +113,5 @@ fun ttType(fonts: TtFonts): TtType = TtType(
     label12Bold = style(fonts.silkscreen, FontWeight.Bold, 12.sp, 14.sp),
     label13Bold = style(fonts.silkscreen, FontWeight.Bold, 13.sp, 16.sp),
     section = style(fonts.silkscreen, FontWeight.Normal, 11.sp, 12.sp, 1.sp),
+    numerals = fonts.numerals,
 )

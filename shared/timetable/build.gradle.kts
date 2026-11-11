@@ -16,7 +16,9 @@ kotlin {
             implementation(kotlin("test"))
         }
         jvmMain.dependencies {
-            implementation(libs.sqldelight.sqlite.driver)
+            // api: the pipeline writes packs through JvmTimetables and opens them with the same driver.
+            api(libs.sqldelight.sqlite.driver)
+            api(libs.sqlite.jdbc)
         }
     }
 }

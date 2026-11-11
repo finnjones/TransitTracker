@@ -32,14 +32,14 @@ drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
 | F3 | Role of animation | **Decided** | **Central.** Animated pixel vehicles show where each service is and which way it is going, for every mode; page changes use game-style transitions (section 3) |
 | F3a | Vehicle in the page transition | **Decided** | **It matches the service being opened**, in mode and line colour: a bus for a bus trip, a ferry for a ferry (section 3.4) |
 | F3b | Transition timing | **Decided** | **As prototyped:** the new page is usable within 300 ms |
-| F4 | UI toolkit | To confirm | **Compose Multiplatform**, screens shared by Android and iOS. The look is fully custom, so nothing is lost by not using each platform's own widgets, and iOS later becomes a thin shell. This changes one line of the backend plan ("screens stay native") |
+| F4 | UI toolkit | **Decided** | **Compose Multiplatform**, screens shared by Android and iOS. The look is fully custom, so nothing is lost by not using each platform's own widgets, and iOS later becomes a thin shell. This changes one line of the backend plan ("screens stay native") |
 | F5 | Map | To confirm | **Our own pixel line map** for rail; a street map only when buses arrive. Matches the look, needs no map key or billing, works on both platforms |
 | F6 | Themes | To confirm | **Night** by default, **Day** for sunlight, follow the phone setting |
 | F7 | Sound | To confirm | **Off by default**; commuters are in quiet carriages |
 | F8 | Saved places | **Decided** | **Addresses can be saved** (Home, Work and others), kept on the phone only, and used as the start or end of a saved trip (section 5.7) |
 | F9 | How an address is found | To confirm | **TfNSW's lookup through the server, plus "use where I am now".** The server is needed for journey planning anyway, so the phone's own lookup is no longer the simpler choice (section 5.7) |
 | F10 | Journey planning | **Decided** | **The app recommends ways to get from A to B**, including changes between modes and the walking time between them (section 5.6) |
-| F11 | What works the journeys out | To confirm | **TfNSW's Trip Planner, through tt-server.** Assessed as acceptable for this use. Google Maps and the other hosted services were assessed and are not recommended. An open-source planner on the home server (MOTIS) is the fallback if TfNSW's falls short (section 8.5) |
+| F11 | What works the journeys out | **Decided** | **TfNSW's Trip Planner, through tt-server.** Assessed as acceptable for this use. Google Maps and the other hosted services were assessed and are not recommended. An open-source planner on the home server (MOTIS) is the fallback if TfNSW's falls short (section 8.5) |
 
 ---
 
@@ -1002,11 +1002,6 @@ Rough weeks for one developer; estimates only.
 
 ## 11. Open questions
 
-- Is Compose Multiplatform acceptable (F4), given the backend plan said
-  screens stay native?
-- Is TfNSW's Trip Planner through the server acceptable as the planning engine
-  (F11)? It means planning needs a connection, though Home and saved routes do
-  not.
 - Should GO (following a journey leg by leg) be in the first build, or later
   as planned?
 - Does "save routes" also mean following a line on its own (the 333, or T1)

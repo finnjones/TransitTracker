@@ -58,3 +58,8 @@ sqldelight {
         }
     }
 }
+
+// List each Android host (Robolectric) test in the build log, so CI shows what ran.
+tasks.withType<Test>().matching { it.name == "testAndroidHostTest" }.configureEach {
+    testLogging { events("passed", "skipped", "failed") }
+}

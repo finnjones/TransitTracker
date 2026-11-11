@@ -278,11 +278,4 @@ class SqliteNotificationLog(private val db: Database) : NotificationLog {
             )
         }
     }
-
-    /** Number of entries at or after [sinceMs]. */
-    fun countSince(sinceMs: Long): Int = db.read { c ->
-        c.prepareStatement("SELECT COUNT(*) FROM notifications WHERE at_ms >= ?").use { ps ->
-            ps.bind(sinceMs).executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
-        }
-    }
 }

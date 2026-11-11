@@ -171,7 +171,12 @@ class StubWatchService(
             ),
         )
         if (result == PushResult.InvalidToken) devices.clearPushToken(deviceId)
-        log.record(NotificationLogEntry(clock.nowMillis(), deviceId, watchId, null, null, "test", title, result.toString()))
+        val outcome = when (result) {
+            is PushResult.Sent -> "sent"
+            PushResult.InvalidToken -> "invalid_token"
+            is PushResult.Failed -> "failed: ${result.reason}"
+        }
+        log.record(NotificationLogEntry(clock.nowMillis(), deviceId, watchId, null, null, "test", title, outcome))
         return result
     }
 

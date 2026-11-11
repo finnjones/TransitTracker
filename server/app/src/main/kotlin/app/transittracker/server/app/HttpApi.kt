@@ -286,12 +286,21 @@ fun ApplicationCall.clientIp(): String {
     return peer
 }
 
-/** True if the request came straight from this machine, not through a proxy such as Tailscale Funnel. */
+/**
+ * True if the request came straight from this machine, not through a proxy such as Tailscale
+ * Funnel. In the Docker setup Tailscale proxies from loopback, so a loopback peer alone is not
+ * enough: the request must also carry no forwarding headers (Tailscale sets `X-Forwarded-For`)
+ * and must address the server as localhost (Tailscale keeps the public `Host`).
+ */
 fun ApplicationCall.isDirectLocalRequest(): Boolean {
     if (!isLoopback(request.local.remoteAddress)) return false
-    val proxied = listOf(HttpHeaders.XForwardedFor, HttpHeaders.Forwarded, "X-Real-IP", "Tailscale-Funnel-Request")
-        .any { request.header(it) != null }
-    return !proxied
+    val proxied = listOf(
+        HttpHeaders.XForwardedFor, HttpHeaders.XForwardedHost, HttpHeaders.Forwarded, "X-Real-IP",
+        "Tailscale-Funnel-Request",
+    ).any { request.header(it) != null }
+    if (proxied) return false
+    val host = request.header(HttpHeaders.Host)?.substringBeforeLast(':')?.removeSurrounding("[", "]") ?: return true
+    return isLoopback(host)
 }
 
 private fun isLoopback(address: String): Boolean =

@@ -14,6 +14,8 @@ kotlin {
         }
         commonMain.dependencies {
             api(project(":shared:model"))
+            // Timetable pack reader: CompositeTimetable here, JvmTimetables for the JVM opener.
+            api(project(":shared:timetable"))
             api(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.json)

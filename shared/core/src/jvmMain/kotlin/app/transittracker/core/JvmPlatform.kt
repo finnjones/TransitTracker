@@ -1,5 +1,7 @@
 package app.transittracker.core
 
+import app.transittracker.model.Timetable
+import app.transittracker.timetable.JvmTimetables
 import com.github.luben.zstd.ZstdInputStream
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -85,4 +87,9 @@ private fun moveAtomically(from: Path, to: Path) {
     } catch (e: AtomicMoveNotSupportedException) {
         Files.move(from, to, StandardCopyOption.REPLACE_EXISTING)
     }
+}
+
+/** Opens downloaded packs with the `:shared:timetable` SQLite reader (read-only, pooled connections). */
+object JvmTimetableOpener : TimetableOpener {
+    override fun open(path: String): Timetable = JvmTimetables.open(Path.of(path))
 }

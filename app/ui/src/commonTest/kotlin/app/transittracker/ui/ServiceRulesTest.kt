@@ -8,7 +8,7 @@ import app.transittracker.ui.feature.service.FooterKind
 import app.transittracker.ui.feature.service.ListItem
 import app.transittracker.ui.feature.service.MarkerKind
 import app.transittracker.ui.feature.service.StopRole
-import app.transittracker.ui.feature.service.ageWords
+import app.transittracker.ui.format.ageWords
 import app.transittracker.ui.feature.service.footerFor
 import app.transittracker.ui.feature.service.listItems
 import app.transittracker.ui.feature.service.modeNoun

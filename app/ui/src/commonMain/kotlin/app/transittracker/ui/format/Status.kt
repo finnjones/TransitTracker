@@ -80,14 +80,19 @@ fun statusPresentation(d: Departure): StatusPresentation =
 /** Whole minutes of a delay, rounded to nearest, at least 1. */
 fun delayMinutes(delaySeconds: Int?): Int = maxOf(1, (abs(delaySeconds ?: 0) + 30) / 60)
 
-private fun ageWords(ms: Long): String {
+/** The age of live data in label form: "12S" under a minute, else "3 MIN". */
+fun ageWords(ms: Long): String {
     val s = (ms / 1000).coerceAtLeast(0)
     return if (s < 60) "${s}S" else "${s / 60} MIN"
 }
 
-private fun ageSpoken(ms: Long): String {
+/** [ageWords] for a LIVE chip: "NOW" for the first few seconds (never "0S"), then "12S AGO", "3 MIN AGO". */
+fun liveAgeWords(ms: Long): String = if (ms < 5_000) "NOW" else ageWords(ms) + " AGO"
+
+/** The age of live data for a screen reader: "12 seconds", "1 minute". */
+fun ageSpoken(ms: Long): String {
     val s = (ms / 1000).coerceAtLeast(0)
-    return if (s < 60) (if (s == 1L) "1 second" else "$s seconds") else minutesSpoken((s / 60).toInt())
+    return if (s < 60) (if (s == 1L) "1 second" else "$s seconds") else (s / 60).let { if (it == 1L) "1 minute" else "$it minutes" }
 }
 
 internal fun minutesSpoken(m: Int) = if (m == 1) "1 minute" else "$m minutes"

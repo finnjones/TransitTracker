@@ -269,7 +269,8 @@ phase, so it costs nothing when no transition runs; it works inside `LazyColumn`
 
 ```kotlin
 class AppDeps(core: TransitCore, planner: JourneyPlanner, settings: SettingsStore,
-              places: PlacesStore, platform: PlatformServices, clock: WallClock)
+              places: PlacesStore, platform: PlatformServices, clock: WallClock,
+              kv: KeyValueStore? = null /* for screen-level things that should survive a restart */)
 AppDeps.fake(clock = SampleData.clock, joined = true, settings = UiSettings(), trips = FakeSetup.trips,
              withPlaces = true, scenario = CoreScenario(), platform = FakePlatformServices(), kv = null)
 ```

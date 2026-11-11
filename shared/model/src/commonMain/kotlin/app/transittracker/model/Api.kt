@@ -45,6 +45,8 @@ object ApiPaths {
     const val WATCH_TEST = "/v1/watches/{id}/test"
     /** GET /v1/places?q=text&lat=..&lon=..&limit=.. -> PlacesResponse (see Planning.kt) */
     const val PLACES = "/v1/places"
+    /** GET /v1/stops/near?lat=..&lon=..&radius=.. -> PlacesResponse: stops of every mode, nearest first (see Planning.kt) */
+    const val STOPS_NEAR = "/v1/stops/near"
     /** POST /v1/plan (PlanRequest) -> PlanResponse (see Planning.kt) */
     const val PLAN = "/v1/plan"
     const val HEALTH = "/health"

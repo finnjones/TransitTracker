@@ -3,6 +3,8 @@ package app.transittracker.ui
 import app.transittracker.core.FakeData
 import app.transittracker.model.JourneyPlanner
 import app.transittracker.model.LatLng
+import app.transittracker.model.Mode
+import app.transittracker.model.Place
 import app.transittracker.model.PlaceKind
 import app.transittracker.model.PlacesResult
 import app.transittracker.model.TransitCore
@@ -192,12 +194,62 @@ class PlaceEditStateHolderTest {
         runCurrent()
         assertTrue(h.now().stops.isEmpty())
         assertFalse(h.now().canSave)
-        assertEquals("No stations are within walking distance of here. Try another address.", h.now().saveProblem)
+        assertEquals("No stations or stops are within walking distance of here. Try another address.", h.now().saveProblem)
+    }
+
+    @Test
+    fun busAndLightRailStopsFromThePlannerAreOfferedWhereThereIsNoStation() = runTest {
+        // Like Coogee St, Randwick: no train station within 1.5 km, buses and light rail close by.
+        val deps = AppDeps.fake()
+        val home = LatLng(-33.5, 150.5)
+        val planner = deps.planner as FakeJourneyPlanner
+        planner.nearStops = listOf(
+            Place("G1", PlaceKind.STOP, "Carrington Rd at Coogee St", "Randwick", LatLng(-33.5, 150.5025), modes = listOf(Mode.BUS)),
+            Place("2", PlaceKind.STOP, "Randwick Light Rail", "Randwick", LatLng(-33.5, 150.5056), modes = listOf(Mode.LIGHT_RAIL)),
+            Place("G3", PlaceKind.STOP, "Far Bus Stop", "Randwick", LatLng(-33.5, 150.5080), modes = listOf(Mode.BUS)),
+        )
+        val h = holder(deps, backgroundScope)
+        h.setName("Home")
+        h.pick(albertRd.copy(position = home))
+        runCurrent()
+        assertEquals(listOf(home), planner.nearLookups)
+        assertEquals(listOf("Carrington Rd at Coogee St", "Randwick"), h.now().stops.map { it.stop.name })
+        assertEquals(listOf(Mode.LIGHT_RAIL), h.now().stops[1].stop.modes)
+        assertNull(h.now().stopsNote)
+        assertTrue(h.now().canSave)
+    }
+
+    @Test
+    fun withoutThePlannerTheTimetablesStationsAreOfferedWithANote() = runTest {
+        val deps = AppDeps.fake()
+        (deps.planner as FakeJourneyPlanner).answer = FakeJourneyPlanner.Answer.OFFLINE
+        val h = holder(deps, backgroundScope)
+        h.setName("Home")
+        h.pick(albertRd)
+        runCurrent()
+        assertTrue(h.now().stops.isNotEmpty())
+        assertNotNull(h.now().stopsNote)
+        assertTrue(h.now().canSave)
+    }
+
+    @Test
+    fun withoutThePlannerAndNoStationNearbyItDoesNotClaimNothingIsNear() = runTest {
+        val deps = AppDeps.fake()
+        val planner = deps.planner as FakeJourneyPlanner
+        planner.answer = FakeJourneyPlanner.Answer.OFFLINE
+        val h = holder(deps, backgroundScope)
+        h.setName("Home")
+        h.pick(albertRd.copy(position = LatLng(-33.5, 150.5)))
+        runCurrent()
+        assertEquals("Could not look up the stops near here. Check the connection and try again.", h.now().stopsProblem)
+        assertFalse(h.now().canSave)
     }
 
     @Test
     fun aFailedStopLookupOffersToTryAgain() = runTest {
         val deps = AppDeps.fake()
+        val planner = deps.planner as FakeJourneyPlanner
+        planner.answer = FakeJourneyPlanner.Answer.FAILED
         var fail = true
         val core = object : TransitCore by deps.core {
             override suspend fun stopsNear(position: LatLng, radiusMeters: Double): List<Stop> =
@@ -210,6 +262,7 @@ class PlaceEditStateHolderTest {
         assertNotNull(h.now().stopsProblem)
         assertFalse(h.now().canSave)
         fail = false
+        planner.answer = FakeJourneyPlanner.Answer.NORMAL
         h.retryStops()
         runCurrent()
         assertNull(h.now().stopsProblem)

@@ -193,5 +193,12 @@ sealed interface PlanResult {
 interface JourneyPlanner {
     suspend fun searchPlaces(query: String, near: LatLng? = null, limit: Int = 10): PlacesResult
 
+    /**
+     * Stops of every mode (train, metro, light rail, bus, ferry, coach) within [radiusMeters] of
+     * [position], nearest first, as [PlaceKind.STOP] places. The phone's own timetable may hold
+     * only some modes; this asks the planner, which knows them all.
+     */
+    suspend fun stopsNear(position: LatLng, radiusMeters: Int): PlacesResult
+
     suspend fun plan(request: PlanRequest): PlanResult
 }

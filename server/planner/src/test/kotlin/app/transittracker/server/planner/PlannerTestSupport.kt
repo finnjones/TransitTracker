@@ -29,6 +29,8 @@ object PlannerFixtures {
 
     fun tfnsw(name: String): String = Files.readString(dir.resolve("tfnsw").resolve(name))
 
+    fun live(name: String): String = Files.readString(dir.resolve("live").resolve(name))
+
     val replay: Path = dir.resolve("replay/planner")
 }
 
@@ -149,12 +151,14 @@ class FakePlannerFetcher(
     val calls = ArrayList<Pair<PlannerEndpoint, List<Pair<String, String>>>>()
     var trip: PlannerFetch = PlannerFetch.Success(PlannerFixtures.tfnsw("trip_direct_train.json"))
     var stopFinder: PlannerFetch = PlannerFetch.Success(PlannerFixtures.tfnsw("stop_finder_central.json"))
+    var coord: PlannerFetch = PlannerFetch.Success(PlannerFixtures.live("coord-central.json"))
 
     override suspend fun fetch(endpoint: PlannerEndpoint, params: List<Pair<String, String>>): PlannerFetch {
         calls += endpoint to params
         return when (endpoint) {
             PlannerEndpoint.TRIP -> trip
             PlannerEndpoint.STOP_FINDER -> stopFinder
+            PlannerEndpoint.COORD -> coord
         }
     }
 }

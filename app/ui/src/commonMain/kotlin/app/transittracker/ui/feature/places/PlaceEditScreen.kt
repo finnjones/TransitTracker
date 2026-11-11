@@ -252,13 +252,13 @@ private fun StopsSection(state: PlaceEditState, actions: PlaceEditActions, modif
         SectionHeading("STOPS YOU WOULD WALK TO", Modifier.padding(bottom = 4.dp))
         when {
             state.position == null -> PixelText(
-                "Pick an address, or use where you are now. The stations within walking distance appear here.",
+                "Pick an address, or use where you are now. The stations and stops within walking distance appear here.",
                 style = TtTheme.type.reading15, color = c.textSecondary,
             )
             state.stopsLoading -> Label("LOOKING FOR STOPS…", color = c.textSecondary, size = LabelSize.L10)
             state.stopsProblem != null -> AnswerNote(state.stopsProblem, actions.retryStops)
             state.stops.isEmpty() -> PixelText(
-                "No stations are within walking distance of here. Try another address.",
+                NO_STOPS_NEAR,
                 style = TtTheme.type.reading15, color = c.caution,
             )
             else -> {
@@ -270,6 +270,7 @@ private fun StopsSection(state: PlaceEditState, actions: PlaceEditActions, modif
                     "WALK TIMES ARE ESTIMATES. TAP ONE TO CORRECT IT.",
                     Modifier.padding(top = 10.dp), color = c.textSecondary, size = LabelSize.L10,
                 )
+                state.stopsNote?.let { AnswerNote(it, actions.retryStops) }
             }
         }
     }
@@ -281,7 +282,7 @@ private fun StopRowView(row: StopRow, open: Boolean, actions: PlaceEditActions) 
     val c = TtTheme.colors
     val s = row.stop
     val ink = if (s.enabled) c.text else c.textSecondary
-    val spoken = "${s.name}, ${spokenWalk(s.walkMinutes, s.estimated)}, ${formatDistance(s.distanceMeters).lowercase().replace(" m", " metres").replace(" km", " kilometres")}" +
+    val spoken = "${s.name}${if (row.lines.isEmpty()) modesLabel(s.modes)?.let { ", ${it.lowercase()}" }.orEmpty() else ""}, ${spokenWalk(s.walkMinutes, s.estimated)}, ${formatDistance(s.distanceMeters).lowercase().replace(" m", " metres").replace(" km", " kilometres")}" +
         if (row.lines.isNotEmpty()) ", lines ${spokenLines(row.lines)}" else ""
     DashedDivider()
     Row(
@@ -292,6 +293,8 @@ private fun StopRowView(row: StopRow, open: Boolean, actions: PlaceEditActions) 
         Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = spoken }, verticalArrangement = Arrangement.spacedBy(5.dp)) {
             PixelText(s.name, style = TtTheme.type.row15Strong, color = ink, maxLines = 2)
             LineBadges(row.lines, dim = !s.enabled)
+            // Stops the phone has no timetable for (buses, light rail) say what calls there instead.
+            if (row.lines.isEmpty()) modesLabel(s.modes)?.let { Label(it, color = c.textSecondary, size = LabelSize.L10) }
         }
         Row(
             Modifier.heightIn(min = TtTheme.spacing.touch)

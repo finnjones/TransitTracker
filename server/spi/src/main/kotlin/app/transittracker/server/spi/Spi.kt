@@ -123,8 +123,8 @@ data class FeedStatus(
 // Journey planning (implemented by :server:planner)
 
 /**
- * Place search and journey planning for `GET /v1/places` and `POST /v1/plan` (contract in
- * `Planning.kt`). Implementations validate their input and report failures as [ApiException]:
+ * Place search, stops near a position and journey planning for `GET /v1/places`,
+ * `GET /v1/stops/near` and `POST /v1/plan` (contract in `Planning.kt`). Implementations validate their input and report failures as [ApiException]:
  * 400 `bad_request`, 503 `planner_unavailable` (no key and no replay data, today's TfNSW budget
  * used up, or TfNSW throttling) and 502 `planner_upstream` (TfNSW answered with something unusable).
  *
@@ -136,6 +136,12 @@ interface Planner {
 
     /** Places matching [query] (2..80 characters); nearer results first when [near] is given. */
     suspend fun places(query: String, near: LatLng?, limit: Int): PlacesResponse
+
+    /**
+     * Stops of every mode within [radiusMeters] (1..2000) of [position], nearest first, as
+     * `PlaceKind.STOP` places. Counted with place searches in [PlannerStatus.placesRequests].
+     */
+    suspend fun stopsNear(position: LatLng, radiusMeters: Int): PlacesResponse
 
     suspend fun plan(request: PlanRequest): PlanResponse
 

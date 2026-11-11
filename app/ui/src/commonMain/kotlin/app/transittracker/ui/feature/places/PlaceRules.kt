@@ -32,7 +32,16 @@ const val STATION_RADIUS_M = 1500.0
 /** ...nearest three at most... */
 const val STATION_LIMIT = 3
 
-/** ...plus bus, light rail and ferry stops within this distance (plan 5.7). */
+/**
+ * ...plus light rail stops and ferry wharves within this distance, nearest [LIGHT_RAIL_FERRY_LIMIT]
+ * (a change to plan 5.7, which put them with buses at 500 m: people walk further to a tram or a
+ * ferry than to a bus, e.g. Randwick Light Rail is 529 m from Coogee St, Randwick)...
+ */
+const val LIGHT_RAIL_FERRY_RADIUS_M = 1000.0
+
+const val LIGHT_RAIL_FERRY_LIMIT = 2
+
+/** ...plus bus and coach stops within this distance (plan 5.7). */
 const val LOCAL_STOP_RADIUS_M = 500.0
 
 /** The plan gives no number for local stops; a busy street has dozens, so only the nearest few are offered. */
@@ -77,30 +86,45 @@ fun spokenWalk(minutes: Int, estimated: Boolean): String =
 /** A rail station: trains or metro call there. Everything else (bus, light rail, ferry, coach) is a local stop. */
 fun isRailStation(stop: Stop): Boolean = Mode.TRAIN in stop.modes || Mode.METRO in stop.modes
 
+/** Which walking-distance rule a stop falls under: the most far-reaching mode that calls there. */
+enum class StopTier { RAIL, LIGHT_RAIL_FERRY, LOCAL }
+
+fun stopTier(stop: Stop): StopTier = when {
+    isRailStation(stop) -> StopTier.RAIL
+    Mode.LIGHT_RAIL in stop.modes || Mode.FERRY in stop.modes -> StopTier.LIGHT_RAIL_FERRY
+    else -> StopTier.LOCAL
+}
+
 /**
- * The stops to offer for a place at [position], from the core's [candidates] (stops near it,
- * platforms or stands included): platforms are folded into their station, then the rule of plan
- * 5.7 applies. Rail stations within [STATION_RADIUS_M], nearest [STATION_LIMIT]; other stops within
+ * The stops to offer for a place at [position], from [candidates] (stops near it, platforms or
+ * stands included; the phone's timetable and the planner's stops-near lookup together, so the same
+ * station may come twice): platforms are folded into their station, then the rule of plan 5.7
+ * applies. Rail stations within [STATION_RADIUS_M], nearest [STATION_LIMIT]; light rail and ferry
+ * within [LIGHT_RAIL_FERRY_RADIUS_M], nearest [LIGHT_RAIL_FERRY_LIMIT]; bus and coach stops within
  * [LOCAL_STOP_RADIUS_M], nearest [LOCAL_STOP_LIMIT]. Nearest first, walk times estimated.
  */
 fun walkingStops(position: LatLng, candidates: List<Stop>): List<PlaceStop> {
-    class Group(val id: StopId, var name: String, var distance: Double, var rail: Boolean)
+    class Group(val id: StopId, var name: String, var distance: Double, var tier: StopTier, val modes: MutableSet<Mode> = mutableSetOf())
 
     val groups = LinkedHashMap<StopId, Group>()
     for (s in candidates) {
         val key = s.parentId ?: s.id
         val d = distanceMeters(position, s.position)
-        val g = groups.getOrPut(key) { Group(key, shortStopName(s.name), d, false) }
+        val tier = stopTier(s)
+        val g = groups.getOrPut(key) { Group(key, shortStopName(s.name), d, tier) }
         if (s.parentId == null) g.name = shortStopName(s.name) // the station's own name beats a platform's
         g.distance = min(g.distance, d)
-        g.rail = g.rail || isRailStation(s)
+        if (tier.ordinal < g.tier.ordinal) g.tier = tier
+        g.modes += s.modes
     }
     val all = groups.values.sortedBy { it.distance }
-    val stations = all.filter { it.rail && it.distance <= STATION_RADIUS_M }.take(STATION_LIMIT)
-    val local = all.filter { !it.rail && it.distance <= LOCAL_STOP_RADIUS_M }.take(LOCAL_STOP_LIMIT)
-    return (stations + local).sortedBy { it.distance }.map { g ->
+    fun pick(tier: StopTier, radius: Double, limit: Int) = all.filter { it.tier == tier && it.distance <= radius }.take(limit)
+    val chosen = pick(StopTier.RAIL, STATION_RADIUS_M, STATION_LIMIT) +
+        pick(StopTier.LIGHT_RAIL_FERRY, LIGHT_RAIL_FERRY_RADIUS_M, LIGHT_RAIL_FERRY_LIMIT) +
+        pick(StopTier.LOCAL, LOCAL_STOP_RADIUS_M, LOCAL_STOP_LIMIT)
+    return chosen.sortedBy { it.distance }.map { g ->
         val meters = g.distance.roundToInt()
-        PlaceStop(g.id, g.name, estimateWalkMinutes(meters), meters, enabled = true, estimated = true)
+        PlaceStop(g.id, g.name, estimateWalkMinutes(meters), meters, enabled = true, estimated = true, modes = g.modes.sortedBy { it.ordinal })
     }
 }
 
@@ -144,10 +168,26 @@ fun addressText(place: Place): String = if (place.detail.isBlank()) place.name e
 fun placeSaveProblem(name: String, hasPosition: Boolean, hasStops: Boolean, enabledStops: Int): String? = when {
     name.isBlank() -> "Give the place a name."
     !hasPosition -> "Pick an address from the list, or use where you are now."
-    !hasStops -> "No stations are within walking distance of here. Try another address."
+    !hasStops -> NO_STOPS_NEAR
     enabledStops == 0 -> "Switch on at least one stop you would walk to."
     else -> null
 }
+
+/** "BUS", "LIGHT RAIL · BUS": what calls at a stop, for a stop shown without line badges; null if nothing is known. */
+fun modesLabel(modes: List<Mode>): String? = modes.distinct().sortedBy { it.ordinal }.mapNotNull { m ->
+    when (m) {
+        Mode.TRAIN -> "TRAIN"
+        Mode.METRO -> "METRO"
+        Mode.LIGHT_RAIL -> "LIGHT RAIL"
+        Mode.BUS -> "BUS"
+        Mode.FERRY -> "FERRY"
+        Mode.COACH -> "COACH"
+        Mode.OTHER -> null
+    }
+}.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+
+/** Said when nothing is within walking distance of a place. */
+const val NO_STOPS_NEAR = "No stations or stops are within walking distance of here. Try another address."
 
 /** How many saved routes use [placeId]: the trips linked to it at either end. */
 fun routesUsingPlace(placeId: String, links: Collection<TripPlaces>): Int =

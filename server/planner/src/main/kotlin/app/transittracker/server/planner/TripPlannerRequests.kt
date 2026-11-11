@@ -1,5 +1,6 @@
 package app.transittracker.server.planner
 
+import app.transittracker.model.LatLng
 import app.transittracker.model.PlanEndpoint
 import app.transittracker.model.PlanRequest
 import app.transittracker.model.PlanTimeKind
@@ -9,7 +10,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Query parameters of the two Trip Planner calls. Names and values are from the Trip Planner
+ * Query parameters of the Trip Planner calls. Names and values are from the Trip Planner
  * Swagger `tripplanner_v1_swag_efa11_20251002.yml` [S] (operations `/stop_finder` and `/trip`), as
  * KRAIL also sends them [K]. The optional `version` parameter is not sent, so TfNSW answers in its
  * current response version. Nothing identifies the device.
@@ -24,6 +25,20 @@ object TripPlannerRequests {
         "name_sf" to text,
         "coordOutputFormat" to "EPSG:4326",
         "TfNSWSF" to "true",
+    )
+
+    /**
+     * `/v1/tp/coord`: the stops (`type_1=STOP`, one per stop, with the product classes that serve
+     * it) within [radiusMeters] of [position]. The coordinate is `LONGITUDE:LATITUDE:EPSG:4326`,
+     * longitude first [S]; `inclFilter=1` makes `type_1` / `radius_1` apply [S].
+     */
+    fun coord(position: LatLng, radiusMeters: Int): List<Pair<String, String>> = listOf(
+        "outputFormat" to "rapidJSON",
+        "coord" to "%.6f:%.6f:EPSG:4326".format(Locale.ROOT, position.lon, position.lat),
+        "coordOutputFormat" to "EPSG:4326",
+        "inclFilter" to "1",
+        "type_1" to "STOP",
+        "radius_1" to radiusMeters.toString(),
     )
 
     /**

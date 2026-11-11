@@ -42,7 +42,8 @@ import kotlin.io.path.name
  *
  * - [start] loads the newest published version of every pack in `config.packsDir`, then runs
  *   [refresh] every night at `config.nightlyBuildHour` (Sydney time), and once at start if a
- *   configured pack has never been built.
+ *   configured pack has never been built. While one still has not been built, it tries again
+ *   after `options.missingPackRetry`, doubling up to `options.missingPackRetryMax`.
  * - [refresh] conditionally fetches each `PackDefinition.gtfsPaths` through [source], archives
  *   new zips, and rebuilds a pack only when its inputs changed: load, validate, merge, build,
  *   compress, publish atomically, open, then swap [current]. Any failure keeps the previous pack.
@@ -120,14 +121,28 @@ class PipelineTimetableRepository(
         this.scope = scope
         loadPublished()
         scope.launch(CoroutineName("timetable-nightly")) {
-            if (source != null && config.packs.any { it.name !in loaded }) refreshLogged("startup")
+            if (source != null && missingPacks().isNotEmpty()) refreshLogged("startup")
+            var retry = options.missingPackRetry
             while (isActive) {
                 val now = clock.nowMillis()
-                delay((nextNightlyRunMillis(now) - now).coerceAtLeast(1_000L))
-                refreshLogged("nightly")
+                val untilNightly = nextNightlyRunMillis(now) - now
+                val missing = if (source != null) missingPacks() else emptyList()
+                if (missing.isNotEmpty() && retry.inWholeMilliseconds < untilNightly) {
+                    log.warn("No timetable yet for {}; trying again in {}", missing.joinToString(), retry)
+                    delay(retry)
+                    retry = (retry * 2).coerceAtMost(options.missingPackRetryMax)
+                    refreshLogged("retry")
+                } else {
+                    retry = options.missingPackRetry
+                    delay(untilNightly.coerceAtLeast(1_000L))
+                    refreshLogged("nightly")
+                }
             }
         }
     }
+
+    /** Configured packs with no published version loaded. */
+    private fun missingPacks(): List<String> = config.packs.map { it.name }.filter { it !in loaded }
 
     private suspend fun refreshLogged(reason: String) {
         try {

@@ -26,6 +26,13 @@ data class PipelineOptions(
     val gtfsValidatorJar: Path? = null,
     val gtfsValidatorTimeout: Duration = 15.minutes,
     val retiredPackCloseDelay: Duration = 2.minutes,
+    /**
+     * While a configured pack has never been built (the first build failed, e.g. TfNSW answered
+     * `502`), try again after this long, doubling up to [missingPackRetryMax], instead of waiting
+     * for the nightly run.
+     */
+    val missingPackRetry: Duration = 5.minutes,
+    val missingPackRetryMax: Duration = 60.minutes,
 ) {
     companion object {
         /** Reads `TT_PACK_WINDOW_DAYS` and `TT_GTFS_VALIDATOR_JAR`; everything else keeps its default. */

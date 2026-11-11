@@ -1,6 +1,9 @@
 package app.transittracker.server.pipeline
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.await
+import org.slf4j.LoggerFactory
 import java.io.IOException
 import java.net.URI
 import java.net.http.HttpClient
@@ -9,6 +12,7 @@ import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** HTTP cache validators remembered between fetches of one GTFS bundle. */
 data class CacheValidators(val etag: String?, val lastModified: String?)
@@ -34,6 +38,10 @@ interface GtfsSource {
 /**
  * Fetches bundles from the TfNSW Open Data Hub with `Authorization: apikey <key>` and
  * conditional requests (`If-None-Match` / `If-Modified-Since`). The key is never logged.
+ *
+ * A temporary failure (`5xx`, `429`, or the connection dropping) is tried again after each of
+ * [retryDelays]: TfNSW's gateway sometimes answers `502` to one request and serves the next.
+ * Other statuses (`401`, `403`, `404`) fail at once.
  */
 class HttpGtfsSource(
     private val baseUrl: String,
@@ -43,8 +51,27 @@ class HttpGtfsSource(
         .connectTimeout(Duration.ofSeconds(30))
         .build(),
     private val requestTimeout: Duration = Duration.ofMinutes(10),
+    private val retryDelays: List<kotlin.time.Duration> = listOf(10.seconds, 30.seconds),
 ) : GtfsSource {
+    private val log = LoggerFactory.getLogger(HttpGtfsSource::class.java)
+
     override suspend fun fetch(path: String, validators: CacheValidators?, target: Path): FetchResult {
+        var attempt = 0
+        while (true) {
+            try {
+                return fetchOnce(path, validators, target)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                val wait = retryDelays.getOrNull(attempt++)
+                if (wait == null || (e is HttpStatusException && !e.temporary)) throw e
+                log.warn("Fetching GTFS {} failed ({}); trying again in {}", path, e.message, wait)
+                delay(wait)
+            }
+        }
+    }
+
+    private suspend fun fetchOnce(path: String, validators: CacheValidators?, target: Path): FetchResult {
         val request = HttpRequest.newBuilder(URI.create(baseUrl.trimEnd('/') + "/" + path.trimStart('/')))
             .timeout(requestTimeout)
             .header("Authorization", "apikey $apiKey")
@@ -69,10 +96,15 @@ class HttpGtfsSource(
             )
             else -> {
                 Files.deleteIfExists(target)
-                throw IOException("HTTP $status fetching GTFS $path")
+                throw HttpStatusException(status, "HTTP $status fetching GTFS $path")
             }
         }
     }
 
     override fun toString(): String = "HttpGtfsSource($baseUrl)"
+}
+
+/** A non-success HTTP status; [temporary] for `5xx` and `429`, which are worth trying again. */
+class HttpStatusException(val status: Int, message: String) : IOException(message) {
+    val temporary: Boolean get() = status >= 500 || status == 429
 }

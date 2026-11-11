@@ -26,6 +26,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
 /** A [GtfsSource] serving in-memory bundles with ETags, counting requests. */
@@ -230,6 +231,24 @@ class PipelineTimetableRepositoryTest {
             assertEquals(version, second.packs().single().version)
             // Unchanged input after a restart is still recognised as unchanged.
             assertEquals(listOf("mini-rail"), second.refresh().unchanged)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun aFailedFirstBuildIsRetriedSoonNotAtNight() {
+        source.put(path, fixtureZip, "\"v1\"")
+        source.failNext = IOException("HTTP 502 fetching GTFS $path")
+        val r = PipelineTimetableRepository(config, source, options.copy(missingPackRetry = 200.milliseconds), clock)
+            .also { repos += it }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            r.start(scope)
+            val deadline = System.currentTimeMillis() + 30_000
+            while (r.current.value == null && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            assertNotNull(r.current.value, "built on a retry after the startup fetch failed")
+            assertEquals(2, source.fetches, "startup (502), then one retry")
         } finally {
             scope.cancel()
         }

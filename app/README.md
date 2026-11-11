@@ -292,7 +292,8 @@ AppDeps.fake(clock = SampleData.clock, joined = true, settings = UiSettings(), t
   `KeyValuePlacesStore(kv)` stores JSON under `places.list` and `places.tripLinks`.
 - `platform`: `PlatformServices`: `locationPermission`, `requestLocationPermission()`,
   `currentLocation()`, `notificationPermission`, `requestNotificationPermission()`,
-  `openNotificationSettings()`, `openUrl(url)`, `appVersion`, `deviceId`, `systemReduceMotion`,
+  `openNotificationSettings()`, `openUrl(url)`, `appVersion`, `isDebugBuild` (false unless the
+  shell says otherwise; shows developer-only rows), `deviceId`, `systemReduceMotion`,
   `batterySaver` (StateFlows; `PermissionState` GRANTED / NOT_ASKED / DENIED).
   `FakePlatformServices` records calls and lets tests set every state.
 - `clock`: "now" for every screen.

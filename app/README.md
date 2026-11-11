@@ -27,8 +27,8 @@ app/ui                      :app:ui, package app.transittracker.ui (KMP; JVM tar
     fake/        FakeSetup (sample trips and places), ScenarioTransitCore (stale / offline previews)
     feature/<area>/  one package per feature area: its screens, state holders and <Area>Shots.kt
   src/commonMain/composeResources/
-    font/        Doto Black, Pixelify Sans 400/600/700, Silkscreen 400/700 (static TTFs)
-    files/licenses/  the three OFL licences (ship them with the app)
+    font/        Doto Black, Pixelify Sans 400/600/700, Silkscreen 400/700, Jersey 15 (static TTFs)
+    files/licenses/  the OFL licences of the four faces (ship them with the app)
     drawable/    sprite_<name>.png, _livery.png, _outline.png (generated, do not edit)
   src/jvmMain/   screenshot harness, desktop window (JVM only)
   src/commonTest, src/jvmTest
@@ -65,6 +65,8 @@ Status colour is chosen by role (`TtTheme.colors.of(presentation.role)`), never 
 
 ```kotlin
 PixelText(text, modifier, style = type.row15, color = colors.text, strike = false, textAlign, maxLines, overflow)
+                 // numerals: every digit in a Pixelify or Silkscreen style is drawn in Jersey 15
+                 // automatically (Pixelify's 5 and Silkscreen Bold's 4 are hard to read); pass plain strings
 Label(text, modifier, color, bold = false, size = LabelSize.L11)      // Silkscreen 10/11/12/13
 SectionLabel(text)                                                   // "TO WORK", a heading
 Digits(text, modifier, style = type.digits30, color)                // Doto clock

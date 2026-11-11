@@ -17,13 +17,15 @@ dependencies {
     implementation("org.slf4j:slf4j-api:2.0.17")
 
     testImplementation(kotlin("test"))
+    // Real Trip Planner captures are mapped against a pack built from real GTFS records (testdata/planner/live).
+    testImplementation(project(":server:pipeline"))
     testImplementation(libs.coroutines.test)
     testRuntimeOnly(libs.logback)
 }
 
 tasks.test {
     useJUnitPlatform()
-    // Hand-made TfNSW Trip Planner responses live at the repository root (testdata/planner).
+    // TfNSW Trip Planner responses (hand-made and captured) live at the repository root (testdata/planner).
     systemProperty("tt.testdata", rootProject.layout.projectDirectory.dir("testdata").asFile.absolutePath)
     inputs.dir(rootProject.layout.projectDirectory.dir("testdata"))
 }

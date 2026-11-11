@@ -19,9 +19,9 @@ import kotlinx.serialization.json.JsonPrimitive
  *      captured in 2026 (`trip_seven_hills_redfern_715_backtrack.json`, API version 10.6.21.17).
  *      Fields the Swagger does not list come from there and are marked [K].
  *
- * NOT VERIFIED against the live API from this repository (no key here): see
- * testdata/planner/README.md for what must be checked once a key is available. Every field is
- * optional and unknown fields are ignored, so a renamed field degrades to "missing", never to a crash.
+ * Checked against the live API (version 10.6.21.17) on 11 Nov 2026: see testdata/planner/README.md
+ * for what was found. Every field is optional and unknown fields are ignored, so a renamed field
+ * degrades to "missing", never to a crash.
  */
 
 /** Lenient: TfNSW sends some string fields as bare numbers [K]. */
@@ -104,11 +104,18 @@ internal data class LegDto(
     /** [[lat, lon], ...] [S]. */
     val coords: List<List<Double>>? = null,
     val footPathInfo: List<FootPathInfoDto>? = null,
-    /** True when [footPathInfo] repeats a walk that is also its own leg [K]. */
+    /**
+     * Not read. KRAIL took it to mean "[footPathInfo] repeats a walk that is also its own leg" [K];
+     * on the live API it is true on rides whose AFTER walk is the only description of the change
+     * (Strathfield -> Epping -> metro) and on a first walk leg from a coordinate.
+     */
     val footPathInfoRedundant: Boolean? = null,
     val interchange: InterchangeDto? = null,
     val isRealtimeControlled: Boolean? = null,
-    /** e.g. ["MONITORED"] [K]; a cancelled trip is assumed to carry "TRIP_CANCELLED" (unverified). */
+    /**
+     * ["MONITORED"] when live [K][live]. A cancelled trip is assumed to carry "TRIP_CANCELLED": not
+     * seen live, because the planner leaves trips cancelled in real time out of its answers.
+     */
     val realtimeStatus: List<String>? = null,
     /** Some EFA versions flag cancellation here (unverified). */
     val isCancelled: Boolean? = null,
@@ -155,7 +162,8 @@ internal data class TransportationDto(
 @Serializable
 internal data class ProductDto(
     /** 1 train, 2 metro, 4 light rail, 5 bus, 7 coach, 9 ferry, 11 school bus, 99/100 walking [S];
-     *  101 bicycle ... 105 taxi, 106 car [K]. */
+     *  10 on demand (iconId 23, offered without being asked for) [live]; 101 bicycle ... 105 taxi,
+     *  106 car [K]. */
     @SerialName("class") val productClass: Int? = null,
     val name: String? = null,
     val iconId: Int? = null,

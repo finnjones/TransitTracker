@@ -1,0 +1,4 @@
+agency_id,agency_name,agency_url,agency_timezone,agency_lang,agency_phone,agency_fare_url,agency_email
+NSWTrains,NSW Trains,https://transportnsw.info/regional/,Australia/Sydney,en,,,
+SydneyTrains,Sydney Trains,https://transportnsw.info/,Australia/Sydney,en,,,
+SMNW,Sydney Metro,http://transportnsw.info,Australia/Sydney,EN,,http://transportnsw.info/,

@@ -170,10 +170,10 @@ class TfnswPlannerTest {
     // ---- places ----
 
     @Test
-    fun `places are mapped, unknown types dropped and nearer ones ranked first`() = runTest {
+    fun `places are mapped, unknown types dropped, stations first and nearer ones next`() = runTest {
         val p = planner()
         val all = p.places("central", null, 10).places
-        assertEquals(listOf("200060", "streetID:1500001234:0:95308100:-1:Central Ave:Manly"), all.take(2).map { it.id })
+        assertEquals(listOf("200060", "2000338", "streetID:1500001234:0:95308100:-1:Central Ave:Manly"), all.take(3).map { it.id })
         assertEquals(5, all.size, "the 'unknown' location is dropped")
         val central = all.first()
         assertEquals(PlaceKind.STOP, central.kind)
@@ -184,13 +184,14 @@ class TfnswPlannerTest {
         val platform = all.single { it.id == "2000338" }
         assertEquals("Central Station", platform.name)
         assertEquals("2000338", platform.stopId)
-        assertEquals(PlaceKind.ADDRESS, all[1].kind)
-        assertEquals("Central Ave", all[1].name)
-        assertEquals("Manly", all[1].detail)
+        assertEquals(PlaceKind.ADDRESS, all[2].kind)
+        assertEquals("Central Ave", all[2].name)
+        assertEquals("Manly", all[2].detail)
         assertEquals(PlaceKind.LOCALITY, all.single { it.name == "Central Tilba" }.kind)
 
-        val nearGosford = p.places("central", LatLng(-33.4300, 151.3400), 2).places
-        assertEquals(listOf(PlaceKind.POI, PlaceKind.ADDRESS), nearGosford.map { it.kind }, "Gosford, then Manly")
+        // Stations matching the search first (TfNSW's best match, then stops named "central"), then nearer places.
+        val nearGosford = p.places("central", LatLng(-33.4300, 151.3400), 4).places
+        assertEquals(listOf(PlaceKind.STOP, PlaceKind.STOP, PlaceKind.POI, PlaceKind.ADDRESS), nearGosford.map { it.kind }, "stations, then Gosford, then Manly")
         val params = fetcher.calls.first().second
         assertEquals(
             listOf("outputFormat" to "rapidJSON", "type_sf" to "any", "name_sf" to "central", "coordOutputFormat" to "EPSG:4326", "TfNSWSF" to "true"),

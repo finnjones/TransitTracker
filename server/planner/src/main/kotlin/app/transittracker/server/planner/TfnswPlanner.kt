@@ -91,7 +91,7 @@ class TfnswPlanner(
             // Timetable lookups read SQLite: off the request thread.
             withContext(Dispatchers.IO) { PlaceMapper(timetable.value).map(response) }.also { placesCache.put(key, it) }
         }
-        val places = PlaceRanking.rank(ranked, near, limit)
+        val places = PlaceRanking.rank(ranked, text, near, limit)
         log.info("Place search: {} result(s) of {} (limit {})", places.size, ranked.size, limit)
         return PlacesResponse(serverTimeMs = clock.nowMillis(), places = places)
     }

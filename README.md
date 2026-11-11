@@ -1,7 +1,8 @@
 # TransitTracker
 
 Personal NSW public transport app (Android first, iOS later) built on Transport for NSW open data.
-See [docs/transittracker-backend-plan.md](docs/transittracker-backend-plan.md) for the backend design.
+See [docs/transittracker-backend-plan.md](docs/transittracker-backend-plan.md) for the backend design
+and [docs/transittracker-frontend-plan.md](docs/transittracker-frontend-plan.md) for the UI plan.
 
 ## Modules
 

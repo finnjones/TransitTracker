@@ -1,0 +1,3 @@
+route_id,agency_id,route_short_name,route_long_name,route_type,route_color,route_text_color,route_sort_order
+T1,ST,T1,Central to Chatswood via North Sydney,2,F99D1C,000000,1
+M1,SM,M1,Central to Chatswood via Martin Place,401,168388,FFFFFF,2

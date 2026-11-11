@@ -317,6 +317,8 @@ private suspend fun join(call: ApplicationCall, deps: ApiDependencies) {
 
 private fun configResponse(deps: ApiDependencies): ConfigResponse {
     val c = deps.config
+    // Live data comes from TfNSW (API key) or, in development, from replayed recordings.
+    val liveAvailable = c.tfnswApiKey != null || c.replayDir != null
     return ConfigResponse(
         pollIntervalS = c.pollIntervalS,
         trackerPollIntervalS = c.trackerPollIntervalS,
@@ -325,9 +327,9 @@ private fun configResponse(deps: ApiDependencies): ConfigResponse {
         statusMessage = c.statusMessage,
         features = mapOf(
             "push" to (c.firebaseServiceAccountPath != null),
-            "realtime" to (c.tfnswApiKey != null),
-            "vehicles" to (c.tfnswApiKey != null),
-            "alerts" to (c.tfnswApiKey != null),
+            "realtime" to liveAvailable,
+            "vehicles" to liveAvailable,
+            "alerts" to liveAvailable,
         ),
         packs = deps.timetables.packs(),
     )

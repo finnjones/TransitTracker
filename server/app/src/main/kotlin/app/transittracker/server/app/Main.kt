@@ -7,13 +7,10 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
-import java.nio.file.Files
-import kotlin.time.Duration.Companion.hours
 
 private val log = LoggerFactory.getLogger("app.transittracker.server.app.Main")
 
@@ -23,53 +20,37 @@ private val log = LoggerFactory.getLogger("app.transittracker.server.app.Main")
  */
 fun main() {
     val config = ServerConfig.fromEnv()
-    listOf(config.dataDir, config.packsDir, config.gtfsArchiveDir, config.recordingsDir)
-        .forEach { Files.createDirectories(it) }
+    val tt = TtServer(config)
 
-    val db = Database.open(config.dbPath)
-    val devices = SqliteDeviceStore(db)
-    val watchRepository = SqliteWatchRepository(db)
-    val notificationLog = SqliteNotificationLog(db)
-    val services = wireServices(config, devices, watchRepository, notificationLog)
-
+    val job = SupervisorJob()
     val scope = CoroutineScope(
-        SupervisorJob() + Dispatchers.Default +
-            CoroutineExceptionHandler { _, e -> log.error("Background task failed", e) },
+        job + Dispatchers.Default + CoroutineExceptionHandler { _, e -> log.error("Background task failed", e) },
     )
-    services.start(scope)
-    scope.launch(Dispatchers.IO) {
-        while (isActive) {
-            runCatching { devices.prune() }.onFailure { log.error("Prune failed", it) }
-            delay(24.hours)
-        }
-    }
+    tt.start(scope)
 
-    val deps = ApiDependencies(
-        config = config,
-        devices = devices,
-        notifications = notificationLog,
-        timetables = services.timetables,
-        live = services.live,
-        watches = services.watches,
-    )
-    val server = embeddedServer(Netty, port = config.port, host = "0.0.0.0") { transitTrackerApi(deps) }
+    val server = embeddedServer(Netty, port = config.port, host = "0.0.0.0") { transitTrackerApi(tt.api) }
 
     Runtime.getRuntime().addShutdownHook(
         Thread({
             log.info("Shutting down")
             server.stop(gracePeriodMillis = 2_000, timeoutMillis = 10_000)
-            scope.cancel()
-            db.close()
+            runBlocking { withTimeoutOrNull(5_000) { job.cancelAndJoin() } }
+            tt.close()
             log.info("Stopped")
         }, "tt-server-shutdown"),
     )
 
     log.info(
-        "tt-server listening on port {} (public URL {}, data dir {}, TfNSW key {}, push {}, admin token {})",
+        "tt-server listening on port {} (public URL {}, data dir {}, live {}, push {}, admin token {}, timetable {})",
         config.port, config.publicBaseUrl, config.dataDir.toAbsolutePath(),
-        if (config.tfnswApiKey != null) "set" else "MISSING",
-        if (config.firebaseServiceAccountPath != null) "configured" else "off",
+        when {
+            config.replayDir != null -> "replay from ${config.replayDir}"
+            config.tfnswApiKey != null -> "TfNSW"
+            else -> "off (TFNSW_API_KEY missing)"
+        },
+        if (config.firebaseServiceAccountPath != null) "configured" else "logged only",
         if (config.adminToken != null) "set" else "off",
+        tt.services.timetables.current.value?.version ?: "none yet",
     )
     server.start(wait = true)
 }

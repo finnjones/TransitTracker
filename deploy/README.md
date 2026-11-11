@@ -211,7 +211,7 @@ fails, on the zips the server already downloaded:
 ```bash
 ./tt-admin check-gtfs syd-rail \
   "$(docker compose exec -T tt-server sh -c 'ls -t /data/gtfs/v1_gtfs_schedule_sydneytrains/*.zip | head -1')" \
-  "$(docker compose exec -T tt-server sh -c 'ls -t /data/gtfs/v1_gtfs_schedule_metro/*.zip | head -1')"
+  "$(docker compose exec -T tt-server sh -c 'ls -t /data/gtfs/v2_gtfs_schedule_metro/*.zip | head -1')"
 ```
 
 `tt-admin planner-capture` makes **one real Trip Planner call** with the server's key (counted in
@@ -229,7 +229,10 @@ When several feeds share ids (e.g. Epping or Central station in both the Sydney 
 feeds) the server merges them with a fixed policy: shared stations may differ slightly in position
 (up to 300 m for stations, 50 m for other stops) and in optional details, but must have the same
 name and type; service and shape ids that two feeds use for different things are renamed in the
-later feed (`<id>~2`). Details are in `GtfsMerger.kt`.
+later feed (`<id>~2`). Details are in `GtfsMerger.kt`. On the real feeds (11 Nov 2026) 33 stops are
+shared (Central, Martin Place, Sydenham, Epping, Chatswood and the Bankstown line stations), all
+reconciled, nothing renamed. If the log warns that an input "has no trips in the pack window", that
+source is stale or wrong (the old `/v1/gtfs/schedule/metro` bundle did exactly that).
 
 ## 11. The status page
 

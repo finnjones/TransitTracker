@@ -121,9 +121,14 @@ data class FeedDefinition(
 )
 
 /**
- * Release 1 sources. PATHS MUST BE VERIFIED against the TfNSW developer portal and the
- * TfNSW GTFS/GTFS-R Implementation Specification v2 before relying on them; they are config,
- * not code, so they can be corrected without a rebuild of other modules.
+ * Release 1 sources, checked against the live API on 11 Nov 2026 (every path answered 200 and
+ * decoded; see testdata/planner/README.md for the run).
+ *
+ * - Sydney Trains static: `/v1/gtfs/schedule/sydneytrains` (there is no v2 bundle: 404); its trip
+ *   ids are the ones the v2 trip update and vehicle position feeds use.
+ * - Metro static: `/v2/gtfs/schedule/metro` (its trip ids match every v2 Metro trip update). The v1
+ *   bundle (`/v1/gtfs/schedule/metro`) is frozen at version 17092024 (Metro North West only, 13
+ *   stations) and none of its trips run in the current window: a pack built from it has no metro.
  */
 object DefaultSources {
     val feeds: List<FeedDefinition> = listOf(
@@ -147,7 +152,7 @@ object DefaultSources {
         PackDefinition(
             name = "syd-rail",
             modes = setOf(Mode.TRAIN, Mode.METRO),
-            gtfsPaths = listOf("/v1/gtfs/schedule/sydneytrains", "/v1/gtfs/schedule/metro"),
+            gtfsPaths = listOf("/v1/gtfs/schedule/sydneytrains", "/v2/gtfs/schedule/metro"),
         ),
     )
 }

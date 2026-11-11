@@ -231,6 +231,9 @@ process death (the host keys it by `NavEntry.id`); it is dropped when the page l
 A covered page is not composed, so its state holder stops and is rebuilt on return.
 System back: the platform shell calls `AppController.onBack()` (Compose Multiplatform 1.12 has no
 back handler on the common compile classpath here); Escape does it in the desktop window.
+A page that shows something of its own that back should close first (a search view, a sub-page)
+says so with `OnBack(enabled = …) { close it }`; while enabled, back runs that instead of leaving
+the page. Do not call `nav.back()` inside it.
 The shell's other hooks: `AppController.onForeground()`, `onBackground()`,
 `openFromNotification(data)`.
 

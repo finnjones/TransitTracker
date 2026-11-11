@@ -47,6 +47,7 @@ import app.transittracker.ui.components.SwitchRow
 import app.transittracker.ui.components.ToggleChip
 import app.transittracker.ui.motion.flapRow
 import app.transittracker.ui.nav.LocalNavigator
+import app.transittracker.ui.nav.OnBack
 import app.transittracker.ui.nav.Route
 import app.transittracker.ui.platform.PermissionState
 import app.transittracker.ui.settings.CardDensity
@@ -102,6 +103,8 @@ fun SettingsScreen() {
             openDebugGallery = { nav.push(Route.DebugGallery) },
         )
     }
+    // Back closes the licences page before it leaves the tab.
+    OnBack(enabled = licences) { licences = false }
     if (licences) LicencesPage(state.data.attribution, actions.closeLicences)
     else SettingsContent(state, actions)
 }

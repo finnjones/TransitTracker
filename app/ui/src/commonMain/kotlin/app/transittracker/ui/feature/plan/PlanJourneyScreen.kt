@@ -54,6 +54,7 @@ import app.transittracker.ui.format.Lamp
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.motion.flapRow
 import app.transittracker.ui.nav.LocalNavigator
+import app.transittracker.ui.nav.OnBack
 import app.transittracker.ui.nav.Route
 import app.transittracker.ui.places.SavedPlace
 import app.transittracker.ui.state.rememberStateHolder
@@ -93,6 +94,8 @@ fun PlanJourneyPage(holder: PlanJourneyStateHolder, fromOnboarding: Boolean = fa
             openRoute = { nav.push(Route.TripTimetable(it.id)) },
         )
     }
+    // Back closes the search view before it leaves the page.
+    OnBack(enabled = state.editing != null) { holder.closeSearch() }
     PlanJourneyContent(state, holder, actions)
 }
 

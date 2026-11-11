@@ -76,7 +76,21 @@ class Navigator internal constructor(initial: NavState) {
     val allEntries: List<NavEntry> get() = state.stacks.values.flatten()
 
     /** True when [back] would do something other than leave the app. */
-    val canGoBack: Boolean get() = backStack.size > 1 || state.tab != Tab.TRIPS
+    val canGoBack: Boolean get() = backHandlerFor(current) != null || backStack.size > 1 || state.tab != Tab.TRIPS
+
+    // Pages that take back themselves for now (see `OnBack`). Not saved: pages register again
+    // when they are composed.
+    private val backHandlers = mutableListOf<PageBackHandler>()
+
+    internal fun addBackHandler(handler: PageBackHandler) {
+        backHandlers += handler
+    }
+
+    internal fun removeBackHandler(handler: PageBackHandler) {
+        backHandlers -= handler
+    }
+
+    private fun backHandlerFor(entry: NavEntry): PageBackHandler? = backHandlers.lastOrNull { it.entryId == entry.id }
 
     /** Opens [route] on top of the current page. */
     fun push(route: Route, transition: PageTransition? = null) {
@@ -103,11 +117,16 @@ class Navigator internal constructor(initial: NavState) {
     }
 
     /**
-     * System back or a back button. Pops the current page (playing its entry transition in
-     * reverse); on a tab root other than Trips, returns to Trips. Returns false on the Trips root:
-     * the platform should leave the app.
+     * System back or a back button. A page that has something of its own to close first (an
+     * `OnBack` handler: a search view, a sub-page) gets the call instead. Otherwise pops the
+     * current page (playing its entry transition in reverse); on a tab root other than Trips,
+     * returns to Trips. Returns false on the Trips root: the platform should leave the app.
      */
     fun back(): Boolean {
+        backHandlerFor(current)?.let {
+            it.onBack()
+            return true
+        }
         val stack = backStack
         if (stack.size > 1) {
             val from = stack.last()

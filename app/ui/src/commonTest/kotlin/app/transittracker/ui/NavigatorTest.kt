@@ -4,6 +4,7 @@ import app.transittracker.model.Mode
 import app.transittracker.model.ServiceRef
 import app.transittracker.ui.motion.PageTransition
 import app.transittracker.ui.nav.Navigator
+import app.transittracker.ui.nav.PageBackHandler
 import app.transittracker.ui.nav.Route
 import app.transittracker.ui.nav.Tab
 import kotlin.test.Test
@@ -14,6 +15,26 @@ import kotlin.test.assertTrue
 class NavigatorTest {
     private val ref = ServiceRef("T9N-0730", "20261111")
     private val t9 = PageTransition.vehiclePass(Mode.TRAIN, "D11F2F")
+
+    @Test
+    fun aPageCanTakeBackItselfBeforeItIsLeft() {
+        val nav = Navigator()
+        nav.push(Route.SavedPlaces)
+        var closed = 0
+        val handler = PageBackHandler(nav.current.id) { closed++ }
+        nav.addBackHandler(handler)
+        assertTrue(nav.back())
+        assertEquals(1, closed)
+        assertEquals(Route.SavedPlaces, nav.current.route, "still on the page")
+        nav.removeBackHandler(handler)
+        assertTrue(nav.back())
+        assertEquals(Route.Trips, nav.current.route)
+        // A handler of a page that is no longer on screen is not asked.
+        nav.addBackHandler(handler)
+        assertFalse(nav.canGoBack)
+        assertFalse(nav.back())
+        assertEquals(1, closed)
+    }
 
     @Test
     fun pushAndBackPlayTheSameTransitionInReverse() {

@@ -1,533 +1,377 @@
 # TransitTracker Backend Plan
 
-Status: **Draft for review** · Platform: **Android first, iOS later** · Scope:
-**everything below the UI** (the front end is planned separately)
+Status: **Draft v2** · Audience: **me and a few friends, not for profit** ·
+Data: **TfNSW Open Data Hub, free public tier only** · Platform: **Android
+first, iOS later** · Scope: **everything below the UI** (front end planned
+separately)
 
-This plan turns the design lessons in
-[tripview-architecture.md](tripview-architecture.md) and the direction in
-[tripview-purpose-and-plan.md](tripview-purpose-and-plan.md) into a buildable
-backend for TransitTracker, using Transport for NSW (TfNSW) open data only.
-TripView is a design reference, not a data source: nothing here calls
-TripView's servers or reuses its formats.
+This plan applies the design lessons in
+[tripview-architecture.md](tripview-architecture.md) and
+[tripview-purpose-and-plan.md](tripview-purpose-and-plan.md) to a small,
+personal TransitTracker. TripView is a design reference only: nothing here
+calls TripView's servers or reuses its formats.
+
+> An earlier draft of this file planned for a public app at scale (managed
+> cloud database, Redis, CDN, quota uplift). It is in git history at commit
+> `9c80976` if the app ever grows. Section 14 lists what would change.
 
 ---
 
-## 0. Executive summary
+## 0. Summary
 
-- **Shape.** The backend has two halves:
-  1. a **cloud service** that ingests TfNSW data once and serves it to every
-     device, so device count never affects our TfNSW quota; and
-  2. a **shared on-device core** (Kotlin Multiplatform) that holds the
-     timetable, answers "when is my next service?" offline, and overlays live
-     data. The Android UI calls it now; an iOS UI calls the same code later.
-- **Offline first.** Timetables live on the phone in a compact package that
-  is updated with small daily patches. The network adds freshness (delays,
-  cancellations, platforms, vehicles, alerts), not core function.
-- **The server controls load.** Every real-time response tells the app when
-  to ask next (30 s by default, 15 s while tracking). Load can be tuned with no
-  app release.
-- **Push instead of background polling.** Android restricts background work,
-  so "tell me if my 7:42 is late" runs on the server and is delivered by
-  Firebase Cloud Messaging (which also reaches iPhones later).
-- **Stack.** Kotlin everywhere (Ktor server, Kotlin Multiplatform core),
-  PostgreSQL + PostGIS, Redis, object storage + CDN, Firebase for push and app
-  attestation. Hosted in an **Australian region** (recommended: Google Cloud
-  `australia-southeast1`, Sydney). Infrastructure as code (Terraform).
-- **First release scope.** Sydney Trains and Sydney Metro. This fits inside
-  the default TfNSW quota (about 43% of it). Adding light rail, ferries and
-  buses needs a **quota increase from TfNSW**, which is on the critical path
-  for phase B6.
-- **Effort.** Roughly 16–20 engineer-weeks to a production-ready trains and
-  metro backend (section 15). Rough running cost for a public beta: low
-  hundreds of AUD per month (section 13).
+- **One small server, one free API key.** A single Kotlin program on a
+  home machine or a cheap Sydney VPS holds the one free TfNSW key, builds the
+  timetable file for phones each night, and passes on live data. Friends need
+  no TfNSW account, and the key never sits on a phone.
+- **Fetch only when someone is looking.** The server calls TfNSW only when a
+  phone asks, at most once per feed every 15–30 seconds, and shares that
+  answer with everyone. With a handful of users this uses a small fraction of
+  the free quota, so **all Sydney modes fit** without asking TfNSW for
+  anything.
+- **Offline first.** Each phone keeps the timetable locally and answers
+  "when's my next train?" with no signal. Live data is a layer on top.
+- **Shared engine for Android now, iOS later.** The on-device logic is
+  written once in Kotlin Multiplatform; only the screens differ per platform.
+- **Cost:** about A$0–15 a month, plus a one-off US$25 Google Play developer
+  fee if you distribute through Play. **Effort:** roughly 9–12 engineer-weeks
+  for the full backend (section 12).
 
 ---
 
 ## 1. Scope and boundaries
 
-### 1.1 What "backend" means here
-
 ```mermaid
 flowchart LR
   subgraph FE["Front end (separate plan)"]
-    UI["Android UI: Jetpack Compose screens, widgets, notifications UI"]
-    IOSUI["iOS UI (later): SwiftUI"]
+    UI["Android screens (Compose)"]
+    IOSUI["iOS screens (later)"]
   end
-  subgraph Core["On-device core (this plan, Part B)"]
-    Facade["TransitCore API (Kotlin interfaces + Flows)"]
+  subgraph Core["On-device core (Part B)"]
+    Facade["TransitCore API"]
   end
-  subgraph Cloud["Cloud service (this plan, Part A)"]
-    API["App API"]
+  subgraph Server["Home / VPS server (Part A)"]
+    API["Small HTTP API"]
   end
+  TfNSW[("TfNSW Open Data Hub")]
   UI --> Facade
   IOSUI -.later.-> Facade
   Facade <-->|"HTTPS"| API
+  API <-->|"one free key"| TfNSW
 ```
 
-| In scope | Out of scope (front end) |
+| Backend (this plan) | Front end (separate) |
 |---|---|
-| TfNSW data ingest, processing and redistribution | Screens, navigation, theming, accessibility of the UI |
-| Timetable packages and patch delivery | Maps rendering (the core supplies shapes and positions) |
-| Real-time API, alerts API, push notifications | Notification and widget layouts |
-| On-device timetable store, query engine, real-time overlay, sync logic | On-device alarm UI (the core supplies alarm scheduling logic) |
-| Security, observability, CI/CD, infrastructure | App store listing, onboarding copy |
+| Fetching and processing TfNSW data | Screens, navigation, styling |
+| Timetable file for phones | Map drawing (core supplies shapes and positions) |
+| Live data, alerts, optional push | Notification and widget layouts |
+| On-device timetable, search, live overlay, alarm timing | Alarm and settings screens |
 
-**The contract between the two teams** is (a) the `TransitCore` Kotlin API
-in section 9.2 and (b) the HTTP API in section 6. Both get a mock
-implementation in phase B1 so front-end work can start immediately.
+The hand-off between the two is the `TransitCore` Kotlin interface (section
+8.2). A fake version with sample data comes first so screen work can start
+straight away.
 
-### 1.2 Assumptions (each one is a decision to confirm, see section 17)
+### 1.1 Assumptions
 
-| # | Assumption | Why it matters |
-|---|---|---|
-| A1 | Public app with many users, not a personal tool | Needs a server so devices never hold the TfNSW key |
-| A2 | Release 1 covers Sydney Trains and Sydney Metro; then light rail, ferries, buses, then NSW TrainLink and regional | Drives quota, package size and effort |
-| A3 | No user accounts in release 1; trips stay on the device | Smaller privacy footprint; sync added later |
-| A4 | Free, no ads | No ad SDK, no advertising ID |
-| A5 | Saved stop-to-stop trips first; free-form journey planning later | On-device multi-modal routing is the largest single engineering item |
-
----
-
-## 2. Design principles
-
-Carried over from TripView, adapted for TfNSW open data.
-
-1. **Answer from the phone.** The first thing a user sees is computed locally.
-2. **Overlay, don't replace.** The timetable is the source of truth; live
-   data adjusts it. If live data is missing or doubtful, show the timetable
-   and say so.
-3. **Fetch once, serve many.** Each TfNSW feed is fetched once per interval
-   by the server, no matter how many devices are open.
-4. **Ask for less.** Devices request only the routes they are showing, and
-   use conditional requests so unchanged data costs nothing.
-5. **Server-set pacing.** Poll intervals come from the server in every
-   response.
-6. **Fail soft.** If TfNSW, our server or the phone's network fails, the app
-   still shows timetabled departures, marked as such.
-7. **Write once, run on both phones.** Engine logic lives in shared Kotlin so
-   iOS behaves identically when it arrives.
+| # | Assumption |
+|---|---|
+| A1 | Up to about 10 users, all known to you |
+| A2 | Not for profit, no ads, no accounts |
+| A3 | Only public TfNSW open data on the free tier; no agreement with TfNSW |
+| A4 | Release 1: Sydney Trains + Metro. Then light rail, ferries, buses (no quota barrier, just effort) |
+| A5 | Saved stop-to-stop trips first; free-form journey planning later, if ever |
 
 ---
 
-## 3. Data sources (TfNSW Open Data Hub)
+## 2. Data sources and terms
+
+### 2.1 Feeds
 
 All calls go to `https://api.transport.nsw.gov.au` with header
-`Authorization: apikey <key>`. **Endpoint paths and versions below must be
-checked against the TfNSW developer portal and the _TfNSW GTFS / GTFS-R
-Implementation Specification v2 (June 2025)_ before build.** TfNSW is
-moving Sydney Trains and Metro from v1 to v2 real-time feeds, and sources
-disagree on the current alerts version.
+`Authorization: apikey <key>`. **Check exact paths against the TfNSW
+developer portal and the _TfNSW GTFS / GTFS-R Implementation Specification
+v2 (June 2025)_ before building:** Sydney Trains and Metro are moving from
+v1 to v2 live feeds, and published sources disagree on the current alerts
+path.
 
-| Need | Feed | Example path (verify) | Format | Notes |
-|---|---|---|---|---|
-| Timetable that matches live data | GTFS static, "for realtime", per mode | `/v1/gtfs/schedule/sydneytrains` | Zipped CSV | Trip IDs must align with the real-time feed. Use the per-mode bundles, not the "complete" planning bundle, for matching |
-| Delays, cancellations, platforms, added trips | GTFS-R trip updates | `/v2/gtfs/realtime/sydneytrains`, `/v2/gtfs/realtime/metro` | Protobuf | Sydney Trains carries TfNSW extensions (carriages, occupancy, consist) |
-| Positions, occupancy | GTFS-R vehicle positions | `/v2/gtfs/vehiclepos/sydneytrains`, `/v2/gtfs/vehiclepos/metro` | Protobuf | Needs the TfNSW extension `.proto` (the "1007" extension listed on the dataset page) |
-| Disruptions | GTFS-R service alerts | `/v2/gtfs/alerts/{mode}` | Protobuf | Must add the "Realtime Alerts v2" product to the API application |
-| Ad-hoc journey planning (later) | Trip Planner API | `/v1/tp/trip`, `/v1/tp/stop_finder` | JSON | Costs one quota call per user query; proxy and cache, phase B7 |
+| Need | Feed | Example path (verify) | Notes |
+|---|---|---|---|
+| Timetable | GTFS static, per mode, "for realtime" | `/v1/gtfs/schedule/sydneytrains` | Use the per-mode bundles, whose trip IDs match the live feeds, not the "complete" planning bundle |
+| Delays, cancellations, platforms | GTFS-R trip updates | `/v2/gtfs/realtime/sydneytrains`, `/v2/gtfs/realtime/metro` | Protobuf; Sydney Trains has TfNSW extensions (carriages, occupancy) |
+| Train positions | GTFS-R vehicle positions | `/v2/gtfs/vehiclepos/sydneytrains`, `/v2/gtfs/vehiclepos/metro` | Needs the TfNSW extension `.proto` from the dataset page |
+| Disruptions | GTFS-R alerts | `/v2/gtfs/alerts/{mode}` | Add the "Realtime Alerts v2" product to your API application |
 
-Other modes (light rail lines, Sydney Ferries, Manly Fast Ferry, buses, NSW
-TrainLink, regional buses) follow the same pattern with v1 paths.
+Other modes (light rail, Sydney Ferries, Manly Fast Ferry, buses, NSW
+TrainLink) follow the same pattern.
 
-### 3.1 Licence and attribution
+### 2.2 What the free tier allows
 
-TfNSW open data is generally published under Creative Commons Attribution.
-**Confirm the current terms on the Open Data Hub.** The server returns the
-required attribution text in `/v1/config` so it can change without an app
-release, and the front end must display it (About screen at minimum).
+- **Getting a key:** register on the Open Data Hub, create an application,
+  add the products above. Free.
+- **Limits:** 60,000 requests a day and 5 a second per key, shared across all
+  endpoints. Over-limit responses have been reported as 401, 403 and 503, so
+  the server treats all three as "possibly throttled".
+- **Licence:** datasets are under **Creative Commons Attribution 4.0**, which
+  allows reuse and redistribution with attribution. Use of the Hub is also
+  covered by the Hub Terms and an Acceptable Use Policy. Sharing the data with
+  friends through your own server fits within this; **sharing the key itself
+  does not**, so the key stays on the server. Re-read the terms before
+  launch, as TfNSW can change them.
+- **Attribution:** the app shows an attribution line such as "Contains
+  Transport for NSW data" (check the Hub terms for any required wording),
+  served by the server so it can be changed without an app update.
 
----
+### 2.3 Quota in practice
 
-## 4. Quota strategy
+The server fetches a feed only when a phone asks for it, and never more often
+than its minimum age (15 s for trains and metro, 30 s for other modes, 60 s
+for alerts).
 
-### 4.1 Limits
+| Scenario | TfNSW calls/day |
+|---|---|
+| Worst case: someone has trains + metro open 24 hours a day | ≈ 26,000 (43%) |
+| Realistic: 5 people, ~1 hour of app-open time each, mostly overlapping commute times | ≈ 1,500–3,000 (under 5%) |
+| Nightly timetable check, 2–8 bundles | under 50 |
 
-The default ("Bronze") plan is **60,000 requests per day and 5 requests per
-second** per API key, shared across all endpoints. Over-limit responses have
-been reported as 401, 403 and 503, so the ingest client treats all three as
-"possibly throttled" (section 5.3). Higher limits are requested by emailing
-TfNSW Open Data Help.
-
-### 4.2 Budget for release 1 (Sydney Trains + Metro)
-
-| Feed | Interval | Calls/day |
-|---|---|---|
-| Trip updates, Sydney Trains | 15 s | 5,760 |
-| Vehicle positions, Sydney Trains | 15 s | 5,760 |
-| Trip updates, Metro | 15 s | 5,760 |
-| Vehicle positions, Metro | 15 s | 5,760 |
-| Alerts, Sydney Trains + Metro | 60 s each | 2,880 |
-| GTFS static change checks (conditional), 2 bundles | hourly | 48 |
-| **Total** | | **25,968 (≈43% of 60,000)** |
-
-Peak rate is about 0.3 calls per second, far below 5 per second. Headroom
-covers retries, a staging environment on a **separate key**, and spikes.
-
-### 4.3 Adding modes
-
-Adding 4 light rail lines, 2 ferry feeds and the bus feed (7 more modes,
-trip updates + vehicles) at 30 s adds 40,320 calls/day, taking the total to
-about 66,000, **over the default limit**. Options, in order of preference:
-
-1. **Request a higher quota from TfNSW** before phase B6 (critical path; start
-   the conversation in phase B0).
-2. **Demand-aware polling** (built in from day one, section 5.2): skip or slow
-   feeds that no device has asked about in the last 10 minutes. Overnight and
-   for low-use modes this cuts calls sharply.
-3. **Mode-specific intervals**: vehicle positions for light rail and ferries
-   at 60 s instead of 30 s (total ≈ 56,000, 93% of quota; too tight to rely
-   on alone).
-
-The scheduler holds a **daily budget**: if projected use passes 85% of quota,
-it lengthens intervals automatically and raises an alert.
+A **daily budget guard** stops calling TfNSW at 50,000 calls and serves the
+last data marked "stale" instead, so the key can never be suspended for
+overuse. Because of this, adding every Sydney mode later needs no quota
+change.
 
 ---
 
-## Part A: Cloud service
+## Part A: The server
 
-## 5. Architecture
+## 3. Architecture
+
+One program, one machine, one database file.
 
 ```mermaid
 flowchart LR
-  subgraph TfNSW["TfNSW Open Data Hub"]
-    GS["GTFS static (per mode)"]
-    RT["GTFS-R trip updates + vehicle positions"]
-    AL["GTFS-R alerts"]
-  end
-
-  subgraph GCP["Cloud (australia-southeast1)"]
-    subgraph Pipeline["Static pipeline (scheduled job)"]
-      Fetch["Fetch + validate GTFS"]
-      Load["Load versioned schedule to Postgres"]
-      Pack["Build device packages + patches"]
+  TfNSW[("TfNSW Open Data Hub")]
+  subgraph Box["Home machine or small VPS (Docker Compose)"]
+    Proxy["Caddy (HTTPS) or Cloudflare Tunnel"]
+    subgraph App["tt-server (one Kotlin process)"]
+      Api["HTTP API"]
+      Live["Live data cache (fetch on demand)"]
+      Build["Nightly timetable builder"]
+      Push["Push watcher (optional, later)"]
     end
-    subgraph Ingest["Real-time ingest (single active worker)"]
-      Sched["Quota-aware scheduler"]
-      Decode["Decode protobuf + TfNSW extensions"]
-      Match["Match to static trips, normalise"]
-      Snap["Build per-route snapshots"]
-      Watch["Watch engine (push triggers)"]
-    end
-    PG[("PostgreSQL + PostGIS")]
-    RD[("Redis: live snapshots, pub/sub, rate limits")]
-    GCSb[("Object storage: GTFS archive, packages, patches, RT recordings")]
-    CDN["CDN"]
-    API["App API (Ktor, autoscaled)"]
+    Files[("Disk: SQLite db, timetable files, raw GTFS archive")]
   end
+  FCM["Firebase Cloud Messaging (free)"]
+  Phones["Phones"]
 
-  FCM["Firebase Cloud Messaging"]
-  App["Android app (iOS later)"]
-
-  GS --> Fetch --> Load --> PG
-  Load --> Pack --> GCSb --> CDN --> App
-  RT --> Sched --> Decode --> Match --> Snap --> RD
-  AL --> Sched
-  PG --> Match
-  RD --> API
-  PG --> API
-  Snap --> Watch --> FCM --> App
-  App <-->|"HTTPS, App Check token"| API
+  Phones <-->|"HTTPS + device token"| Proxy <--> Api
+  Api --> Live <-->|"at most once per 15-30 s per feed"| TfNSW
+  Build <-->|"nightly"| TfNSW
+  Build --> Files
+  Api --> Files
+  Live --> Push --> FCM --> Phones
 ```
 
-### 5.1 Components
-
-| Component | Runs as | Responsibility |
-|---|---|---|
-| **Static pipeline** | Scheduled container job (hourly change check, full build on change) | Download GTFS, validate, load to Postgres as a new version, build device packages and patches, publish signed manifest |
-| **Real-time ingest** | One always-on container with a warm standby (leader election) | Poll TfNSW on schedule, decode, match, build snapshots, run watch engine |
-| **App API** | Autoscaled stateless containers | Serve config, manifests, real-time, alerts, shapes, device registration, watches |
-| **PostgreSQL + PostGIS** | Managed database | Versioned static schedule, devices, watches, package metadata, audit |
-| **Redis** | Managed cache | Latest real-time snapshots, feed health, pub/sub to API instances, per-device rate limits, quota counters, leader lock |
-| **Object storage + CDN** | Managed | Raw GTFS archive (90 days), device packages and patches, route shapes, real-time recordings (14 days) |
-| **Firebase** | SaaS | Cloud Messaging (push), App Check (attestation), Crashlytics, Remote Config (kill switches) |
-
-### 5.2 Real-time ingest in detail
-
-Each cycle, per feed:
-
-1. **Schedule.** The scheduler picks the next feed due, respecting the per
-   second throttle (token bucket, max 4/s to leave margin) and the daily
-   budget. Feeds have a base interval (15 s trains and metro, 30 s others,
-   60 s alerts) multiplied by a **demand factor**: ×1 if any device asked for
-   that mode in the last 10 minutes, ×4 if none, paused overnight if none for
-   an hour.
-2. **Fetch** with a 10 s timeout. Record latency, size and status.
-3. **Decode** GTFS-R protobuf, including TfNSW extensions (using Square's
-   Wire library with the official `.proto` files, pinned and versioned in the
-   repo).
-4. **Check freshness.** If the feed header timestamp has not advanced, skip
-   processing (cheap no-op). If it is older than 2× the interval, mark the
-   feed stale.
-5. **Match each trip update to the static schedule** (section 5.4).
-6. **Normalise** into our own compact model (section 6.3): per trip, a list
-   of stop deltas (arrival/departure delay, actual platform stop, skipped),
-   status (scheduled, cancelled, added, replaced), occupancy, vehicle, consist.
-7. **Build per-route snapshots**, each with a version number and a hash.
-   Write only routes whose hash changed to Redis, then publish a change event.
-8. **Run the watch engine** for affected trips (section 7).
-9. **Record** the raw feed to object storage (sampled, compressed) for replay
-   tests and incident analysis.
-
-**Single active worker.** Only one ingest instance polls at a time (Redis
-lock with 30 s lease, renewed each cycle). A standby takes over within one
-lease if the leader dies. This keeps quota use deterministic.
-
-### 5.3 Failure handling
-
-| Condition | Behaviour |
+| Part | What it does |
 |---|---|
-| 401/403/503 with throttle message, or 429 | Exponential backoff for that feed: 30 s, 60 s, 120 s, cap 5 min, with jitter. Alert if any feed is in backoff > 5 min |
-| Other 5xx or timeout | Retry once after 5 s, then back off as above |
-| Malformed protobuf | Keep last good snapshot, mark feed degraded, store payload for analysis |
-| Feed header not advancing for > 2× interval | Mark stale; snapshots carry `stale=true`; app shows "live data delayed" |
-| Static bundle update fails validation | Keep serving previous version; alert; do not publish packages |
-| Redis down | API serves last snapshot held in memory, marked stale; ingest buffers latest only |
+| **HTTP API** | Serves config, timetable file info and downloads, live data, alerts, shapes, device sign-up |
+| **Live data cache** | Fetches a TfNSW feed only when asked and the cached copy is older than its minimum age. Concurrent requests share one fetch. Decodes, matches to the timetable, keeps the result in memory |
+| **Timetable builder** | Nightly: checks TfNSW for new timetables, validates, builds the phone timetable file (section 7) |
+| **Push watcher** | Optional, phase P6: during the time windows friends set, checks their trips and sends "your train is late" via Firebase |
+| **SQLite database** | Devices, invite codes, watches, timetable file versions, daily call counter |
 
-### 5.4 Matching live data to the timetable
+No separate database server, cache server or CDN: at this size they add cost
+and upkeep without benefit.
 
-This is the part most likely to produce wrong answers, so it has its own
-rules and tests.
+**Code sharing:** the server uses the **same Kotlin modules as the phone**
+for reading the timetable file, time calculations and decoding live feeds.
+The server opens the timetable file it built to match live updates to
+scheduled services, so the phone and server can never disagree about what a
+trip ID means.
 
-1. **Primary key:** GTFS `trip_id` + `start_date` against the static version
-   the feed is aligned to. The pipeline records which static version each
-   real-time feed matches, and rejects a new static version if live trip IDs
-   stop matching (match rate drop > 10% triggers an alert and rollback).
-2. **Platform changes:** in TfNSW data, stops are platform-level child stops.
-   A trip update that names a different child stop of the same parent station
-   is a platform change.
-3. **Delay propagation:** follow GTFS-R semantics. A stop without an update
-   inherits the delay of the previous updated stop. Pre-compute delays for
-   every remaining stop so devices do no propagation logic.
-4. **Added and replacement trips:** trips not in the static schedule
-   (`ADDED`, replacement services) are sent with their full stop list and
-   times, since the device cannot look them up.
-5. **Cancellations and skipped stops:** trip-level `CANCELED` and stop-level
-   `SKIPPED` are passed through explicitly.
-6. **Unmatched updates:** counted and logged, never guessed. Target match
-   rate above 98% for trains and metro.
-7. **Static version skew:** each real-time response carries the static
-   version it was matched against. If a device holds an older package, the
-   server includes a small `tripIdMap` for changed IDs or the device falls
-   back to "timetabled" for unmatched services.
+## 4. Live data path
 
-### 5.5 Time handling
+When a phone asks for live data on some routes:
 
-- All service times are in `Australia/Sydney`. GTFS times can exceed 24:00
-  and are measured from "noon minus 12 hours" of the service day, which
-  matters on daylight-saving change days. Both the pipeline and the device
-  core use one shared, heavily tested conversion function.
-- Every API response carries the server time so the device can correct a
-  wrong phone clock when showing countdowns in seconds.
+1. Work out which feeds those routes need (for example T1 → Sydney Trains
+   trip updates).
+2. For each feed: if the cached copy is younger than its minimum age, use it.
+   Otherwise fetch once (other requests wait for the same fetch), with a
+   10 s timeout.
+3. Decode the protobuf, including TfNSW extensions (Square's Wire library,
+   with the official `.proto` files pinned in the repo).
+4. **Match each update to a timetabled trip** (section 4.1) and pre-compute
+   the delay at every remaining stop, so phones do no transit logic.
+5. Return only the trips on the requested routes, with the time the data was
+   produced and the next poll interval.
 
----
+**If TfNSW fails or throttles:** back off for that feed (30 s, 60 s, 120 s,
+up to 5 minutes), keep serving the last good copy marked stale.
 
-## 6. App API
+### 4.1 Matching rules
 
-### 6.1 Conventions
+| Case | Rule |
+|---|---|
+| Normal trip | Match on GTFS `trip_id` + start date |
+| Platform change | The update names a different platform stop of the same station |
+| Stops with no update | Inherit the delay of the previous updated stop (GTFS-R rule) |
+| Cancelled trip / skipped stop | Pass through explicitly |
+| Added or replacement trip (not in timetable) | Send its full stop list and times |
+| No match | Count and log; never guess. Show as "timetabled" |
+| Phone has an older timetable file | Response says which timetable version it matched; phone treats unmatched trips as "timetabled" |
 
-- HTTPS only, HTTP/2, base path `/v1`. Versioned; breaking changes go to
-  `/v2` and `/v1` is kept for at least 6 months.
-- **Formats:** real-time endpoints return **protobuf** (`application/x-protobuf`)
-  with gzip, and JSON when `Accept: application/json` (for debugging and
-  tests). Other endpoints are JSON.
-- **Every response** includes headers `X-Server-Time` (epoch ms) and, where
-  relevant, `X-Poll-Interval` and `X-Tracker-Poll-Interval` (seconds).
-- **Conditional requests** everywhere: `ETag` + `If-None-Match`, returning
-  `304 Not Modified` when unchanged.
-- **Auth:** every call carries a Firebase App Check token (Play Integrity on
-  Android, App Attest on iOS later) and an anonymous install ID. No user
-  login in release 1.
-- **Errors:** RFC 9457 problem JSON with a stable `code` field.
-- The API is described in an OpenAPI 3.1 file plus `.proto` files in
-  `/proto`, both used to generate client code and mock servers.
+**Staleness:** feed data older than 2× its minimum age is stale; a trip
+update older than 3 minutes is stale; a vehicle position older than
+2 minutes is hidden.
 
-### 6.2 Endpoints
+### 4.2 Time handling
 
-| Method and path | Purpose | Cache | Phase |
-|---|---|---|---|
-| `GET /v1/config` | Poll intervals, feature flags, minimum app version, attribution text, list of available packs, status banner | CDN 5 min | B1 |
-| `GET /v1/packs/manifest` | Signed manifest: pack versions, sizes, SHA-256, full and patch URLs | CDN 5 min, ETag | B2 |
-| `GET {cdn}/packs/{pack}/{version}.ttpk` | Full timetable package (immutable) | CDN 1 year | B2 |
-| `GET {cdn}/packs/{pack}/{from}-{to}.patch` | Patch between versions (immutable) | CDN 1 year | B2 |
-| `GET /v1/rt?routes=R1,R2&v=…` | Live data for listed routes: trip deltas, vehicles, alert IDs, feed health | 5 s server cache per canonical route set, ETag | B3 |
-| `GET /v1/rt/trip/{tripId}?date=YYYYMMDD` | Single-service tracking (faster interval) | 5 s, ETag | B3 |
-| `GET /v1/vehicles?routes=…` | Vehicle positions for map view | 5 s, ETag | B4 |
-| `GET /v1/alerts?modes=…` | Active alerts, translated into our model, with affected routes and stops | ETag; 304 when unchanged | B4 |
-| `GET /v1/shapes/{shapeId}` | Route shape as an encoded polyline | CDN 1 day, immutable per version | B4 |
-| `POST /v1/devices` | Register install ID and FCM token; returns device ID | none | B5 |
-| `PUT /v1/devices/{id}` | Update FCM token, locale, notification settings | none | B5 |
-| `DELETE /v1/devices/{id}` | Delete device and all its watches (privacy) | none | B5 |
-| `GET/PUT/DELETE /v1/devices/{id}/watches[/{watchId}]` | Manage push watches (section 7) | none | B5 |
-| `POST /v1/diagnostics` | Opt-in log upload for support | none | B5 |
-| `GET /v1/plan?from=…&to=…&at=…` | Proxy to TfNSW Trip Planner, cached, rate-limited | 60 s | B7 |
+All times are `Australia/Sydney`. GTFS times can go past 24:00 and are
+counted from "noon minus 12 hours" of the service day, which matters on
+daylight-saving change days. One shared, well-tested function does this for
+both server and phone. Every response carries the server time so the phone
+can correct a wrong clock in second-by-second countdowns.
 
-### 6.3 Real-time payload (sketch)
+## 5. API
+
+Plain HTTPS + JSON for most calls; live data in protobuf (smaller, faster)
+with JSON available for debugging. Every response carries `X-Server-Time`.
+Live responses carry `pollInterval` (default 30 s) and `trackerPollInterval`
+(default 15 s), which the phone obeys, so you can change everyone's refresh
+rate from the server.
+
+| Method and path | Purpose | Phase |
+|---|---|---|
+| `POST /v1/join` | Exchange an invite code for a device token | P1 |
+| `GET /v1/config` | Poll intervals, feature flags, minimum app version, attribution, available timetable files, status message | P1 |
+| `GET /v1/packs` | Timetable files: name, version, size, SHA-256, download URL | P2 |
+| `GET /v1/packs/{name}/{version}` | Download a timetable file | P2 |
+| `GET /v1/rt?routes=T1,T9` | Live data for those routes; `ETag` so unchanged data returns `304` | P3 |
+| `GET /v1/rt/trip/{tripId}?date=YYYYMMDD` | One service, for live tracking | P3 |
+| `GET /v1/vehicles?routes=…` | Vehicle positions for the map | P4 |
+| `GET /v1/alerts?modes=…` | Current disruptions; `ETag` / `304` | P4 |
+| `GET /v1/shapes/{shapeId}` | Route line for the map (encoded polyline) | P4 |
+| `PUT /v1/watches` · `DELETE /v1/watches/{id}` | "Tell me if this trip is late" (with Firebase token) | P6 |
+| `GET /status` | Your own page: feed ages, calls used today, errors, devices | P3 |
+
+### 5.1 Live data payload (sketch)
 
 ```proto
 message RealtimeResponse {
-  int64  server_time_ms           = 1;
-  int32  poll_interval_s          = 2;  // default 30
-  int32  tracker_poll_interval_s  = 3;  // default 15
-  string static_version           = 4;  // pack version these IDs match
-  repeated FeedHealth feeds       = 5;
-  repeated TripDelta  trips       = 6;
-  repeated Vehicle    vehicles    = 7;  // only if requested
-  repeated string     alert_ids   = 8;  // fetch details via /v1/alerts
-  string alerts_etag              = 9;  // tells the app whether to refetch alerts
-  repeated TripIdMap  trip_id_map = 10; // only when device pack is behind
+  int64  server_time_ms          = 1;
+  int32  poll_interval_s         = 2;   // default 30
+  int32  tracker_poll_interval_s = 3;   // default 15
+  string timetable_version       = 4;   // version these trip IDs match
+  repeated FeedHealth feeds      = 5;   // per mode: data time, stale
+  repeated TripDelta  trips      = 6;
+  string alerts_etag             = 7;   // tells the phone whether to refetch alerts
 }
-
-message FeedHealth { string mode = 1; int64 data_time_ms = 2; bool stale = 3; }
 
 message TripDelta {
   string trip_id    = 1;
   string start_date = 2;               // YYYYMMDD
   Status status     = 3;               // SCHEDULED, CANCELLED, ADDED, REPLACED
   repeated StopDelta stops = 4;        // remaining stops only
-  Occupancy occupancy      = 5;
-  string vehicle_id        = 6;
-  int32  car_count         = 7;        // from TfNSW consist extension
-  int64  updated_ms        = 8;
-  bool   stale             = 9;
-  repeated AddedStop added_stops = 10; // full timetable for ADDED trips
+  Occupancy occupancy = 5;
+  int32  car_count    = 6;
+  int64  updated_ms   = 7;
+  bool   stale        = 8;
+  repeated AddedStop added_stops = 9;  // full timetable for ADDED trips
 }
 
 message StopDelta {
   uint32 stop_sequence  = 1;
   sint32 arr_delay_s    = 2;
   sint32 dep_delay_s    = 3;
-  string actual_stop_id = 4;  // set only on platform change
+  string actual_stop_id = 4;           // only on platform change
   bool   skipped        = 5;
 }
 ```
 
-**Staleness rules** (applied on the server and re-checked on the device):
-feed data older than 2× its interval is stale; a trip update older than
-3 minutes is stale; a vehicle position older than 2 minutes is hidden.
+## 6. Access and security
 
-### 6.4 Serving model and capacity
+Kept proportionate to "me and a few friends".
 
-- Each API instance subscribes to Redis change events and keeps the latest
-  per-route snapshots **in memory**. A request for a route set is assembled
-  from memory and cached for 5 s under its canonical (sorted) key. No database
-  call is on the real-time path.
-- Rough capacity: 10,000 devices open at once polling every 30 s is about
-  330 requests/second, which two small instances handle. The poll interval is
-  the safety valve: raising it to 60 s halves load instantly for all devices.
-- If load grows by another order of magnitude, put per-route snapshots behind
-  the CDN with a 5 s TTL and have the device request one URL per route.
-
-### 6.5 Abuse protection
-
-- App Check token required (unattested traffic rejected in production).
-- Per-device and per-IP rate limits in Redis (for example 20 requests/minute
-  on real-time, 5/minute on watches).
-- Route list capped (for example 30 routes per request).
-- Cloud edge firewall (Cloud Armor) with basic bot and geo rules.
-
----
-
-## 7. Push notifications (watch engine)
-
-Android limits background polling (Doze, App Standby), so "tell me if my
-usual train is late" must be driven by the server.
-
-**Watch model** (stored in Postgres):
-
-| Field | Example |
+| Area | Approach |
 |---|---|
-| `device_id` | anonymous device |
-| `origin_stop`, `dest_stop` (parent stations) | Central → Parramatta |
-| `routes` (optional filter) | T1 |
-| `days` | Mon–Fri |
-| `window` | 07:15–08:15 departure |
-| `rules` | delay ≥ 5 min, cancellation, platform change |
-| `lead_time` | notify from 60 min before departure |
-| `quiet_hours`, `paused_until` | |
+| TfNSW key | Only on the server, in an environment file excluded by `.gitignore`. Never in the app or the repo. Turn on GitHub secret scanning |
+| Who can use the server | **Invite codes.** A small command (`tt-admin invite`) creates a one-time code; the app exchanges it for a device token. `tt-admin revoke` cuts a device off |
+| Abuse | Per-device rate limit (for example 20 live requests a minute); route list capped at 30; unknown tokens rejected |
+| Transport | HTTPS only: Caddy with automatic certificates, or Cloudflare Tunnel (no open ports at home) |
+| Timetable integrity | SHA-256 for every timetable file, checked on the phone |
+| Personal data | Only a random device ID, app version and (if push is on) a Firebase token. No names, emails or locations. Location alarms run on the phone |
+| Repo | Keep private while `tripview-low-level-notes.md` is in its history (that file already says so) |
 
-**How it runs:**
+## 7. Timetable files for phones
 
-1. Each morning, and when packages change, the pipeline expands every active
-   watch into the **concrete trips** it covers that day (from the static
-   schedule) and stores an index `trip_id → watches` in Redis.
-2. On every ingest cycle, changed trips are looked up in that index. For each
-   watch whose rule is newly met (state change, not every cycle), a message is
-   queued.
-3. A sender sends via FCM HTTP v1 with a collapse key per trip, so updates
-   replace rather than stack. Delivery results are recorded; invalid tokens are
-   removed.
-4. Deduplication: one notification per trip per rule state; a follow-up only
-   when the situation materially changes (for example, delay rises by 5+ min,
-   or the service is cancelled).
+### 7.1 Nightly build
 
-Time-based "leave now" alarms and location alarms stay **on the device**
-(they need no server and work offline); the core provides the scheduling
-logic (section 9).
+1. At about 03:00, ask TfNSW whether each timetable bundle has changed
+   (conditional request). Stop if not.
+2. Download and keep the raw zip for 30 days.
+3. Validate with the MobilityData GTFS Validator; if it fails, keep serving
+   yesterday's file and log the problem.
+4. Build the phone timetable file (below) and publish its version and SHA-256.
 
----
+### 7.2 Format
 
-## 8. Static pipeline and timetable packages
-
-### 8.1 Pipeline steps
-
-1. **Check** each GTFS bundle hourly with a conditional request. Do nothing if
-   unchanged.
-2. **Download** and archive the raw zip in object storage (90 days).
-3. **Validate** with the MobilityData GTFS Validator. Block publication on
-   errors; record warnings.
-4. **Load** into Postgres under a new `feed_version` (the previous version
-   stays live until the new one is fully built and checked).
-5. **Check alignment** against live trip IDs (section 5.4, step 1).
-6. **Build device packages** (section 8.2).
-7. **Build patches** from each of the last 14 versions to the new one.
-8. **Sign and publish** the manifest (Ed25519; the public key ships in the
-   app), then flip the live version pointer.
-
-Target: new packages published by 04:30 each day when the source changes,
-and within 2 hours of any TfNSW mid-day update.
-
-### 8.2 Device package format (`.ttpk`)
-
-A **SQLite database**, built deterministically and compressed with zstd.
-SQLite is chosen over a custom binary format because it works identically on
-Android and iOS, needs no custom parser, and is fast enough for the queries
-needed. The size savings come from the schema, not the container.
+Each timetable file is a **SQLite database**, zstd-compressed. SQLite works
+the same on Android and iOS and needs no custom reader. The size savings come
+from how the data is arranged:
 
 | Table | Contents |
 |---|---|
-| `meta` | pack ID, version, source feed versions, validity window, build time, schema version |
-| `stops` | compact integer ID, GTFS stop ID, parent, name, lat/lon, platform code, mode mask, accessibility |
-| `routes` | ID, short and long name, mode, colour, agency |
-| `patterns` | ID, route, direction, headsign, **ordered stop list** (packed varints) |
-| `time_profiles` | **deduplicated** arrival/departure offsets for a pattern (packed varints) |
-| `trips` | GTFS trip ID, pattern, time profile, start time (seconds), service ID, flags (wheelchair, bikes) |
-| `services` | active-day **bitset** over the pack window (for example 70 days from build date) |
-| `stop_patterns` | index: stop → (pattern, position), for fast "what serves this stop" |
-| `transfers` | interchange walking times between stops |
+| `meta` | Version, source versions, valid dates, schema version |
+| `stops` | Small integer ID, GTFS ID, parent station, name, position, platform, modes, accessibility |
+| `routes` | Name, mode, colour |
+| `patterns` | Each distinct ordered list of stops a line runs (packed) |
+| `time_profiles` | Each distinct set of stop-to-stop times (packed, shared between trips) |
+| `trips` | GTFS trip ID, pattern, time profile, start time, service days |
+| `services` | Which days each service runs, as a bitset over the next ~70 days |
+| `stop_patterns` | Index: stop → patterns that call there, and at which position |
+| `transfers` | Walking times between stops at interchanges |
 
-Storing each trip as *pattern + time profile + start time* rather than one
-row per stop visit is the key saving: most trips on a line share a few stop
-patterns and a few time profiles. This mirrors TripView's "pattern maps".
+Storing each trip as "pattern + time profile + start time" instead of one row
+per stop visit is what keeps the file small (TripView does the same).
 
-**Packs** are split by area and mode so users download only what they need:
-`syd-rail` (Sydney Trains + Metro, release 1), `syd-lightrail`,
-`syd-ferry`, `syd-bus`, `nsw-trainlink`, regional packs. Shapes are not in
-packs; they are fetched on demand and cached.
+**Files by mode**, so people download only what they use: `syd-rail`
+(Trains + Metro), then `syd-lightrail`, `syd-ferry`, `syd-bus`.
 
-**Targets (validate in phase B2):** `syd-rail` under 5 MB compressed; daily
-patch under 150 KB.
+**Updates:** phones download the whole file when the version changes,
+preferring Wi-Fi. Target: `syd-rail` under 5 MB. Small patch updates (as
+TripView does) are **left out** for now; the build is kept deterministic so
+they can be added later if file sizes or friends' data use make it
+worthwhile.
 
-### 8.3 Patches
+## 8. Hosting and operations
 
-- Patches are made with `zstd --patch-from` (old pack as the dictionary).
-  Small patches depend on **deterministic builds**: stable ordering of rows,
-  stable compact IDs across versions (kept in a Postgres ID map), fixed page
-  size and `VACUUM` before publication.
-- The device applies a patch, checks the result's SHA-256 against the
-  manifest and swaps it in atomically. On any mismatch it downloads the full
-  pack.
-- If a patch would be larger than 40% of the full pack, or the device is more
-  than 14 versions behind, the manifest points to the full pack instead.
+### 8.1 Where to run it
+
+| Option | Cost | Good | Watch out for |
+|---|---|---|---|
+| **Home machine** (mini PC, Raspberry Pi 4/5, NAS) with **Cloudflare Tunnel** | ≈ A$0 (plus a domain, ≈ A$15/year) | Free; no open ports | Home internet or power outage takes it down (the app still shows timetables) |
+| **Small VPS in Sydney** (1 vCPU, 1–2 GB RAM) with Caddy | ≈ A$6–15/month | Always on; simple | Small monthly cost |
+
+**Recommendation:** start on whichever you already have. Both run the same
+`docker compose up`, so moving later takes minutes. The program needs about
+512 MB RAM; the bus timetable build needs more briefly, so allow 2 GB once
+buses are added.
+
+### 8.2 Keeping it running
+
+- `restart: unless-stopped` in Docker Compose; automatic OS security updates.
+- **Backups:** nightly copy of the SQLite database and the env file to
+  another location. Timetable files can be rebuilt, so they need no backup.
+- **Monitoring:** a free uptime checker pinging `/health`; the `/status` page
+  for feed ages and calls used; Firebase Crashlytics (free) for app crashes.
+- **Updates:** GitHub Actions builds and tests on every push and publishes a
+  container image; the box pulls the new image (manually or with Watchtower).
+- **Environments:** your laptop (with a second free key, or replays of
+  recorded feeds) and the one live server. No separate staging.
+
+### 8.3 Getting the app to friends
+
+Front-end concern, noted here because it affects sign-up: either Google Play
+**internal testing** (up to 100 testers by email, one-off US$25 developer
+account) or **Firebase App Distribution** (free). Both avoid a public store
+listing. Friends then enter an invite code on first launch.
 
 ---
 
@@ -535,34 +379,33 @@ patch under 150 KB.
 
 ## 9. Shared core (Kotlin Multiplatform)
 
-### 9.1 Why Kotlin Multiplatform
+### 9.1 Why
 
-TripView's lesson is "one engine, many shells". Kotlin Multiplatform (KMP)
-gives that without C++: the same Kotlin code compiles for Android now and to
-an iOS framework later, and shares data models and protobuf code with the
-server. The UI on each platform stays native (Compose on Android, SwiftUI on
-iOS).
+TripView's lesson is "one engine, many shells". Kotlin Multiplatform does
+that without C++: the same code runs on Android now and becomes an iOS
+framework later, and it shares the timetable reader, time function and feed
+models with the server. Screens stay native on each platform.
 
-### 9.2 `TransitCore` API (the contract with the front end)
+### 9.2 `TransitCore` interface (hand-off to the front end)
 
 ```kotlin
 interface TransitCore {
   // Lifecycle
-  suspend fun start()                       // open packs, load trips, schedule updates
-  fun onForeground(); fun onBackground()    // starts / pauses real-time polling
+  suspend fun start()                        // open timetable files, load trips
+  fun onForeground(); fun onBackground()     // start / pause live polling
 
   // Saved trips
   val trips: Flow<List<SavedTrip>>
   suspend fun saveTrip(trip: SavedTrip); suspend fun deleteTrip(id: TripId)
   suspend fun reorderTrips(ids: List<TripId>)
 
-  // Departures (timetable + live overlay, re-emits when live data arrives)
+  // Departures: timetable + live layer; re-emits when live data arrives
   fun upcoming(tripId: TripId, count: Int = 6): Flow<List<Departure>>
   fun timetable(tripId: TripId, date: LocalDate): Flow<List<Departure>>
-  fun service(serviceRef: ServiceRef): Flow<ServiceDetail>   // every stop of one service
-  fun track(serviceRef: ServiceRef): Flow<TrackingState>     // 15 s tracking mode
+  fun service(ref: ServiceRef): Flow<ServiceDetail>       // all stops of one service
+  fun track(ref: ServiceRef): Flow<TrackingState>         // 15 s tracking
 
-  // Search and reference data
+  // Reference data
   suspend fun searchStops(query: String, near: LatLng? = null): List<Stop>
   suspend fun linesAt(stopId: StopId): List<Line>
   suspend fun shape(shapeId: ShapeId): Polyline
@@ -570,291 +413,138 @@ interface TransitCore {
 
   // Alerts and status
   val alerts: Flow<List<Alert>>
-  val dataStatus: Flow<DataStatus>          // pack versions, last live update, stale flags
+  val dataStatus: Flow<DataStatus>   // timetable versions, last live update, stale flags
 
-  // Notifications and alarms
-  suspend fun setWatch(tripId: TripId, rules: WatchRules)    // server push
-  suspend fun nextAlarmTimes(alarm: AlarmSpec): List<Instant> // device alarms
+  // Setup, alarms and push
+  suspend fun join(inviteCode: String): JoinResult
+  suspend fun nextAlarmTimes(alarm: AlarmSpec): List<Instant>
+  suspend fun setWatch(tripId: TripId, rules: WatchRules)  // phase P6
 }
 ```
 
-`Departure` carries scheduled time, estimated time, delay, status
-(on time / late / cancelled / added), platform (and whether it changed),
-occupancy, car count, data age and a `stale` flag, so the front end never
-reimplements transit logic.
+`Departure` includes scheduled time, expected time, delay, status (on time,
+late, cancelled, added), platform and whether it changed, occupancy, car
+count, data age and a `stale` flag. The front end never has to work out
+transit logic.
 
-A **fake implementation** with canned data ships in phase B1 so UI work can
-start before the real engine exists.
+### 9.3 Modules
 
-### 9.3 Core modules
-
-| Module | Responsibility |
+| Module | Job |
 |---|---|
-| `store` | Opens `.ttpk` packs read-only (SQLDelight), plus a small read-write database for trips, alarms, cached alerts and settings |
-| `query` | Next departures between stop sets on a date; service detail; multi-leg trips with connection times. Later: RAPTOR for free-form journeys |
-| `overlay` | Applies `TripDelta`s to query results; adds `ADDED` trips; marks stale data; re-emits Flows |
-| `realtime` | Poller: one request per poll for the routes currently on screen; obeys server intervals; pauses in background; exponential backoff on errors; conditional requests |
-| `updater` | Checks manifest, downloads full pack or patch, verifies signature and SHA-256, atomic swap; runs via Android WorkManager on unmetered network and charging when possible |
-| `timesync` | Corrects device clock from `X-Server-Time` |
-| `api` | Ktor client, generated protobuf models (Wire), App Check token injection |
-| `alarms` | Computes alarm instants; the Android layer schedules them with `AlarmManager` and geofences |
-| `platform` | Thin `expect/actual` layer: file paths, network status, background scheduling, secure storage |
+| `store` | Opens timetable files read-only (SQLDelight); small read-write database for trips, alarms, cached alerts, settings |
+| `query` | Next departures between two stations on a date; service detail; multi-leg trips with connection times |
+| `overlay` | Applies live updates to timetable results, adds added trips, marks stale data |
+| `realtime` | Polls only for routes on screen; obeys server intervals; pauses in background; backs off on errors; sends `If-None-Match` |
+| `updater` | Checks for new timetable files, downloads (Wi-Fi preferred, via Android WorkManager), checks SHA-256, swaps in atomically |
+| `timesync` | Corrects the phone clock using server time |
+| `api` | Ktor HTTP client, Wire protobuf models, device token |
+| `alarms` | Works out alarm times; the Android layer schedules them (`AlarmManager`, geofences) |
+| `fake` | Sample-data implementation for front-end development and tests |
 
-### 9.4 Query approach for release 1
+### 9.4 How "next departures" works
 
-For a saved trip (origin stop set → destination stop set):
+For a saved trip (origin station → destination station):
 
-1. From `stop_patterns`, find patterns that visit an origin stop **before** a
-   destination stop.
-2. For each such pattern, find trips active on the date (service bitset)
-   whose departure from the origin is after "now".
-3. Merge and sort; cache results per trip per day (the TripView
-   "SuperQuery" idea), extending the window on demand.
+1. Find the patterns that call at the origin **before** the destination.
+2. For those patterns, find trips running today that leave the origin after
+   now.
+3. Sort, cache for the day, and extend on demand.
 
-This is fast (patterns per stop are few) and needs no graph search. Multi-leg
-trips chain this per leg with the configured connection time. A full journey
-planner (RAPTOR over the same tables) is phase B7.
+This is fast and needs no route-graph search. Multi-leg trips repeat it per
+leg with the connection time. A full journey planner is not needed for
+version one.
 
 ### 9.5 iOS later
 
-Nothing in the backend changes for iOS. The KMP core builds as an
-XCFramework; FCM delivers via APNs; App Check uses App Attest. If optional
-Google sign-in is added for sync, App Store rules also require Sign in with
-Apple.
+No server changes. The shared core builds as an iOS framework; Firebase
+handles iPhone push through Apple's service. You will need an Apple
+Developer account (US$99/year) and TestFlight to share it with friends.
 
 ---
 
-## 10. Data model (server)
+## 10. Repository layout
 
-```mermaid
-erDiagram
-  FEED_VERSION ||--o{ STOP : contains
-  FEED_VERSION ||--o{ ROUTE : contains
-  FEED_VERSION ||--o{ TRIP : contains
-  ROUTE ||--o{ TRIP : has
-  TRIP ||--o{ STOP_TIME : has
-  STOP ||--o{ STOP_TIME : at
-  PACK ||--o{ PACK_VERSION : has
-  PACK_VERSION }o--|| FEED_VERSION : built_from
-  DEVICE ||--o{ WATCH : owns
-  ID_MAP }o--|| STOP : stabilises
+```
+/proto           GTFS-R .proto, TfNSW extension .proto, our API .proto
+/shared          Kotlin Multiplatform core (also used by the server)
+/server          tt-server: API, live cache, timetable builder, push watcher, tt-admin
+/androidApp      front end (separate plan)
+/deploy          docker-compose.yml, Caddyfile, .env.example (no secrets)
+/tools           feed recorder and replayer, timetable file inspector
+/docs            plans, TripView reference docs
 ```
 
-- **Schedule tables** (`stop`, `route`, `trip`, `stop_time`, `calendar`,
-  `shape`) are partitioned by `feed_version`; old versions are dropped after
-  14 days.
-- **`id_map`** keeps compact integer IDs stable across versions (needed for
-  small patches).
-- **`device`**: random ID, FCM token, platform, app version, locale,
-  created/last seen. No name, email or location.
-- **`watch`**: section 7.
-- **`pack_version`**: pack, version, size, SHA-256, URLs, patches available.
-- Migrations with Flyway; every migration reversible.
+## 11. Testing
 
----
+- **Time function:** normal days, after-midnight services, both daylight
+  saving change days.
+- **Matching:** recorded real feeds replayed against a fixed timetable, with
+  expected delays, cancellations and platform changes.
+- **Timetable builder:** a fixed GTFS input must produce the same file
+  every time (checked in CI).
+- **Query:** known departures between known stations on a known date.
+- **API:** contract tests against the `.proto` and JSON examples.
+- **Manual:** a week of real commutes compared against station displays.
 
-## 11. Security and privacy
+## 12. Delivery plan
 
-| Area | Control |
-|---|---|
-| TfNSW API key | In Secret Manager only; separate keys for dev, staging and prod; rotated twice a year; never in the app or repo; secret scanning on the repo |
-| App to API | TLS 1.2+; Firebase App Check (Play Integrity) enforced in production; rate limits; anonymous device IDs |
-| Data integrity | Pack manifests signed (Ed25519); SHA-256 on every pack and patch |
-| Cloud access | Least-privilege service accounts per component; no public database endpoints; infrastructure changes only via Terraform in CI |
-| Personal data | Release 1 stores only an anonymous device ID, FCM token and watch settings. No accounts, no location on the server, no advertising ID. Location for alarms stays on the device |
-| User rights | `DELETE /v1/devices/{id}` removes everything; deleting the app makes data orphaned and it is purged after 90 days of inactivity |
-| Compliance | Privacy policy aligned to the Australian Privacy Principles; Google Play Data Safety form; data hosted in Australia |
-| Supply chain | Dependency pinning, Dependabot/Renovate, container image scanning, signed images |
-| Logging | No FCM tokens or IPs in application logs beyond 7 days; request logs sampled |
+Rough engineer-weeks for one experienced Kotlin developer.
 
----
-
-## 12. Observability and operations
-
-### 12.1 Service levels (initial targets)
-
-| Measure | Target |
-|---|---|
-| Live data freshness: TfNSW feed time → available on our API | p95 under 20 s |
-| Real-time API availability | 99.9% monthly |
-| Real-time API latency | p95 under 150 ms (server time) |
-| Match rate, trains and metro | above 98% |
-| Push notification: trigger → sent | p95 under 30 s |
-| New timetable package after TfNSW change | within 2 hours |
-
-### 12.2 Signals
-
-- **Metrics** (OpenTelemetry → Cloud Monitoring): per-feed fetch latency,
-  status codes, payload size, data age, match rate, unmatched count; quota
-  used vs budget; API requests, latency and 304 ratio; active devices by mode
-  (from demand tracker); push sent/failed; pack downloads vs patch downloads.
-- **Logs:** structured JSON with request and feed IDs.
-- **Traces:** API requests and ingest cycles.
-- **Alerts:** any feed stale > 2 minutes; quota projection > 85%; match rate
-  < 95%; API error rate > 1%; pipeline failure; leader lock lost with no
-  takeover.
-- **Status:** a public status banner can be set via `/v1/config` without a
-  release.
-
-### 12.3 Runbooks (written in phase B6)
-
-TfNSW outage; quota exhausted; bad static bundle; real-time mismatch after a
-timetable change; push provider outage; key rotation; restoring Postgres.
-
----
-
-## 13. Infrastructure and cost
-
-### 13.1 Recommended stack
-
-| Layer | Choice | Reason |
-|---|---|---|
-| Language | Kotlin (JVM 21 server; KMP on device) | One language and shared models across server, Android and iOS |
-| Server framework | Ktor | Lightweight, coroutine-based, same HTTP client on device |
-| Protobuf | Wire (Square) | Works in KMP; handles GTFS-R and TfNSW extensions |
-| Database | PostgreSQL 16 + PostGIS (Cloud SQL) | Geospatial stop queries; mature |
-| Cache / pub-sub | Redis 7 (Memorystore) | Snapshots, locks, rate limits |
-| Compute | Cloud Run (API autoscaled; ingest with always-on CPU, min 1 instance); Cloud Run Jobs + Cloud Scheduler for pipeline | No servers to patch |
-| Storage / CDN | Cloud Storage + Cloud CDN | Immutable packs, cheap egress at the edge |
-| Push, attestation, crashes | Firebase (FCM, App Check, Crashlytics, Remote Config) | Covers Android now, iOS later |
-| IaC / CI/CD | Terraform; GitHub Actions; Artifact Registry | Repeatable environments |
-| Region | `australia-southeast1` (Sydney) | Low latency to users; data stays in Australia |
-
-AWS works equally well (`ap-southeast-2`: ECS Fargate, RDS, ElastiCache,
-S3 + CloudFront, SNS → FCM). The design is container-based and portable.
-
-**Lean alternative for a private beta:** one small VM running the same
-containers with Docker Compose (Postgres, Redis, API, ingest) for tens of
-dollars a month, moving to managed services before public launch.
-
-### 13.2 Rough monthly cost (public beta, up to ~10,000 users)
-
-| Item | Estimate (AUD/month) |
-|---|---|
-| Cloud Run (API min 1 instance + ingest always-on) | 80–150 |
-| Cloud SQL (small, with backups) | 60–120 |
-| Memorystore Redis (basic, 1 GB) | 50–80 |
-| Storage + CDN egress | 10–50 |
-| Monitoring, logging, secrets | 10–40 |
-| Firebase (FCM and App Check are free at this scale) | 0 |
-| **Total** | **≈ 210–440** |
-
-These are order-of-magnitude figures to validate with the Google Cloud
-pricing calculator. Staging runs scaled to zero where possible.
-
-### 13.3 Environments
-
-| Env | Purpose | TfNSW key | Data |
+| Phase | Goal | Done when | Est. |
 |---|---|---|---|
-| `local` | Developer laptops (Docker Compose) | Personal dev key, or replay recordings | Recorded feeds |
-| `dev` | Integration, nightly | Dev key | Live, low intervals |
-| `staging` | Release candidate, load tests | Staging key | Live |
-| `prod` | Users | Prod key | Live |
+| **P0. Setup** | Key, repo, build | TfNSW key works from your laptop; repo layout and CI build an empty server and shared module | 0.5 |
+| **P1. Contracts and fake** | Front end can start | `TransitCore` interface, fake data, `/v1/join` and `/v1/config` | 1 |
+| **P2. Timetable** | Offline departures | Nightly builder makes `syd-rail`; phone downloads it and lists next trains between two stations with no network | 3 |
+| **P3. Live data** | Live delays | Fetch-on-demand cache, matching, `/v1/rt`, tracking endpoint, `/status`; phone shows a real delay within one poll interval | 2.5 |
+| **P4. Alerts, map** | Full picture | Alerts, vehicle positions and route shapes on the phone | 1.5 |
+| **P5. Friends** | Share it | Server on home box or VPS with HTTPS, invite codes, rate limits, backups, uptime check; first friend joined | 1 |
+| **P6. Push (optional)** | "Your train is late" while the phone is locked | Firebase set up; watches; notification arrives within ~30 s of the feed | 1.5–2 |
+| **P7. More** | As wanted | Light rail, ferries, buses timetable files and feeds; multi-leg polish; iOS | ongoing |
 
----
+**P0–P5: about 9–10 weeks. With push: about 11–12 weeks.**
 
-## 14. Repository layout and engineering practice
+## 13. Risks
 
-```
-/proto            GTFS-R .proto, TfNSW extension .proto, TransitTracker API .proto
-/api-spec         OpenAPI 3.1 for JSON endpoints
-/server
-  /common         shared server code: config, db, observability
-  /api            Ktor App API
-  /ingest         real-time ingest + watch engine
-  /pipeline       static pipeline + pack builder
-/shared           Kotlin Multiplatform core (TransitCore), incl. fake implementation
-/androidApp       front end (separate plan)
-/infra            Terraform modules and environments
-/tools            replay harness, pack inspector, load tests
-/docs             this plan, TripView reference docs, ADRs, runbooks
-```
+| Risk | What we do |
+|---|---|
+| TfNSW changes feed versions or paths | Pin `.proto` files; recorded-feed tests; watch the TfNSW developer forum; feeds configured, not hard-coded |
+| Live update matched to the wrong service | Strict trip ID + date matching; show "timetabled" when unsure |
+| Key suspended for overuse | Fetch on demand, daily budget guard at 50,000, back off on errors |
+| Key leaked | Server only, `.gitignore`d env file, GitHub secret scanning; regenerate on the Hub if exposed |
+| Home server offline | App still works from its timetable; consider a VPS if it happens often |
+| Daylight-saving and after-midnight bugs | One shared time function with dedicated tests |
+| Terms change | Re-read Hub Terms before sharing; attribution served from the server |
 
-- **Testing:** unit tests for time conversion (including DST days), matching,
-  delay propagation, query engine; **golden tests** that build a pack from a
-  fixed GTFS input and compare output byte-for-byte (determinism); **replay
-  tests** that feed recorded GTFS-R into ingest and check outputs; contract
-  tests from OpenAPI/proto; load tests (k6) at 3× expected peak; chaos tests
-  (feed down, Redis down).
-- **CI:** build, test, lint, secret scan and image scan on every pull request;
-  deploy to `dev` on merge; promote to `staging` and `prod` by tagged release
-  with manual approval.
-- **Decisions** are recorded as short Architecture Decision Records in
-  `/docs/adr`.
+## 14. If it ever grows
 
----
+The design scales up without a rewrite. In order, roughly:
 
-## 15. Delivery plan (backend phases)
+| Trigger | Change |
+|---|---|
+| More than ~50 users, or you want it always on | Move to a Sydney VPS or cloud containers |
+| Data use matters | Add timetable patch updates (build is already deterministic) |
+| Hundreds of users | Postgres instead of SQLite; Redis for live snapshots; CDN for timetable files; app attestation (Play Integrity) instead of invite codes |
+| Public release, commercial, or quota pressure | Talk to TfNSW about higher limits; privacy policy and Play data-safety work; see the scaled design at commit `9c80976` |
 
-Phases map to the product phases in
-[tripview-purpose-and-plan.md](tripview-purpose-and-plan.md) section 2.6.
-Estimates are engineer-weeks for an experienced Kotlin engineer and are
-rough.
+## 15. Open decisions
 
-| Phase | Goal | Main work | Done when | Est. |
-|---|---|---|---|---|
-| **B0. Foundations** | Decisions and accounts | Confirm section 17; TfNSW keys (dev, staging, prod); **start quota-uplift request**; cloud project, Terraform skeleton, CI; repo layout; ADRs | Empty services deploy to `dev` from CI | 1–2 |
-| **B1. Contracts and fakes** | Unblock the front end | `TransitCore` interfaces + fake; OpenAPI + proto; mock server from spec; `/v1/config` | Front end can build every screen against fakes | 1–2 |
-| **B2. Static data** | Offline departures | Pipeline: fetch, validate, load; `syd-rail` pack builder; manifest; KMP `store` + `query` + `updater` | Android test app lists next departures between two stations offline; pack and patch size targets met | 4 |
-| **B3. Real-time** | Live overlay | Ingest worker, Wire decoding, matching, snapshots, Redis; `/v1/rt` and tracking endpoint; KMP `realtime`, `overlay`, `timesync` | A live delay appears on device within one poll interval; match rate > 98% | 4 |
-| **B4. Alerts, vehicles, shapes** | Complete the picture | Alerts ingest with conditional fetch; `/v1/alerts`, `/v1/vehicles`, `/v1/shapes` | Disruptions shown; trains on map | 2 |
-| **B5. Push** | Server-driven notifications | Device registration, watches, watch engine, FCM sender, diagnostics upload | "My 7:42 is 6 min late" arrives on a locked phone within 30 s of the feed | 2–3 |
-| **B6. Production readiness** | Safe to launch | App Check enforcement, rate limits, dashboards, alerts, runbooks, load and chaos tests, privacy policy, backups and restore drill | Launch checklist signed off | 2 |
-| **B7. Expansion** | More modes and features | New packs and feeds (after quota uplift), multi-leg refinements, RAPTOR journey planning or Trip Planner proxy, optional accounts and cloud sync, iOS enablement | As prioritised | ongoing |
-
-**B0–B6 total: roughly 16–20 engineer-weeks.** B1 is deliberately early so
-front-end and back-end work proceed in parallel.
-
----
-
-## 16. Risks
-
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| TfNSW quota insufficient for more modes | High | Blocks B7 expansion | Request uplift in B0; demand-aware polling; daily budget guard |
-| TfNSW changes feed versions or formats (v1 → v2) | Medium | Live data breaks | Pin protos; monitor TfNSW forum and spec; replay tests; feature flag per feed |
-| Live updates matched to wrong service | Medium | Wrong answers, trust loss | Strict trip ID + date matching, alignment check on static updates, show "timetabled" when unsure |
-| Package too large for users | Medium | Poor first-run experience | Pattern/time-profile compression, per-mode packs, size budget in CI |
-| Patches not small because builds are non-deterministic | Medium | Data costs | Stable ID map, deterministic build, golden tests |
-| DST and after-midnight service errors | Medium | Wrong times twice a year | Single shared time function with dedicated tests |
-| API key leak | Low | Quota theft, account suspension | Secret Manager, secret scanning, per-env keys, rotation |
-| Push notifications unreliable on some Android devices (vendor battery savers) | Medium | Missed alerts | High-priority FCM for time-critical alerts; in-app guidance (front end) |
-| Licence or attribution breach | Low | Data access withdrawn | Confirm terms in B0; attribution served from config |
-| Cost creep | Low | Budget | Budgets and alerts in cloud billing; scale-to-zero staging |
-| Repo contains reverse-engineering notes about a third party | Low | Reputational/legal | Keep `tripview-low-level-notes.md` out of any public copy of the repo (as that file already says) |
-
----
-
-## 17. Decisions needed
-
-Defaults below are what this plan assumes; changing them changes scope.
-
-| # | Decision | Recommended default |
+| # | Decision | Default in this plan |
 |---|---|---|
-| D1 | Audience: personal tool or public app? | Public app (plan assumes this) |
-| D2 | Release 1 modes | Sydney Trains + Metro |
-| D3 | Cloud provider | Google Cloud, Sydney region |
-| D4 | Accounts and cross-device sync in release 1? | No; Android Auto Backup for trips; accounts in B7 |
-| D5 | Business model | Free, no ads |
-| D6 | Journey planning in release 1? | No; saved stop-to-stop trips only |
-| D7 | Who owns the TfNSW relationship (keys, quota uplift, licence)? | Product owner, starting in B0 |
-| D8 | Repo visibility | Private while low-level reference notes are in history |
+| D1 | Home machine or VPS? | Whichever you already have |
+| D2 | Push notifications in the first version? | No; add in P6 |
+| D3 | Distribution to friends | Play internal testing (or Firebase App Distribution if you'd rather not pay the Play fee) |
+| D4 | Modes after trains and metro | Light rail, then ferries, then buses |
 
----
+## 16. Sources
 
-## 18. Sources
-
-- TfNSW Open Data Hub, API basics (quota and throttle limits):
-  <https://opendata.transport.nsw.gov.au/developers/api-basics>
-- TfNSW developer documentation:
-  <https://opendata.transport.nsw.gov.au/developers/documentation>
+- TfNSW API basics (limits): <https://opendata.transport.nsw.gov.au/developers/api-basics>
+- TfNSW developer documentation: <https://opendata.transport.nsw.gov.au/developers/documentation>
 - TfNSW GTFS / GTFS-R Implementation Specification v2 (June 2025):
   <https://opendata.transport.nsw.gov.au/sites/default/files/2025-09/TfNSW%20GTFS%20%20GTFS%20R%20Implementation%20Specification%20v2%20June%202025.pdf>
-- Real-time vehicle positions v2 dataset:
-  <https://opendata.transport.nsw.gov.au/data/dataset/public-transport-realtime-vehicle-positions-v2>
-- Real-time alerts v2 dataset:
-  <https://opendata.transport.nsw.gov.au/dataset/public-transport-realtime-alerts-v2/resource/811affc9-7415-4558-9e9c-efc982fae6a2>
-- Sydney Trains GTFS-R version 2 (forum):
-  <https://opendataforum.transport.nsw.gov.au/t/sydney-trains-gtfs-r-version-2/2551>
-- Over-limit response codes discussion (forum):
-  <https://opendataforum.transport.nsw.gov.au/t/intermittent-http-503-response-your-api-quota-or-rate-limit-has-been-exceeded/1006>
+- Realtime vehicle positions v2: <https://opendata.transport.nsw.gov.au/data/dataset/public-transport-realtime-vehicle-positions-v2>
+- Realtime alerts v2: <https://opendata.transport.nsw.gov.au/dataset/public-transport-realtime-alerts-v2/resource/811affc9-7415-4558-9e9c-efc982fae6a2>
+- Sydney Trains GTFS-R v2 (forum): <https://opendataforum.transport.nsw.gov.au/t/sydney-trains-gtfs-r-version-2/2551>
+- Over-limit responses (forum): <https://opendataforum.transport.nsw.gov.au/t/intermittent-http-503-response-your-api-quota-or-rate-limit-has-been-exceeded/1006>
+- Open Data Hub Terms: <https://opendata.transport.nsw.gov.au/sites/default/files/TfNSW-Open-Data-Portal-Terms.pdf>
+- Acceptable Use Policy: <https://opendata.transport.nsw.gov.au/sites/default/files/TfNSW-Acceptable-Use-Policy.pdf>
+- Open Data Hub FAQs (licence and redistribution): <https://opendata.transport.nsw.gov.au/faqs>

@@ -58,6 +58,14 @@ class StripMathTest {
     }
 
     @Test
+    fun aRunWithEveryCallSkippedIsDrawnAsTimetabled() {
+        // The core marks every call of a cancelled service as skipped.
+        val model = journeyStripModel(calls(4, skipped = setOf(0, 1, 2, 3)), "S1", "S3", 2 * min)
+        assertEquals(listOf("A", "B", "D"), model.stops.map { it.name })
+        assertNull(model.vehicle)
+    }
+
+    @Test
     fun skippedCallsAreIgnored() {
         val p = vehicleProgress(calls(5, skipped = setOf(2)), 9 * min)!!
         assertEquals(1, p.fromIndex); assertEquals(3, p.toIndex)

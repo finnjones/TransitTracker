@@ -64,7 +64,7 @@ private object StripDots {
  * right end; the ground follows [mode]. The vehicle is placed from [calls] and [clock] on every
  * sprite-clock tick, in whole dots, and steps to a new estimate over one second when [calls]
  * change. Its sprite state follows [status] / [stale] / [delaySeconds] (plan 3.2): a ghost when
- * TIMETABLED. Read by the screen reader as one sentence. 54 dp high, fills the width.
+ * TIMETABLED. Read by the screen reader as one sentence. 54 dp high (27 dots), fills the width.
  */
 @Composable
 fun JourneyStrip(
@@ -79,6 +79,11 @@ fun JourneyStrip(
     stale: Boolean = false,
     /** Delay for the late tag; null takes it from the vehicle's next call. */
     delaySeconds: Int? = null,
+    /**
+     * Show the amber "+4" tag over a late vehicle. It overhangs the top of the strip by 16 dp, so
+     * leave that room above, or turn it off where the delay is already written next to the strip.
+     */
+    lateTag: Boolean = true,
 ) {
     val c = TtTheme.colors
     val dot = TtTheme.dot
@@ -168,7 +173,7 @@ fun JourneyStrip(
         }
         for (s in model.stops.filter { it.labelled }) StripLabel(s)
         // The "+4" tag rides above a late vehicle (plan 3.2); it may overhang the top of the strip.
-        val late = stateFor(model) as? VehicleState.Late
+        val late = if (lateTag) stateFor(model) as? VehicleState.Late else null
         if (late != null) {
             Box(
                 Modifier
@@ -200,11 +205,12 @@ fun JourneyStrip(
     destinationStopId: StopId,
     clock: WallClock,
     modifier: Modifier = Modifier,
+    lateTag: Boolean = true,
 ) = JourneyStrip(
     detail.calls, yourStopId, destinationStopId,
     detail.route?.mode ?: Mode.OTHER,
     parseLineColor(detail.route?.color) ?: DefaultLineColor,
-    detail.status, clock, modifier, detail.stale,
+    detail.status, clock, modifier, detail.stale, lateTag = lateTag,
 )
 
 private fun DrawScope.drawStripStop(s: StripStop, groundY: Float, d: Float, blinkOn: Boolean, colors: TtColors) {

@@ -13,6 +13,21 @@ google-auth = "1.57.0"
 # Front end (:app:ui). Compose Multiplatform 1.12.2 is the latest stable release; the Compose
 # compiler ships with Kotlin, so its plugin version follows `kotlin`.
 compose-multiplatform = "1.12.2"
+# Android (only used when an Android SDK is present; see settings.gradle.kts). Compose 1.12.1 for
+# Android (what Compose Multiplatform 1.12.2 maps to) needs compileSdk 37 and AGP 9.1+, and AGP 9.1
+# needs Gradle 9.3.1+: that is why the wrapper is on Gradle 9.3.1. AGP 9.1.x is the newest line
+# Kotlin 2.4.10 lists as supported; 9.1.1 is the first that knows API 37.
+agp = "9.1.1"
+android-compileSdk = "37"
+android-targetSdk = "36"
+android-minSdk = "26"
+androidx-activity = "1.13.0"
+androidx-core = "1.19.1"
+firebase-bom = "35.1.0"
+google-services = "4.5.0"
+junit4 = "4.13.2"
+robolectric = "4.17"
+androidx-test-core = "1.7.0"
 
 [libraries]
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -31,6 +46,7 @@ ktor-server-compression = { module = "io.ktor:ktor-server-compression", version.
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
@@ -50,6 +66,14 @@ compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-mu
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose-multiplatform" }
 compose-ui-test = { module = "org.jetbrains.compose.ui:ui-test", version.ref = "compose-multiplatform" }
 
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+androidx-core = { module = "androidx.core:core", version.ref = "androidx-core" }
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
+
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
@@ -58,3 +82,6 @@ sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 wire = { id = "com.squareup.wire", version.ref = "wire" }
 compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }

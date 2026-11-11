@@ -47,6 +47,9 @@ class HttpGtfsSource(
     private val baseUrl: String,
     private val apiKey: String,
     private val client: HttpClient = HttpClient.newBuilder()
+        // HTTP/1.1 like curl: the JDK's HTTP/2 client has been answered 502 by TfNSW's gateway for
+        // the large timetable bundles while curl on the same machine got 200.
+        .version(HttpClient.Version.HTTP_1_1)
         .followRedirects(HttpClient.Redirect.NORMAL)
         .connectTimeout(Duration.ofSeconds(30))
         .build(),
@@ -75,6 +78,7 @@ class HttpGtfsSource(
         val request = HttpRequest.newBuilder(URI.create(baseUrl.trimEnd('/') + "/" + path.trimStart('/')))
             .timeout(requestTimeout)
             .header("Authorization", "apikey $apiKey")
+            .header("User-Agent", "TransitTracker-server")
             .header("Accept", "application/zip, application/octet-stream, */*")
             .apply {
                 validators?.etag?.let { header("If-None-Match", it) }
@@ -95,10 +99,22 @@ class HttpGtfsSource(
                 ),
             )
             else -> {
+                val detail = errorDetail(response.headers(), target)
                 Files.deleteIfExists(target)
-                throw HttpStatusException(status, "HTTP $status fetching GTFS $path")
+                throw HttpStatusException(status, "HTTP $status fetching GTFS $path$detail")
             }
         }
+    }
+
+    /** What the gateway said (its name and the start of its body), to tell a 502 from TfNSW from one in between. */
+    private fun errorDetail(headers: java.net.http.HttpHeaders, target: Path): String {
+        val body = runCatching {
+            Files.newInputStream(target).use { it.readNBytes(200) }.toString(Charsets.UTF_8)
+                .filter { !it.isISOControl() || it == ' ' }.trim()
+        }.getOrDefault("")
+        val server = headers.firstValue("Server").orElse(null)
+        val parts = listOfNotNull(server?.let { "server=$it" }, body.takeIf { it.isNotEmpty() }?.let { "body=\"$it\"" })
+        return if (parts.isEmpty()) "" else " (${parts.joinToString(", ")})"
     }
 
     override fun toString(): String = "HttpGtfsSource($baseUrl)"

@@ -22,6 +22,9 @@ class Harness(private val scope: TestScope, startMs: Long = at(6, 50)) {
     var pollIntervalS = 30
     var wifiOnly = true
 
+    /** The packs the phone wants; most tests exercise one pack. */
+    var defaultPacks = listOf("syd-rail")
+
     /** Opens a fake pack: the version is taken from the file name `syd-rail-<version>.sqlite`. */
     val opener = TimetableOpener { path ->
         val version = path.substringAfterLast("syd-rail-").removeSuffix(".sqlite")
@@ -33,7 +36,7 @@ class Harness(private val scope: TestScope, startMs: Long = at(6, 50)) {
 
     val core: DefaultTransitCore by lazy {
         TransitCoreFactory.create(
-            CoreConfig("https://tt.test", appVersion = "1.2.3", platform = "android", wifiOnlyPackUpdates = wifiOnly),
+            CoreConfig("https://tt.test", appVersion = "1.2.3", platform = "android", wifiOnlyPackUpdates = wifiOnly, defaultPacks = defaultPacks),
             CoreDependencies(
                 httpClient = server.client,
                 kv = kv,
@@ -51,10 +54,15 @@ class Harness(private val scope: TestScope, startMs: Long = at(6, 50)) {
     fun sqlite(version: String) = "SQLite format 3 / syd-rail $version".encodeToByteArray()
     fun compressed(version: String) = sqlite(version).reversedArray()
 
-    fun packInfo(version: String, sha256: String = Sha256.hex(compressed(version)), sqliteSha: String = Sha256.hex(sqlite(version))) =
+    fun packInfo(
+        version: String,
+        sha256: String = Sha256.hex(compressed(version)),
+        sqliteSha: String = Sha256.hex(sqlite(version)),
+        name: String = "syd-rail",
+    ) =
         PackInfo(
-            name = "syd-rail", version = version, sizeBytes = compressed(version).size.toLong(), sha256 = sha256,
-            url = "/v1/packs/syd-rail/$version", modes = listOf(Mode.TRAIN, Mode.METRO), validTo = "20261231",
+            name = name, version = version, sizeBytes = compressed(version).size.toLong(), sha256 = sha256,
+            url = "/v1/packs/$name/$version", modes = listOf(Mode.TRAIN, Mode.METRO), validTo = "20261231",
             sqliteSha256 = sqliteSha,
         )
 
@@ -65,9 +73,11 @@ class Harness(private val scope: TestScope, startMs: Long = at(6, 50)) {
                 json(ConfigResponse.serializer(), ConfigResponse(pollIntervalS = pollIntervalS, attribution = "Test attribution", statusMessage = "All good", packs = packs.toList()))
             }
         }
-        server.on("GET", "/v1/packs/syd-rail/*") { req ->
-            val version = req.path.substringAfterLast('/')
-            respond(compressed(version), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/octet-stream"))
+        for (name in packs.map { it.name }.distinct()) {
+            server.on("GET", "/v1/packs/$name/*") { req ->
+                val version = req.path.substringAfterLast('/')
+                respond(compressed(version), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/octet-stream"))
+            }
         }
     }
 

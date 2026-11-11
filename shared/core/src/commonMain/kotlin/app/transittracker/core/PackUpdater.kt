@@ -106,7 +106,8 @@ class PackUpdater(
                     setStatus(name) { it.copy(updateAvailable = false) }
                     PackUpdateResult.UpToDate(name, info.version)
                 }
-                installedState.value.isNotEmpty() && config.wifiOnlyPackUpdates && !network.isUnmetered() -> {
+                // Only updates wait for Wi-Fi: a pack this phone has never had downloads at once.
+                current != null && config.wifiOnlyPackUpdates && !network.isUnmetered() -> {
                     setStatus(name) { it.copy(updateAvailable = true) }
                     PackUpdateResult.Deferred(name, info.version)
                 }

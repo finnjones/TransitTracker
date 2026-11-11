@@ -286,7 +286,7 @@ class EndToEndTest {
         assertEquals(listOf("cancel", "platform"), log.map { it.kind })
         assertTrue(log.all { it.result == "sent" && it.deviceId == device.deviceId && it.tripId == "T1.N.0700" })
         assertEquals(2, tt.services.watches.status().sentToday)
-        assertEquals(0, feeds.unexpectedCalls.get(), "only the sydneytrains and metro feeds are known")
+        assertEquals(0, feeds.unexpectedCalls.get(), "only the default feeds are known")
     }
 
     @Test
@@ -466,7 +466,7 @@ class EndToEndTest {
 
         val restarted = phoneCore(this, kv, files)
         restarted.start()
-        assertEquals("20261111T0640", restarted.dataStatus.first().packs.single().version)
+        assertEquals("20261111T0640", restarted.dataStatus.first().packs.single { it.name == "syd-rail" }.version)
         assertEquals(listOf("Chatswood Station"), restarted.searchStops("Chatswood").filter { it.parentId == null }.map { it.name })
     }
 
@@ -550,7 +550,7 @@ class EndToEndTest {
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
         val plan = Codecs.json.decodeFromString(PlanResponse.serializer(), response.bodyAsText())
         assertEquals("20261111T0640", plan.timetableVersion)
-        assertEquals(setOf(Mode.TRAIN, Mode.METRO), plan.liveModes.toSet())
+        assertEquals(setOf(Mode.TRAIN, Mode.METRO, Mode.LIGHT_RAIL, Mode.BUS), plan.liveModes.toSet())
         assertEquals(2, plan.itineraries.size)
 
         val first = plan.itineraries.first()
@@ -629,10 +629,10 @@ class EndToEndTest {
         assertIs<JoinResult.Joined>(core.join(newInvite()))
         val report = assertNotNull(core.updatePacks())
         assertTrue(
-            report.single().let { it is PackUpdateResult.Updated || it is PackUpdateResult.UpToDate },
+            report.single { it.name == "syd-rail" }.let { it is PackUpdateResult.Updated || it is PackUpdateResult.UpToDate },
             report.toString(),
         )
-        assertEquals("20261111T0640", core.dataStatus.first().packs.single().version)
+        assertEquals("20261111T0640", core.dataStatus.first().packs.single { it.name == "syd-rail" }.version)
 
         val central = core.searchStops("Central").first { it.parentId == null }
         val chatswood = core.searchStops("Chatswood").first { it.parentId == null }
@@ -731,6 +731,11 @@ class FakeFeedFetcher(private val clock: WallClock) : FeedFetcher {
     @Volatile var trainVehicles: List<FeedEntity> = emptyList()
     val unexpectedCalls = AtomicInteger()
 
+    private companion object {
+        /** The default feeds: trains, metro, the three light rail networks and buses (empty here). */
+        val KNOWN_FEEDS = setOf("sydneytrains", "metro", "lightrail-cbdandsoutheast", "lightrail-innerwest", "lightrail-parramatta", "buses")
+    }
+
     override val isRemote: Boolean get() = false
 
     override suspend fun fetch(feed: FeedDefinition, kind: FeedKind): FetchResult {
@@ -740,7 +745,7 @@ class FakeFeedFetcher(private val clock: WallClock) : FeedFetcher {
             "sydneytrains" to FeedKind.ALERTS -> trainAlerts
             "sydneytrains" to FeedKind.VEHICLES -> trainVehicles
             else -> {
-                if (feed.id !in setOf("sydneytrains", "metro")) unexpectedCalls.incrementAndGet()
+                if (feed.id !in KNOWN_FEEDS) unexpectedCalls.incrementAndGet()
                 emptyList()
             }
         }

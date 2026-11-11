@@ -64,8 +64,8 @@ data class CoreConfig(
     val appVersion: String,
     /** "android" or "ios". */
     val platform: String,
-    /** Packs to install when none are installed yet. */
-    val defaultPacks: List<String> = listOf("syd-rail"),
+    /** Packs every phone installs (as well as any already installed): trains, metro and light rail; buses. */
+    val defaultPacks: List<String> = listOf("syd-rail", "syd-bus"),
     /** Only download pack updates on unmetered networks (first install is always allowed). */
     val wifiOnlyPackUpdates: Boolean = true,
     /** How often to check `/v1/config` for new packs. */

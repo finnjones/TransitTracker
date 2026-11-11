@@ -117,6 +117,22 @@ class PackUpdaterTest {
     }
 
     @Test
+    fun aPackThePhoneHasNeverHadIgnoresWifiPolicy() = runTest {
+        val h = Harness(this)
+        h.defaultPacks = listOf("syd-rail", "syd-bus")
+        h.unmetered = false
+        h.join()
+        h.preinstall("v1")
+        h.serveConfig(h.packInfo("v2"), h.packInfo("v1", name = "syd-bus"))
+        h.core.start()
+        runCurrent()
+        assertEquals(
+            listOf(PackUpdateResult.Deferred("syd-rail", "v2"), PackUpdateResult.Updated("syd-bus", null, "v1")),
+            h.core.lastPackReport.first(),
+        )
+    }
+
+    @Test
     fun upToDatePackIsNotDownloaded() = runTest {
         val h = Harness(this)
         h.join()

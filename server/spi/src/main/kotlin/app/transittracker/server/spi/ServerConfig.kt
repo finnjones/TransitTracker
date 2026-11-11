@@ -133,6 +133,13 @@ data class FeedDefinition(
  *   is the Inner West line alone, so the three Sydney networks are listed by name. They merge with
  *   the train bundle at shared stations (Central, Circular Quay, Town Hall, Wynyard, Parramatta) with no
  *   conflicts; with them the pack is about 2 MB compressed (checked 11 Nov 2026).
+ * - Light rail live: CBD & South East and Parramatta answer on v1 only, Inner West on v2 only
+ *   (realtime and vehiclepos alike); every one of them uses the static bundles' trip ids.
+ *   Alerts: `/v2/gtfs/alerts/lightrail`.
+ * - Buses: static `/v1/gtfs/schedule/buses` (111 MB zip, all operators; no v2) builds a pack of
+ *   about 6.6 MB compressed / 27 MB SQLite in under a minute within a 1.5 GB heap. Live
+ *   `/v1/gtfs/realtime/buses` and `/v1/gtfs/vehiclepos/buses` use its trip ids; alerts
+ *   `/v2/gtfs/alerts/buses`.
  */
 object DefaultSources {
     val feeds: List<FeedDefinition> = listOf(
@@ -150,6 +157,40 @@ object DefaultSources {
             vehiclePositionsPath = "/v2/gtfs/vehiclepos/metro",
             alertsPath = "/v2/gtfs/alerts/metro",
         ),
+        // Light rail: one feed per network, on whichever API version answers for it (the others
+        // 404). Alerts are one feed for all light rail, so only the first network carries it.
+        FeedDefinition(
+            id = "lightrail-cbdandsoutheast",
+            mode = Mode.LIGHT_RAIL,
+            tripUpdatesPath = "/v1/gtfs/realtime/lightrail/cbdandsoutheast",
+            vehiclePositionsPath = "/v1/gtfs/vehiclepos/lightrail/cbdandsoutheast",
+            alertsPath = "/v2/gtfs/alerts/lightrail",
+        ),
+        FeedDefinition(
+            id = "lightrail-innerwest",
+            mode = Mode.LIGHT_RAIL,
+            tripUpdatesPath = "/v2/gtfs/realtime/lightrail/innerwest",
+            vehiclePositionsPath = "/v2/gtfs/vehiclepos/lightrail/innerwest",
+            alertsPath = null,
+        ),
+        FeedDefinition(
+            id = "lightrail-parramatta",
+            mode = Mode.LIGHT_RAIL,
+            tripUpdatesPath = "/v1/gtfs/realtime/lightrail/parramatta",
+            vehiclePositionsPath = "/v1/gtfs/vehiclepos/lightrail/parramatta",
+            alertsPath = null,
+        ),
+        // Every Sydney bus operator in one feed. Trip updates are about 5 MB a fetch, so they are
+        // fetched less often than the rail feeds.
+        FeedDefinition(
+            id = "buses",
+            mode = Mode.BUS,
+            tripUpdatesPath = "/v1/gtfs/realtime/buses",
+            vehiclePositionsPath = "/v1/gtfs/vehiclepos/buses",
+            alertsPath = "/v2/gtfs/alerts/buses",
+            minAgeOnScreenS = 30,
+            minAgeWatchS = 60,
+        ),
     )
 
     val packs: List<PackDefinition> = listOf(
@@ -163,6 +204,12 @@ object DefaultSources {
                 "/v1/gtfs/schedule/lightrail/innerwest", // L1
                 "/v1/gtfs/schedule/lightrail/parramatta", // L4
             ),
+        ),
+        // Its own pack so the rail pack stays small. It also carries one Newcastle ferry route.
+        PackDefinition(
+            name = "syd-bus",
+            modes = setOf(Mode.BUS, Mode.FERRY),
+            gtfsPaths = listOf("/v1/gtfs/schedule/buses"),
         ),
     )
 }

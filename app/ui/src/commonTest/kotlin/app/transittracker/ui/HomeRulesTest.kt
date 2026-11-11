@@ -95,6 +95,14 @@ class HomeRulesTest {
         val none = live.copy(packs = listOf(PackStatus("syd-rail", null, null, false, downloading = true)))
         assertEquals("Getting the timetable. Your trips appear when it is ready.", banners(none, "20261111").single().text)
         assertEquals(listOf(BannerKind.UPDATING), banners(live.copy(packs = emptyList()), "20261111").map { it.kind })
+        // ...and the core says why: the reason replaces "Getting the timetable".
+        val failed = live.copy(packs = listOf(PackStatus("syd-rail", null, null, false)), timetableProblem = "The server has no timetable yet.")
+        assertEquals("No timetable yet. The server has no timetable yet.", banners(failed, "20261111").single().text)
+        assertEquals(
+            "Getting the timetable. Your trips appear when it is ready.",
+            banners(failed.copy(packs = listOf(PackStatus("syd-rail", null, null, false, downloading = true))), "20261111").single().text,
+            "a download under way wins over the last failure",
+        )
     }
 
     @Test

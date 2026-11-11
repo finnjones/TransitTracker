@@ -329,4 +329,6 @@ copy runs the tunnel, run `docker compose up -d --build`, then restore the datab
 | Docker won't start inside a Proxmox LXC | Container is unprivileged with `nesting=1,keyctl=1`; if a Docker/Proxmox update broke it, move to a VM |
 | Server keeps restarting | `docker compose logs tt-server` |
 | `timetableLoaded` stays `false` | `TFNSW_API_KEY` set and the products added to your application (step 4); see the log, then `docker compose restart tt-server` |
+| App: search says "Something went wrong" or "The server does not have journey search" | The server was built before journey planning (11 Nov 2026) and has no `/v1/places`. Update it (section 14). `docker compose logs tt-server` shows `journey planner tfnsw` at start once it has one |
+| App: onboarding says the timetable did not arrive | The sentence under it says why. "No timetable yet": the server has not published one (`/health` shows `timetableLoaded`; see the row above). "Download failed (HTTP …)": `docker compose logs tt-server`. Older servers' first build failed on the shared Sydney Trains/Metro stops: update (section 14) |
 | Friends get no notifications | `FIREBASE_*` settings, the file in `secrets/`, and `./tt-admin devices` shows `PUSH yes` |

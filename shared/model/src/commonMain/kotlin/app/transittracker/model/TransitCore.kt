@@ -195,6 +195,12 @@ data class DataStatus(
     val minAppVersion: String = "0",
     /** Most push watches this device may have. */
     val maxWatches: Int = 10,
+    /**
+     * Why the last timetable check did not bring a timetable, as a sentence for the user (the
+     * server has none yet, a download failed, the server refused); null when it did, or before
+     * the first check.
+     */
+    val timetableProblem: String? = null,
 )
 
 @Serializable

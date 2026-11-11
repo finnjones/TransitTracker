@@ -77,6 +77,9 @@ enum class DownloadPhase {
 
     /** Reachable, but nothing has moved for a while. */
     STALLED,
+
+    /** The server answered, and the core says why no timetable came ([DownloadUi.detail]). */
+    FAILED,
 }
 
 /**
@@ -90,12 +93,15 @@ data class DownloadUi(
     val packsTotal: Int = 0,
     /** The headline under the scene, "Downloading timetable 2 of 3". */
     val words: String = "Asking the server which timetables you need",
+    /** Why it failed, from the core ([DataStatus.timetableProblem]), for [DownloadPhase.FAILED]. */
+    val detail: String? = null,
 ) {
     val percent: Int get() = (fraction * 100f).toInt().coerceIn(0, 100)
     val percentWords: String get() = "$percent%"
 
     /** True when RETRY makes sense. */
-    val failed: Boolean get() = phase == DownloadPhase.OFFLINE || phase == DownloadPhase.STALLED
+    val failed: Boolean get() =
+        phase == DownloadPhase.OFFLINE || phase == DownloadPhase.STALLED || phase == DownloadPhase.FAILED
 
     /** What the screen reader says for the whole scene. */
     val spoken: String get() = if (phase == DownloadPhase.READY) words else "$words, $percent percent"
@@ -114,6 +120,9 @@ fun downloadProgress(status: DataStatus?): DownloadUi {
         !status.serverReachable -> DownloadUi(
             DownloadPhase.OFFLINE, fraction, done, total,
             "Can't reach the server, so the timetable has not finished",
+        )
+        busy == 0 && status.timetableProblem != null -> DownloadUi(
+            DownloadPhase.FAILED, fraction, done, total, "The timetable did not arrive", status.timetableProblem,
         )
         total == 0 -> DownloadUi()
         else -> DownloadUi(

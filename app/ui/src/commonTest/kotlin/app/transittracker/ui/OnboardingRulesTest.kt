@@ -82,10 +82,25 @@ class OnboardingRulesTest {
         assertEquals("STEP 2 OF 4", OnboardingStep.DOWNLOAD.words)
     }
 
-    private fun status(vararg packs: PackStatus, reachable: Boolean = true) = DataStatus(
+    private fun status(vararg packs: PackStatus, reachable: Boolean = true, problem: String? = null) = DataStatus(
         packs = packs.toList(), lastLiveUpdateMs = null, liveStale = false, serverReachable = reachable,
-        joined = true, attribution = "",
+        joined = true, attribution = "", timetableProblem = problem,
     )
+
+    @Test
+    fun theCoresReasonIsShownWhenNothingIsDownloading() {
+        val failed = downloadProgress(status(pack(null), problem = "The server has no timetable yet."))
+        assertEquals(DownloadPhase.FAILED, failed.phase)
+        assertEquals("The timetable did not arrive", failed.words)
+        assertEquals("The server has no timetable yet.", failed.detail)
+        assertTrue(failed.failed)
+
+        val retrying = downloadProgress(status(pack(null, downloading = true), problem = "old reason"))
+        assertEquals(DownloadPhase.DOWNLOADING, retrying.phase, "a download under way wins over the last failure")
+
+        val offline = downloadProgress(status(pack(null), reachable = false, problem = "old reason"))
+        assertEquals(DownloadPhase.OFFLINE, offline.phase)
+    }
 
     private fun pack(version: String?, downloading: Boolean = false, update: Boolean = false) =
         PackStatus("syd-rail", version, null, updateAvailable = update, downloading = downloading)

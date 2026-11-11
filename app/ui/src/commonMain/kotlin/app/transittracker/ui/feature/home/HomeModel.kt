@@ -139,7 +139,11 @@ fun banners(status: DataStatus?, today: ServiceDate): List<HomeBanner> {
         status.statusMessage?.takeIf { it.isNotBlank() }?.let { add(HomeBanner(BannerKind.MESSAGE, it)) }
         // Joined, but the first timetable has not arrived yet (the app was closed during onboarding's download).
         if (status.joined && status.packs.none { it.version != null }) {
-            add(HomeBanner(BannerKind.UPDATING, "Getting the timetable. Your trips appear when it is ready."))
+            val problem = status.timetableProblem?.takeIf { status.serverReachable && status.packs.none { it.downloading } }
+            add(
+                if (problem != null) HomeBanner(BannerKind.MESSAGE, "No timetable yet. $problem")
+                else HomeBanner(BannerKind.UPDATING, "Getting the timetable. Your trips appear when it is ready."),
+            )
         } else if (status.packs.any { it.downloading }) {
             add(HomeBanner(BannerKind.UPDATING, "Updating timetable…"))
         }

@@ -210,11 +210,13 @@ private fun DownloadStep(download: DownloadUi, actions: OnboardingActions) {
         download.phase == DownloadPhase.READY ->
             PixelButton("CONTINUE", actions.continueFromDownload, Modifier.fillMaxWidth(), kind = ButtonKind.PRIMARY)
         download.failed -> {
+            val carryOn = "You can carry on, but the app has no timetable until this finishes."
             PixelText(
-                if (download.phase == DownloadPhase.OFFLINE)
-                    "Connect to the internet and try again. You can carry on, but the app has no timetable until this finishes."
-                else
-                    "Nothing has arrived for a while. Try again. You can carry on, but the app has no timetable until this finishes.",
+                when {
+                    download.phase == DownloadPhase.OFFLINE -> "Connect to the internet and try again. $carryOn"
+                    download.detail != null -> "${download.detail} $carryOn"
+                    else -> "Nothing has arrived for a while. Try again. $carryOn"
+                },
                 style = TtTheme.type.reading15, color = c.textReading,
             )
             PixelButton("RETRY", actions.retryDownload, Modifier.fillMaxWidth(), kind = ButtonKind.PRIMARY)

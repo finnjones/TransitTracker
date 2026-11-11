@@ -13,6 +13,8 @@ import app.transittracker.model.PlanResult
  * Outcomes:
  * - the server could not be reached → `Offline`;
  * - `503 planner_unavailable` (no key, today's quota used up, TfNSW throttling) → `Unavailable`;
+ * - `404`/`405`/`501` (a tt-server built before journey planning) → `Failed` saying the server
+ *   needs updating;
  * - anything else that is not a success (including `429` and a body that cannot be read) →
  *   `Failed` with a plain sentence for the user ([PlannerMessages]).
  *
@@ -52,9 +54,11 @@ class RemoteJourneyPlanner(private val api: ApiClient) : JourneyPlanner {
         failure.status == 429 -> PlannerMessages.TOO_MANY
         failure.status == 401 || failure.status == 403 -> PlannerMessages.NOT_JOINED
         failure.status == 400 -> if (what == PLAN) PlannerMessages.BAD_JOURNEY else PlannerMessages.BAD_SEARCH
+        // A tt-server built before journey planning has no such route.
+        failure.status == 404 || failure.status == 405 || failure.status == 501 -> PlannerMessages.SERVER_TOO_OLD
         failure.status == 502 && failure.error?.code == CODE_UPSTREAM -> PlannerMessages.UPSTREAM
         failure.status >= 500 -> PlannerMessages.SERVER_ERROR
-        else -> PlannerMessages.GENERIC
+        else -> PlannerMessages.generic(failure.status)
     }
 
     companion object {
@@ -99,5 +103,9 @@ object PlannerMessages {
     const val UPSTREAM = "The journey planner sent an answer that could not be used. Try again."
     const val SERVER_ERROR = "The server had a problem. Try again soon."
     const val UNREADABLE = "The server sent an answer the app could not read. Try again soon."
+    const val SERVER_TOO_OLD = "The server does not have journey search. Update tt-server to the latest version."
     const val GENERIC = "Something went wrong. Try again."
+
+    /** [GENERIC] with the HTTP status, so a report from the phone says what the server answered. */
+    fun generic(status: Int): String = "Something went wrong (HTTP $status). Try again."
 }

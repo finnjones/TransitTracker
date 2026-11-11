@@ -188,3 +188,29 @@ class PackUpdater(
         }
     }
 }
+
+/**
+ * Plain sentences for [app.transittracker.model.DataStatus.timetableProblem]: why the timetable
+ * did not arrive. They name what to check on the server, since the person reading them runs it.
+ */
+object TimetableProblems {
+    const val NOT_OFFERED =
+        "The server has no timetable yet. It builds one from TfNSW's data after it starts and then nightly: check TFNSW_API_KEY and the server log."
+    const val UNREADABLE_CONFIG = "The server sent an answer the app could not read. Update tt-server to the latest version."
+
+    /** `/v1/config` answered [status]. */
+    fun config(status: Int): String = when (status) {
+        401, 403 -> "The server no longer knows this phone. Clear the app's data and join again with a new invite code."
+        404 -> "The server address looks wrong: it has no TransitTracker API. Check the address and that tt-server is up to date."
+        else -> "The server could not send the timetable list (HTTP $status). Try again soon."
+    }
+
+    /** The problem in [report], if nothing usable was installed ([installed] is false). */
+    fun of(report: List<PackUpdateResult>, installed: Boolean): String? {
+        if (installed) return null
+        report.filterIsInstance<PackUpdateResult.Failed>().firstOrNull()?.let {
+            return "The timetable download failed (${it.reason}). Try again."
+        }
+        return if (report.any { it is PackUpdateResult.NotOffered }) NOT_OFFERED else null
+    }
+}

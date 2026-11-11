@@ -295,4 +295,34 @@ class CoreTest {
         assertNull(before.packs.single().version)
         assertNotNull(before)
     }
+
+    @Test
+    fun dataStatusSaysWhyTheTimetableDidNotArrive() = runTest {
+        val h = Harness(this)
+        h.join()
+        h.core.start()
+
+        // The server answers but offers no timetable (its first build has not finished).
+        h.serveConfig()
+        h.core.checkForUpdates()
+        assertEquals(TimetableProblems.NOT_OFFERED, h.core.dataStatus.first().timetableProblem)
+
+        // It offers one, but the download fails.
+        h.serveConfig(h.packInfo("v1"))
+        h.server.on("GET", "/v1/packs/syd-rail/*") { respond("", HttpStatusCode.NotFound) }
+        h.core.checkForUpdates()
+        assertEquals("The timetable download failed (HTTP 404). Try again.", h.core.dataStatus.first().timetableProblem)
+
+        // The server no longer knows this phone.
+        h.server.on("GET", "/v1/config") { respond("", HttpStatusCode.Unauthorized) }
+        h.core.checkForUpdates()
+        assertEquals(TimetableProblems.config(401), h.core.dataStatus.first().timetableProblem)
+
+        // All well: no problem.
+        h.serveConfig(h.packInfo("v1"))
+        h.core.checkForUpdates()
+        val ok = h.core.dataStatus.first()
+        assertEquals("v1", ok.packs.single().version)
+        assertNull(ok.timetableProblem)
+    }
 }

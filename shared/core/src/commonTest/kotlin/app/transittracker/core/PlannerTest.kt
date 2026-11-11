@@ -133,6 +133,9 @@ class PlannerTest {
         answer = { respond(problem("unauthorized", 401), HttpStatusCode.Unauthorized) }
         assertEquals(PlacesResult.Failed(PlannerMessages.NOT_JOINED), search())
 
+        answer = { respond(problem("not_found", 404), HttpStatusCode.NotFound) }
+        assertEquals(PlacesResult.Failed(PlannerMessages.SERVER_TOO_OLD), search(), "a server without /v1/places")
+
         answer = { respond("""{"places": [""") }
         assertEquals(PlacesResult.Failed(PlannerMessages.UNREADABLE), search(), "malformed JSON")
 
@@ -191,7 +194,10 @@ class PlannerTest {
         assertEquals(PlanResult.Failed(PlannerMessages.BAD_JOURNEY), plan())
 
         answer = { respond(problem("not_found", 404), HttpStatusCode.NotFound) }
-        assertEquals(PlanResult.Failed(PlannerMessages.GENERIC), plan())
+        assertEquals(PlanResult.Failed(PlannerMessages.SERVER_TOO_OLD), plan(), "a server without /v1/plan")
+
+        answer = { respond(problem("conflict", 409), HttpStatusCode.Conflict) }
+        assertEquals(PlanResult.Failed(PlannerMessages.generic(409)), plan())
 
         answer = { respond("<html>oops</html>") }
         assertEquals(PlanResult.Failed(PlannerMessages.UNREADABLE), plan(), "malformed body")

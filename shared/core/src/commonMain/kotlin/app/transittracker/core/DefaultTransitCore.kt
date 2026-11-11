@@ -97,6 +97,9 @@ class DefaultTransitCore internal constructor(
     }
     private val tripStore = TripStore(kv)
     private val configState = MutableStateFlow<ConfigResponse?>(null)
+
+    /** Why the last `/v1/config` call failed when the server answered (null otherwise). */
+    private val configProblem = MutableStateFlow<String?>(null)
     private val watchesState = MutableStateFlow<List<WatchDto>?>(null)
     private val startMutex = Mutex()
     private var started = false
@@ -144,6 +147,13 @@ class DefaultTransitCore internal constructor(
         if (loadToken() == null) return null
         sendPendingPushToken()
         val result = api.config()
+        when (result) {
+            is ApiResult.Success -> configProblem.value = null
+            is ApiResult.HttpFailure -> configProblem.value = TimetableProblems.config(result.status)
+            // Not reached: DataStatus.serverReachable already says so. Reached but unreadable:
+            is ApiResult.NetworkFailure ->
+                configProblem.value = if (result.reachedServer) TimetableProblems.UNREADABLE_CONFIG else null
+        }
         if (result !is ApiResult.Success) return null
         val cfg = result.value
         applyConfig(cfg)
@@ -371,8 +381,10 @@ class DefaultTransitCore internal constructor(
         poller.snapshot,
         api.reachable,
         joined.onStart { emit(false) },
-        combine(configState, ticker()) { cfg, _ -> cfg },
-    ) { packs, live, reachable, joined, cfg ->
+        combine(configState, ticker(), configProblem, updater.lastReport) { cfg, _, problem, report ->
+            Triple(cfg, problem, report)
+        },
+    ) { packs, live, reachable, joined, (cfg, configFailure, report) ->
         val now = timeSync.nowMillis()
         val names = (packs.keys + config.defaultPacks).sorted()
         val last = live.lastUpdateMs
@@ -387,6 +399,7 @@ class DefaultTransitCore internal constructor(
             features = cfg?.features.orEmpty(),
             minAppVersion = cfg?.minAppVersion ?: "0",
             maxWatches = cfg?.maxWatches ?: DEFAULT_MAX_WATCHES,
+            timetableProblem = configFailure ?: TimetableProblems.of(report, installed = packs.values.any { it.version != null }),
         )
     }.distinctUntilChanged()
 

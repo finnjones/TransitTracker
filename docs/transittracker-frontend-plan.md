@@ -39,7 +39,7 @@ drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
 | F8 | Saved places | **Decided** | **Addresses can be saved** (Home, Work and others), kept on the phone only, and used as the start or end of a saved trip (section 5.7) |
 | F9 | How an address is found | To confirm | **TfNSW's lookup through the server, plus "use where I am now".** The server is needed for journey planning anyway, so the phone's own lookup is no longer the simpler choice (section 5.7) |
 | F10 | Journey planning | **Decided** | **The app recommends ways to get from A to B**, including changes between modes and the walking time between them (section 5.6) |
-| F11 | What works the journeys out | To confirm | **TfNSW's Trip Planner, through tt-server.** Assessed as acceptable for this use. Google Maps was assessed and is not recommended. A planner on the phone and OpenTripPlanner on the home server remain alternatives (section 8.5) |
+| F11 | What works the journeys out | To confirm | **TfNSW's Trip Planner, through tt-server.** Assessed as acceptable for this use. Google Maps and the other hosted services were assessed and are not recommended. An open-source planner on the home server (MOTIS) is the fallback if TfNSW's falls short (section 8.5) |
 
 ---
 
@@ -880,7 +880,8 @@ so something has to work the journeys out.
 | **TfNSW's Trip Planner, through tt-server** (recommended) | The server passes a journey request to TfNSW's Trip Planner API with the key it already holds, and returns a trimmed result | Covers every mode today, including those whose timetables are not on the phone yet; walks follow real footpaths; little to build; nothing new to run | Needs a connection; each search is a call against the daily quota; the choice of journeys is TfNSW's |
 | Google Maps (Routes API) | The server asks Google for public transport routes | Strong address search and walking directions; works anywhere in the world; free at this scale | Its terms do not allow the results to be used with a non-Google map, which rules out our own line map; results may not be stored, apart from coordinates for 30 days, which conflicts with saved routes; rides carry no trip ID, so they cannot be tied to our live data, tracking or push watches; needs a Google billing account |
 | A planner on the phone | Search the timetable packs on the device | Works offline; no quota | Weeks of work; needs every mode's timetable on the phone (the bus pack is large); walks would be straight-line guesses |
-| OpenTripPlanner on the home server | Run the open-source planner with TfNSW timetables and OpenStreetMap | Full control; real street walking; no quota | A heavy service to run and keep fed with data; the most upkeep |
+| An open-source planner on the home server (MOTIS, or OpenTripPlanner) | Run the planner yourself, fed with the TfNSW timetable files the server already downloads each night, plus OpenStreetMap for walking | Every planned ride carries exactly the trip ID the live feeds use, so it ties to live data, tracking and notifications without guesswork; no quota; no dependence on TfNSW changing its planner; MOTIS includes address search | Another service to run and keep fed; its memory needs for Sydney are untested (OpenTripPlanner is known to be memory-hungry; MOTIS is the lighter of the two); its journeys may differ from the official planner's |
+| Other hosted services: TripGo, HERE Public Transit, Transitland, Transitous | Ask a third party's planner | TripGo has a free tier and is made by a Sydney company; Transitous is free and community-run | None beats TfNSW here. Each adds a third party with its own terms and no link to our trip IDs. Transitland's routing covers North America only and ignores live data. Transitous is run by volunteers and its NSW coverage is unconfirmed |
 
 **Is TfNSW's Trip Planner acceptable?** Yes, on what could be checked.
 
@@ -897,6 +898,13 @@ requests are billed at the lowest tier, with 10,000 free a month and US$5 per
 5,000 free, then US$10 per 1,000). The obstacles are its terms and its data,
 not its price, as set out in the table above. It would suit a different app:
 one that uses Google's own map as its map and does not save routes.
+
+**The fallback.** The server's `/v1/plan` and `/v1/places` answers are in our
+own format, not TfNSW's, so the engine behind them can be changed without
+touching the app. If matching TfNSW's rides to live data proves unreliable in
+practice, or its planner is often unavailable, the replacement is MOTIS on the
+home server. A half-day trial import of the Sydney data would show how much
+memory it needs, and is worth doing before it is ever needed.
 
 These findings come from search results quoting the official pages. The pages
 themselves could not be opened from the session that wrote this plan, so read
@@ -938,7 +946,13 @@ Sources: [Trip Planner APIs dataset](https://opendata.transport.nsw.gov.au/datas
 [Google Maps Platform pricing list](https://developers.google.com/maps/billing-and-pricing/pricing),
 [Google Maps Platform service specific terms](https://cloud.google.com/maps-platform/terms/maps-service-terms),
 [Google Routes API policies](https://developers.google.com/maps/documentation/routes/policies),
-[Google Routes API: get a transit route](https://developers.google.com/maps/documentation/routes/transit-route).
+[Google Routes API: get a transit route](https://developers.google.com/maps/documentation/routes/transit-route),
+[MOTIS](https://github.com/motis-project/motis),
+[OpenTripPlanner system requirements](https://docs.opentripplanner.org/en/latest/System-Requirements/),
+[TripGo API pricing](https://skedgo.com/tripgo-api/pricing/),
+[HERE Public Transit API](https://docs.here.com/transit/docs/readme-public-transit-api-v8),
+[Transitland routing API](https://www.transit.land/documentation/routing-api/),
+[Transitous overview](https://deepwiki.com/public-transport/transitous).
 
 ---
 

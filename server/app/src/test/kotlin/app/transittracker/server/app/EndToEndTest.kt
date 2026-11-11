@@ -17,6 +17,14 @@ import app.transittracker.model.DeviceUpdate
 import app.transittracker.model.JoinRequest
 import app.transittracker.model.JoinResponse
 import app.transittracker.model.JoinResult
+import app.transittracker.model.LatLng
+import app.transittracker.model.LegKind
+import app.transittracker.model.PlaceKind
+import app.transittracker.model.PlacesResponse
+import app.transittracker.model.PlanEndpoint
+import app.transittracker.model.PlanRequest
+import app.transittracker.model.PlanResponse
+import app.transittracker.model.changes
 import app.transittracker.model.MediaTypes
 import app.transittracker.model.Mode
 import app.transittracker.model.PackInfo
@@ -34,6 +42,7 @@ import app.transittracker.server.live.FeedFetcher
 import app.transittracker.server.live.FeedKind
 import app.transittracker.server.live.FetchResult
 import app.transittracker.server.pipeline.PipelineOptions
+import app.transittracker.server.planner.ReplayPlannerFetcher
 import app.transittracker.server.spi.FeedDefinition
 import app.transittracker.server.spi.PushMessage
 import app.transittracker.server.spi.PushResult
@@ -132,7 +141,11 @@ class EndToEndTest {
     private fun startServer(version: String): TtServer {
         val output = admin("import-gtfs", "syd-rail", Fixtures.miniRail.toString())
         assertTrue("Published timetable pack syd-rail/$version" in output, output)
-        val tt = TtServer(config, clock, fetcher = feeds, push = push, pipelineOptions = PipelineOptions(zstdLevel = 3))
+        val tt = TtServer(
+            config, clock, fetcher = feeds, push = push, pipelineOptions = PipelineOptions(zstdLevel = 3),
+            // Hand-made Trip Planner answers using the mini-rail stations and trips (testdata/planner/README.md).
+            plannerFetcher = ReplayPlannerFetcher(Fixtures.testdata.resolve("planner/replay/planner")),
+        )
         server = tt
         tt.start(newScope())
         assertEquals(version, tt.services.timetables.current.value?.version)
@@ -505,6 +518,88 @@ class EndToEndTest {
             assertEquals(app.transittracker.model.ServiceRef("T1.N.2430", DAY), departure.ref)
             assertEquals(Instant.parse("2026-11-11T13:37:00Z").toEpochMilli(), departure.expectedDepartureMs)
         }
+    }
+
+    @Test
+    fun `a planned journey on the mini-rail fixture is matched to its trips`() = e2e { tt ->
+        val token = join(newInvite()).deviceToken
+        val config = Codecs.json.decodeFromString(ConfigResponse.serializer(), getAuthed("/v1/config", token).bodyAsText())
+        assertEquals(true, config.features["planner"])
+
+        // ---- find the start: a place search ----
+        val places = Codecs.json.decodeFromString(
+            PlacesResponse.serializer(),
+            getAuthed("/v1/places?q=central&lat=-33.884&lon=151.207", token).bodyAsText(),
+        ).places
+        val central = places.first()
+        assertEquals("Central Station", central.name)
+        assertEquals(PlaceKind.STOP, central.kind)
+        assertEquals("CEN", central.stopId, "the planner's id is a station in the loaded timetable")
+
+        // ---- plan: Eddy Ave -> Cammeray, leaving now (06:40), with the phone's HTTP client ----
+        val request = PlanRequest(
+            from = PlanEndpoint(LatLng(-33.884300, 151.207300)),
+            to = PlanEndpoint(LatLng(-33.822000, 151.211000)),
+            maxItineraries = 3,
+        )
+        val response = client.post("/v1/plan") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(Codecs.json.encodeToString(PlanRequest.serializer(), request))
+        }
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        val plan = Codecs.json.decodeFromString(PlanResponse.serializer(), response.bodyAsText())
+        assertEquals("20261111T0640", plan.timetableVersion)
+        assertEquals(setOf(Mode.TRAIN, Mode.METRO), plan.liveModes.toSet())
+        assertEquals(2, plan.itineraries.size)
+
+        val first = plan.itineraries.first()
+        assertEquals(listOf(LegKind.WALK, LegKind.RIDE, LegKind.WALK, LegKind.RIDE, LegKind.WALK), first.legs.map { it.kind })
+        assertEquals(1, first.changes)
+        val train = first.legs[1]
+        assertEquals("T1", train.routeName)
+        assertEquals("T1.N.0700", train.tripId, "matched by the planner's real-time trip id")
+        assertEquals(DAY, train.serviceDate)
+        assertEquals("T1", train.routeId)
+        assertEquals("F99D1C", train.routeColor)
+        assertEquals("Central", train.from.name)
+        assertEquals("CEN_P1", train.from.stopId)
+        assertEquals("1", train.from.platform)
+        assertEquals("NSY_P1", train.to.stopId)
+        assertEquals(ServiceTime.toEpochMillis(DAY, 7 * 3600), train.from.scheduledMs)
+        assertEquals(ServiceTime.toEpochMillis(DAY, 7 * 3600 + 120), train.from.expectedMs)
+        val change = first.legs[2]
+        assertEquals(180, change.durationS, "the change walk from the planner's foot-path information")
+        assertEquals("North Sydney", change.from.name)
+        assertEquals("Stand D", change.to.platform)
+        val bus = first.legs[3]
+        assertEquals(Mode.BUS, bus.mode)
+        assertEquals("202", bus.routeName)
+        assertEquals(null, bus.tripId, "buses are not in the rail timetable")
+
+        // The second journey's train has a real-time id the timetable does not know: matched by
+        // line, time and stops instead.
+        val second = plan.itineraries[1].legs[1]
+        assertEquals("T1.N.0730", second.tripId)
+        assertEquals(DAY, second.serviceDate)
+
+        // ---- the matched ride works with the live endpoints, as the phone would use it ----
+        feeds.trains = listOf(delayed0700)
+        val tracked = ProtoBuf.decodeFromByteArray(
+            RealtimeResponse.serializer(),
+            getAuthed("/v1/rt/trip/${train.tripId}?date=${train.serviceDate}", token, accept = MediaTypes.PROTOBUF).bodyAsBytes(),
+        )
+        assertEquals(listOf("T1.N.0700"), tracked.trips.map { it.tripId })
+
+        val status = Codecs.json.decodeFromString(
+            StatusReport.serializer(),
+            client.get("/status") { bearerAuth(ADMIN_TOKEN); header(HttpHeaders.Accept, MediaTypes.JSON) }.bodyAsText(),
+        )
+        assertEquals("replay", status.planner.source)
+        assertEquals(2, status.planner.matchedRides)
+        assertEquals(2, status.planner.unmatchedRides)
+        assertEquals(0, status.planner.upstreamCalls, "replay never calls TfNSW")
+        assertEquals(0, tt.services.quota.callsToday)
     }
 
     // ---- phone side ---------------------------------------------------------------------------

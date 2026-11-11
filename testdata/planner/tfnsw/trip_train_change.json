@@ -1,0 +1,549 @@
+{
+ "version": "10.6.21.17",
+ "systemMessages": [],
+ "journeys": [
+  {
+   "rating": 0,
+   "isAdditional": false,
+   "interchanges": 1,
+   "legs": [
+    {
+     "duration": 1200,
+     "isRealtimeControlled": true,
+     "realtimeStatus": [
+      "MONITORED"
+     ],
+     "origin": {
+      "isGlobalId": true,
+      "id": "2121231",
+      "name": "Epping Station, Platform 1, Epping",
+      "disassembledName": "Epping Station, Platform 1",
+      "type": "platform",
+      "coord": [
+       -33.77264,
+       151.08221
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "212110",
+       "name": "Epping Station, Platform 1, Epping",
+       "disassembledName": "Epping Station, Platform 1",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95305254:1",
+        "name": "Epping",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101132"
+       },
+       "coord": [
+        -33.77264,
+        151.08221
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 1",
+       "area": "1",
+       "platform": "EPP1",
+       "platformName": "Platform 1",
+       "plannedPlatformName": "Platform 1"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T20:45:00Z",
+      "departureTimePlanned": "2026-11-10T20:45:00Z",
+      "departureTimeEstimated": "2026-11-10T20:45:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "2135235",
+      "name": "Strathfield Station, Platform 5, Strathfield",
+      "disassembledName": "Strathfield Station, Platform 5",
+      "type": "platform",
+      "coord": [
+       -33.87182,
+       151.09441
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "213510",
+       "name": "Strathfield Station, Platform 5, Strathfield",
+       "disassembledName": "Strathfield Station, Platform 5",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95310587:1",
+        "name": "Strathfield",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101151"
+       },
+       "coord": [
+        -33.87182,
+        151.09441
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 5",
+       "area": "1",
+       "platform": "STR5",
+       "platformName": "Platform 5",
+       "plannedPlatformName": "Platform 5"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T21:05:00Z",
+      "arrivalTimePlanned": "2026-11-10T21:05:00Z",
+      "arrivalTimeEstimated": "2026-11-10T21:05:00Z"
+     },
+     "transportation": {
+      "id": "nsw:020T9: :H:sj2",
+      "name": "Sydney Trains Network T9 Northern Line",
+      "disassembledName": "T9",
+      "number": "T9 Northern Line",
+      "description": "Hornsby to Gordon via Strathfield",
+      "product": {
+       "id": 1,
+       "class": 1,
+       "name": "Sydney Trains Network",
+       "iconId": 1
+      },
+      "operator": {
+       "id": "x0001",
+       "name": "Sydney Trains"
+      },
+      "destination": {
+       "id": "10101100",
+       "name": "Gordon via Central",
+       "type": "stop"
+      },
+      "properties": {
+       "isTTB": true,
+       "tripCode": 541,
+       "timetablePeriod": "NSW JP",
+       "lineDisplay": "LINE",
+       "globalId": "3001",
+       "AVMSTripID": "121A.1450.133.8.T.8.86753100",
+       "RealtimeTripId": "121A.1450.133.8.T.8.86753100",
+       "gtfsTripId": "3001.nsw-2-T9.1.TA.1840.sj2"
+      },
+      "iconId": 1
+     },
+     "stopSequence": [
+      {
+       "isGlobalId": true,
+       "id": "2121231",
+       "name": "Epping Station, Platform 1, Epping",
+       "disassembledName": "Epping Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.77264,
+        151.08221
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "212110",
+        "name": "Epping Station, Platform 1, Epping",
+        "disassembledName": "Epping Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95305254:1",
+         "name": "Epping",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101132"
+        },
+        "coord": [
+         -33.77264,
+         151.08221
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "EPP1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       },
+       "departureTimePlanned": "2026-11-10T20:45:00Z",
+       "departureTimeEstimated": "2026-11-10T20:45:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "2135235",
+       "name": "Strathfield Station, Platform 5, Strathfield",
+       "disassembledName": "Strathfield Station, Platform 5",
+       "type": "platform",
+       "coord": [
+        -33.87182,
+        151.09441
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "213510",
+        "name": "Strathfield Station, Platform 5, Strathfield",
+        "disassembledName": "Strathfield Station, Platform 5",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95310587:1",
+         "name": "Strathfield",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101151"
+        },
+        "coord": [
+         -33.87182,
+         151.09441
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 5",
+        "area": "1",
+        "platform": "STR5",
+        "platformName": "Platform 5",
+        "plannedPlatformName": "Platform 5"
+       },
+       "arrivalTimePlanned": "2026-11-10T21:05:00Z",
+       "arrivalTimeEstimated": "2026-11-10T21:05:00Z"
+      }
+     ],
+     "coords": [
+      [
+       -33.77264,
+       151.08221
+      ],
+      [
+       -33.87182,
+       151.09441
+      ]
+     ],
+     "properties": {
+      "PlanLowFloorVehicle": "1",
+      "PlanWheelChairAccess": "1"
+     },
+     "infos": [],
+     "footPathInfo": [
+      {
+       "position": "AFTER",
+       "duration": 180,
+       "footPathElem": []
+      }
+     ],
+     "footPathInfoRedundant": false,
+     "interchange": {
+      "desc": "Fussweg",
+      "type": 100,
+      "coords": [
+       [
+        -33.87182,
+        151.09441
+       ],
+       [
+        -33.87177,
+        151.09425
+       ]
+      ]
+     }
+    },
+    {
+     "duration": 600,
+     "isRealtimeControlled": true,
+     "realtimeStatus": [
+      "MONITORED"
+     ],
+     "origin": {
+      "isGlobalId": true,
+      "id": "2135233",
+      "name": "Strathfield Station, Platform 3, Strathfield",
+      "disassembledName": "Strathfield Station, Platform 3",
+      "type": "platform",
+      "coord": [
+       -33.87177,
+       151.09425
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "213510",
+       "name": "Strathfield Station, Platform 3, Strathfield",
+       "disassembledName": "Strathfield Station, Platform 3",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95310587:1",
+        "name": "Strathfield",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101151"
+       },
+       "coord": [
+        -33.87177,
+        151.09425
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 3",
+       "area": "1",
+       "platform": "STR3",
+       "platformName": "Platform 3",
+       "plannedPlatformName": "Platform 3"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T21:12:00Z",
+      "departureTimePlanned": "2026-11-10T21:12:00Z",
+      "departureTimeEstimated": "2026-11-10T21:13:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "2015140",
+      "name": "Redfern Station, Platform 10, Redfern",
+      "disassembledName": "Redfern Station, Platform 10",
+      "type": "platform",
+      "coord": [
+       -33.89157,
+       151.19869
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "201510",
+       "name": "Redfern Station, Platform 10, Redfern",
+       "disassembledName": "Redfern Station, Platform 10",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95308462:1",
+        "name": "Redfern",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101102"
+       },
+       "coord": [
+        -33.89157,
+        151.19869
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 10",
+       "area": "1",
+       "platform": "RFN10",
+       "platformName": "Platform 10",
+       "plannedPlatformName": "Platform 10"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T21:22:00Z",
+      "arrivalTimePlanned": "2026-11-10T21:22:00Z",
+      "arrivalTimeEstimated": "2026-11-10T21:23:00Z"
+     },
+     "transportation": {
+      "id": "nsw:020T2: :H:sj2",
+      "name": "Sydney Trains Network T2 Leppington & Inner West Line",
+      "disassembledName": "T2",
+      "number": "T2 Leppington & Inner West Line",
+      "description": "Leppington to City",
+      "product": {
+       "id": 1,
+       "class": 1,
+       "name": "Sydney Trains Network",
+       "iconId": 1
+      },
+      "operator": {
+       "id": "x0001",
+       "name": "Sydney Trains"
+      },
+      "destination": {
+       "id": "10101100",
+       "name": "City via Redfern",
+       "type": "stop"
+      },
+      "properties": {
+       "isTTB": true,
+       "tripCode": 541,
+       "timetablePeriod": "NSW JP",
+       "lineDisplay": "LINE",
+       "globalId": "3001",
+       "AVMSTripID": "NOT-IN-GTFS.0812",
+       "RealtimeTripId": "NOT-IN-GTFS.0812",
+       "gtfsTripId": "3001.nsw-2-T2.1.TA.1840.sj2"
+      },
+      "iconId": 1
+     },
+     "stopSequence": [
+      {
+       "isGlobalId": true,
+       "id": "2135233",
+       "name": "Strathfield Station, Platform 3, Strathfield",
+       "disassembledName": "Strathfield Station, Platform 3",
+       "type": "platform",
+       "coord": [
+        -33.87177,
+        151.09425
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "213510",
+        "name": "Strathfield Station, Platform 3, Strathfield",
+        "disassembledName": "Strathfield Station, Platform 3",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95310587:1",
+         "name": "Strathfield",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101151"
+        },
+        "coord": [
+         -33.87177,
+         151.09425
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 3",
+        "area": "1",
+        "platform": "STR3",
+        "platformName": "Platform 3",
+        "plannedPlatformName": "Platform 3"
+       },
+       "departureTimePlanned": "2026-11-10T21:12:00Z",
+       "departureTimeEstimated": "2026-11-10T21:12:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "2134231",
+       "name": "Burwood Station, Platform 1, Burwood",
+       "disassembledName": "Burwood Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.87738,
+        151.10355
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "213410",
+        "name": "Burwood Station, Platform 1, Burwood",
+        "disassembledName": "Burwood Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95307832:1",
+         "name": "Burwood",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101150"
+        },
+        "coord": [
+         -33.87738,
+         151.10355
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "PLATFORM1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       },
+       "arrivalTimePlanned": "2026-11-10T21:15:00Z",
+       "arrivalTimeEstimated": "2026-11-10T21:15:00Z",
+       "departureTimePlanned": "2026-11-10T21:15:00Z",
+       "departureTimeEstimated": "2026-11-10T21:15:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "2015140",
+       "name": "Redfern Station, Platform 10, Redfern",
+       "disassembledName": "Redfern Station, Platform 10",
+       "type": "platform",
+       "coord": [
+        -33.89157,
+        151.19869
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "201510",
+        "name": "Redfern Station, Platform 10, Redfern",
+        "disassembledName": "Redfern Station, Platform 10",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95308462:1",
+         "name": "Redfern",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101102"
+        },
+        "coord": [
+         -33.89157,
+         151.19869
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 10",
+        "area": "1",
+        "platform": "RFN10",
+        "platformName": "Platform 10",
+        "plannedPlatformName": "Platform 10"
+       },
+       "arrivalTimePlanned": "2026-11-10T21:22:00Z",
+       "arrivalTimeEstimated": "2026-11-10T21:22:00Z"
+      }
+     ],
+     "coords": [
+      [
+       -33.87177,
+       151.09425
+      ],
+      [
+       -33.87738,
+       151.10355
+      ],
+      [
+       -33.89157,
+       151.19869
+      ]
+     ],
+     "properties": {
+      "PlanLowFloorVehicle": "1",
+      "PlanWheelChairAccess": "1"
+     },
+     "infos": []
+    }
+   ],
+   "daysOfService": {
+    "rvb": "1"
+   }
+  }
+ ]
+}

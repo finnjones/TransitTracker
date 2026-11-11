@@ -276,7 +276,37 @@ rate from the server.
 | `PUT /v1/watches/{id}` | Create or update a watch | P5 |
 | `DELETE /v1/watches/{id}` | Remove a watch | P5 |
 | `POST /v1/watches/{id}/test` | Send a test notification | P5 |
+| `GET /v1/places?q=…&lat=…&lon=…&limit=…` | Address, stop and place search for journey planning (`PlacesResponse`); nearer results first when a position is given | Planner |
+| `POST /v1/plan` | Journeys from A to B (`PlanRequest` → `PlanResponse`): rides, changes and walks, rides matched to timetable trips | Planner |
 | `GET /status` | Your own page: feed ages, calls used today, errors, devices, notifications sent | P3 |
+
+### 5.0 Journey planning
+
+The phone never talks to TfNSW. `/v1/places` and `/v1/plan` (contract:
+`shared/model/.../Planning.kt`) are answered by `:server:planner`, which asks TfNSW's Trip
+Planner (`/v1/tp/stop_finder`, `/v1/tp/trip`) with the server's key and trims the answer:
+
+- **Mapping.** Walking legs become `WALK`, public transport legs `RIDE`; a walk TfNSW gives as
+  foot-path information on a ride becomes its own `WALK`, so every change has its minutes;
+  consecutive walks are merged and empty ones dropped; journeys needing cycling, taxi, car or
+  on-demand are dropped. Names lose " Station" and the platform; `stopId` is set only for ids in
+  the loaded timetable. Order: earliest arrival (depart at) or latest departure (arrive by),
+  then fewer changes.
+- **Matching.** A ride gets `routeId`/`tripId`/`serviceDate` only when the planner's real-time
+  trip id is a timetable trip running that day at that time, or exactly one trip of the same line
+  leaves the boarding station at the planned time and calls later at the alighting station.
+  Never guessed; matched and unmatched counts are on `/status`.
+- **Quota.** Planner calls draw on the same daily budget and per-second limiter as the live feeds
+  (one `TfnswQuota` per server), back off on 401/403/429/503, and answer
+  `503 planner_unavailable` meanwhile, when the budget is used up or with no key;
+  `502 planner_upstream` when TfNSW answers with something unusable. Per device: `/v1/plan` 30 an
+  hour (burst 5), `/v1/places` 60 a minute (burst 20). Identical plans are cached 60 s, searches
+  5 minutes (bounded, in memory).
+- **Privacy.** Positions, place ids and search text go only to TfNSW, are not stored and are never
+  logged; logs carry counts, status and duration.
+- **Without a key** `TT_REPLAY_DIR/planner/` answers from fixture files
+  (`testdata/planner/README.md`). The mapping was built from the published Swagger and a third-party
+  capture, **not yet verified against the live API**: the checklist is in that README.
 
 ### 5.1 Live data payload (sketch)
 

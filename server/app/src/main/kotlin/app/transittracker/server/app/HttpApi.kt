@@ -8,9 +8,13 @@ import app.transittracker.model.ConfigResponse
 import app.transittracker.model.DeviceUpdate
 import app.transittracker.model.JoinRequest
 import app.transittracker.model.JoinResponse
+import app.transittracker.model.LatLng
 import app.transittracker.model.MediaTypes
 import app.transittracker.model.Mode
 import app.transittracker.model.PacksResponse
+import app.transittracker.model.PlacesResponse
+import app.transittracker.model.PlanRequest
+import app.transittracker.model.PlanResponse
 import app.transittracker.model.RealtimeResponse
 import app.transittracker.model.RouteId
 import app.transittracker.model.ServiceTime
@@ -25,6 +29,7 @@ import app.transittracker.server.spi.DemandKind
 import app.transittracker.server.spi.DeviceRecord
 import app.transittracker.server.spi.LiveData
 import app.transittracker.server.spi.NotificationLog
+import app.transittracker.server.spi.Planner
 import app.transittracker.server.spi.PushResult
 import app.transittracker.server.spi.ServerConfig
 import app.transittracker.server.spi.TimetableRepository
@@ -82,6 +87,8 @@ class ApiDependencies(
     val watches: WatchService,
     val clock: WallClock = SystemClock,
     val limits: RateLimits = RateLimits(clock),
+    /** Journey planning (`/v1/places`, `/v1/plan`); [NoPlanner] answers 503 when none is wired. */
+    val planner: Planner = NoPlanner,
 )
 
 /** Maximum route ids in one `routes` query. */
@@ -149,6 +156,8 @@ fun Application.transitTrackerApi(deps: ApiDependencies) {
                 call.respond(HttpStatusCode.NoContent)
             }
             post(ApiPaths.WATCH_TEST) { testWatch(call, deps) }
+            get(ApiPaths.PLACES) { places(call, deps) }
+            post(ApiPaths.PLAN) { plan(call, deps) }
         }
     }
 }
@@ -340,8 +349,11 @@ private fun configResponse(deps: ApiDependencies): ConfigResponse {
             "realtime" to liveAvailable,
             "vehicles" to liveAvailable,
             "alerts" to liveAvailable,
+            // A TfNSW key or replay planner files (TT_REPLAY_DIR/planner).
+            "planner" to deps.planner.available,
         ),
         packs = deps.timetables.packs(),
+        maxWatches = MAX_WATCHES_PER_DEVICE,
     )
 }
 
@@ -468,6 +480,41 @@ private suspend fun testWatch(call: ApplicationCall, deps: ApiDependencies) {
         is PushResult.Failed -> TestPushResponse(sent = false, detail = result.reason)
     }
     call.respondPayload(TestPushResponse.serializer(), response)
+}
+
+// ---- journey planning ----------------------------------------------------------------------------
+
+/**
+ * `GET /v1/places?q=<text>&lat=<..>&lon=<..>&limit=<..>`. The query string carries personal data:
+ * call logging records the path only, and nothing here logs parameters.
+ */
+private suspend fun places(call: ApplicationCall, deps: ApiDependencies) {
+    call.rateLimit(deps.limits.places, call.device.deviceId)
+    val params = call.request.queryParameters
+    val query = params["q"] ?: throw ApiException(400, "bad_request", "Query parameter 'q' is required")
+    val lat = params["lat"]
+    val lon = params["lon"]
+    val near = when {
+        lat == null && lon == null -> null
+        lat != null && lon != null -> LatLng(
+            lat.toDoubleOrNull() ?: throw ApiException(400, "bad_request", "lat must be a number"),
+            lon.toDoubleOrNull() ?: throw ApiException(400, "bad_request", "lon must be a number"),
+        )
+        else -> throw ApiException(400, "bad_request", "lat and lon must be given together")
+    }
+    val limit = params["limit"]?.let { it.toIntOrNull() ?: throw ApiException(400, "bad_request", "limit must be a number") } ?: 10
+    val response = deps.planner.places(query, near, limit).copy(serverTimeMs = deps.clock.nowMillis())
+    call.response.header(HttpHeaders.CacheControl, "no-store")
+    call.respondPayload(PlacesResponse.serializer(), response)
+}
+
+/** `POST /v1/plan` with a [PlanRequest]. */
+private suspend fun plan(call: ApplicationCall, deps: ApiDependencies) {
+    call.rateLimit(deps.limits.plan, call.device.deviceId)
+    val request = call.receivePayload(PlanRequest.serializer())
+    val response = deps.planner.plan(request).copy(serverTimeMs = deps.clock.nowMillis())
+    call.response.header(HttpHeaders.CacheControl, "no-store")
+    call.respondPayload(PlanResponse.serializer(), response)
 }
 
 // ---- /status -----------------------------------------------------------------------------------

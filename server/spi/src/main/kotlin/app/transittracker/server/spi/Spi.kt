@@ -2,8 +2,12 @@ package app.transittracker.server.spi
 
 import app.transittracker.model.Alert
 import app.transittracker.model.AlertsResponse
+import app.transittracker.model.LatLng
 import app.transittracker.model.Mode
 import app.transittracker.model.PackInfo
+import app.transittracker.model.PlacesResponse
+import app.transittracker.model.PlanRequest
+import app.transittracker.model.PlanResponse
 import app.transittracker.model.RealtimeResponse
 import app.transittracker.model.RouteId
 import app.transittracker.model.ServiceDate
@@ -24,6 +28,7 @@ import java.nio.file.Path
  *   TimetableRepository  <- :server:pipeline
  *   LiveData             <- :server:live
  *   PushSender, WatchService <- :server:watch
+ *   Planner              <- :server:planner
  *   DeviceRepository, WatchRepository, NotificationLog <- :server:app (SQLite)
  */
 
@@ -112,6 +117,48 @@ data class FeedStatus(
     val matchedTrips: Int,
     val unmatchedTrips: Int,
     val stale: Boolean,
+)
+
+// ---------------------------------------------------------------------------------------------
+// Journey planning (implemented by :server:planner)
+
+/**
+ * Place search and journey planning for `GET /v1/places` and `POST /v1/plan` (contract in
+ * `Planning.kt`). Implementations validate their input and report failures as [ApiException]:
+ * 400 `bad_request`, 503 `planner_unavailable` (no key and no replay data, today's TfNSW budget
+ * used up, or TfNSW throttling) and 502 `planner_upstream` (TfNSW answered with something unusable).
+ *
+ * Start and end points and search text are personal: implementations never store or log them.
+ */
+interface Planner {
+    /** True when a TfNSW key or replay data is available (`ConfigResponse.features["planner"]`). */
+    val available: Boolean
+
+    /** Places matching [query] (2..80 characters); nearer results first when [near] is given. */
+    suspend fun places(query: String, near: LatLng?, limit: Int): PlacesResponse
+
+    suspend fun plan(request: PlanRequest): PlanResponse
+
+    fun status(): PlannerStatus
+}
+
+/** Counters for `/status`; no request contents. Counts are since the server started. */
+data class PlannerStatus(
+    val available: Boolean,
+    /** Where answers come from: "tfnsw", "replay" or "off". */
+    val source: String,
+    val placesRequests: Int,
+    val planRequests: Int,
+    val cacheHits: Int,
+    /** Calls this server sent to TfNSW's trip planner (also counted in [LiveStatus.callsToday]). */
+    val upstreamCalls: Int,
+    val upstreamFailures: Int,
+    /** Rides matched to a trip in the timetable / left unmatched. */
+    val matchedRides: Int,
+    val unmatchedRides: Int,
+    val lastCallMs: Long?,
+    val lastHttpStatus: Int?,
+    val backoffUntilMs: Long?,
 )
 
 // ---------------------------------------------------------------------------------------------

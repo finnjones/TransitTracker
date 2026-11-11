@@ -2,6 +2,16 @@
 
 package app.transittracker.core
 
+import app.transittracker.model.JourneyState
+
+import app.transittracker.model.PlannedJourney
+
+import app.transittracker.model.PlanResult
+
+import app.transittracker.model.PlanRequest
+
+import app.transittracker.model.Place
+
 import app.transittracker.model.Alert
 import app.transittracker.model.AlarmKind
 import app.transittracker.model.AlarmSpec
@@ -470,6 +480,12 @@ class DefaultTransitCore internal constructor(
     override fun openFromNotification(data: Map<String, String>): ServiceRef? = parseNotification(data)
 
     // ---- Alarms ----
+
+    // PLANNER: placeholders until journey planning is implemented in :shared:core.
+    override suspend fun searchPlaces(query: String, near: LatLng?): List<Place> = TODO("searchPlaces")
+    override suspend fun plan(request: PlanRequest): PlanResult = TODO("plan")
+    override fun follow(journey: PlannedJourney): Flow<JourneyState> = TODO("follow")
+    override fun savedTripFrom(journey: PlannedJourney, originName: String, destinationName: String): SavedTrip = TODO("savedTripFrom")
 
     override suspend fun nextAlarmTimes(alarm: AlarmSpec, count: Int): List<Long> {
         val trip = tripStore.get(alarm.savedTripId) ?: return emptyList()

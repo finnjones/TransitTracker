@@ -43,6 +43,10 @@ object ApiPaths {
     const val WATCH = "/v1/watches/{id}"
     /** POST /v1/watches/{id}/test */
     const val WATCH_TEST = "/v1/watches/{id}/test"
+    /** GET /v1/places?q=text&near=lat,lon -> PlacesResponse */
+    const val PLACES = "/v1/places"
+    /** POST /v1/plan (PlanRequest) -> PlanResponse */
+    const val PLAN = "/v1/plan"
     const val HEALTH = "/health"
     const val STATUS = "/status"
 }

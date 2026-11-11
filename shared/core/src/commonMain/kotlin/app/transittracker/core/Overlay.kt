@@ -61,7 +61,9 @@ fun statusForDelay(delaySeconds: Int): DepartureStatus = when {
  * - a CANCELLED trip, or one that skips the origin or destination, is [DepartureStatus.CANCELLED];
  * - added / replacement trips not in the timetable come from [TripDelta.addedStops];
  * - the platform is that of [StopDelta.actualStopId] when set ([Departure.platformChanged]);
- * - data is stale when the delta says so or when it is older than 2 × the poll interval.
+ * - data is stale when the delta says so or when it is older than 2 × the poll interval;
+ * - a call's [StopCall.position] is that of the stop actually used; [ServiceDetail.shapeId] comes
+ *   from the timetable trip (added services have none).
  */
 class Overlay(
     private val timetable: Timetable,
@@ -248,6 +250,7 @@ class Overlay(
                 expectedDepartureMs = expDep,
                 skipped = skipped || cancelled,
                 passed = passedByFeed || (expDep ?: schedDep) < nowMs,
+                position = (if (stopId != st.stopId) timetable.stop(stopId) else stop)?.position ?: stop?.position,
             )
         }
         val status = when {
@@ -272,6 +275,7 @@ class Overlay(
             carCount = delta?.carCount,
             dataAgeMs = liveTrip?.let(::dataAge),
             stale = liveTrip?.let(::isStale) ?: false,
+            shapeId = trip.shapeId,
         )
     }
 
@@ -292,6 +296,7 @@ class Overlay(
                 expectedDepartureMs = s.departureMs,
                 skipped = false,
                 passed = (s.departureMs ?: s.arrivalMs ?: Long.MAX_VALUE) < nowMs,
+                position = stop?.position,
             )
         }
         return ServiceDetail(

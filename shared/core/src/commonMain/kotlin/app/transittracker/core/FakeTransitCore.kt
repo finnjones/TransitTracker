@@ -74,6 +74,12 @@ class FakeTransitCore(
     )
     private val foreground = MutableStateFlow(false)
 
+    /** Server feature flags reported in [dataStatus] (for previews of hidden features). */
+    val features = MutableStateFlow(mapOf("planner" to true, "push" to true, "realtime" to true, "vehicles" to true, "alerts" to true))
+
+    /** Below this app version [dataStatus] asks for an update (for previews of "Update required"). */
+    val minAppVersion = MutableStateFlow("0")
+
     /** Push tokens received (for UI tests). */
     val pushTokens = MutableStateFlow<List<String>>(emptyList())
 
@@ -137,7 +143,7 @@ class FakeTransitCore(
             .map { trip ->
                 if (trip == null) return@map emptyList()
                 val now = clock.nowMillis()
-                compute(planner(now), trip, now)
+                compute(departurePlanner(now), trip, now)
             }
             .distinctUntilChanged()
 
@@ -180,7 +186,12 @@ class FakeTransitCore(
 
     override val alerts: Flow<List<Alert>> = flow { emit(FakeData.alerts(clock.nowMillis())) }
 
-    override val dataStatus: Flow<DataStatus> = combine(joinedState, ticker()) { joined, _ ->
+    override fun alertsFor(tripId: String): Flow<List<Alert>> =
+        combine(tripsState, alerts) { list, all ->
+            list.firstOrNull { it.id == tripId }?.let { alertsForTrip(it, all, timetableData) }.orEmpty()
+        }.distinctUntilChanged()
+
+    override val dataStatus: Flow<DataStatus> = combine(joinedState, features, minAppVersion, ticker()) { joined, features, minVersion, _ ->
         DataStatus(
             packs = listOf(PackStatus("syd-rail", timetableData.version, null, updateAvailable = false)),
             lastLiveUpdateMs = clock.nowMillis(),
@@ -189,6 +200,9 @@ class FakeTransitCore(
             joined = joined,
             attribution = DefaultTransitCore.DEFAULT_ATTRIBUTION,
             statusMessage = "Sample data",
+            features = features,
+            minAppVersion = minVersion,
+            maxWatches = DefaultTransitCore.DEFAULT_MAX_WATCHES,
         )
     }
 
@@ -230,17 +244,18 @@ class FakeTransitCore(
 
     override fun openFromNotification(data: Map<String, String>): ServiceRef? = parseNotification(data)
 
-    // PART C: placeholders until implemented.
-    override fun alertsFor(tripId: String): Flow<List<Alert>> = TODO("alertsFor")
-    override suspend fun checkForUpdates(): Boolean = true
-    override suspend fun refreshWatches(): Boolean = true
+    /** True when joined, as the real core answers when the server can be reached. */
+    override suspend fun checkForUpdates(): Boolean = joinedState.value
+
+    /** True when joined; the watches are already in memory. */
+    override suspend fun refreshWatches(): Boolean = joinedState.value
 
     override suspend fun nextAlarmTimes(alarm: AlarmSpec, count: Int): List<Long> {
         val trip = tripsState.value.firstOrNull { it.id == alarm.savedTripId } ?: return emptyList()
         return alarmTimes(timetableData, trip, alarm, clock.nowMillis(), count)
     }
 
-    private fun planner(now: Long) = JourneyPlanner(timetableData, Overlay(timetableData, FakeData.liveSnapshot(timetableData, now), now))
+    private fun departurePlanner(now: Long) = JourneyPlanner(timetableData, Overlay(timetableData, FakeData.liveSnapshot(timetableData, now), now))
 
     private fun detail(ref: ServiceRef, now: Long): ServiceDetail =
         Overlay(timetableData, FakeData.liveSnapshot(timetableData, now), now).serviceDetail(ref)

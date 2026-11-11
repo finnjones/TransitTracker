@@ -61,7 +61,7 @@ object TestNet {
     )
 
     fun r1(id: String, startSecs: Int) = ScheduledTrip(
-        tripId = id, routeId = "R1", serviceId = "S", headsign = "Charlie",
+        tripId = id, routeId = "R1", serviceId = "S", headsign = "Charlie", shapeId = "shape-R1",
         stopTimes = listOf(
             ScheduledStopTime(1, "A1", startSecs, startSecs),
             ScheduledStopTime(2, "B1", startSecs + 20 * 60, startSecs + 21 * 60),

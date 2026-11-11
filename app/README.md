@@ -28,6 +28,8 @@ app/ui                      :app:ui, package app.transittracker.ui (KMP; JVM tar
     feature/<area>/  one package per feature area: its screens, state holders and <Area>Shots.kt
   src/commonMain/composeResources/
     font/        Doto Black, Pixelify Sans 400/600/700, Silkscreen 400/700, Jersey 15 (static TTFs)
+                 # Pixelify is patched for legibility (B and Z redrawn, fi/fl/ff ligatures off) by
+                 # tools/fonts/patch_pixelify.py; re-run it if the files are ever replaced
     files/licenses/  the OFL licences of the four faces (ship them with the app)
     drawable/    sprite_<name>.png, _livery.png, _outline.png (generated, do not edit)
   src/jvmMain/   screenshot harness, desktop window (JVM only)
@@ -334,12 +336,15 @@ tracking), `onboarding`, `settings`. Pushed pages start with `PageHeader(title, 
 ./gradlew :app:ui:screenshots                       # all shots
 ./gradlew :app:ui:screenshots -Pshots=home-night    # some (comma-separated)
 ./gradlew :app:ui:runDesktop                        # the app on fake data in a window (needs a display)
+TT_SHOT_DENSITY=3 ./gradlew :app:ui:screenshots -Pshots=home-night   # at a phone's density -> home-night@3x.png
 ```
 
 PNGs land in `app/ui/build/screenshots/<name>.png`, 390 x 844 dp at 2x (780 x 1688 px) unless the
 shot says otherwise (`Shot(widthDp, heightDp, density)`), rendered off-screen (no display needed);
 the harness gives screens a few frames of real time so their flows settle. Every shot gets a fixed
-sprite clock (`tick`), Sydney time and the 24 h clock, so output is repeatable.
+sprite clock (`tick`), Sydney time and the 24 h clock, so output is repeatable. Phones are 2.6x to
+3.5x, so small text is sharper on a phone than in the 2x shots; render with `TT_SHOT_DENSITY` when
+judging whether lettering reads.
 
 **Adding shots from a feature.** Each area has `feature/<area>/<Area>Shots.kt` with
 `val shots: List<Shot>`; add entries there, names starting with your area (`"service-late"`).

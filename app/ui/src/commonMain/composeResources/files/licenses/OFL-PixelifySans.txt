@@ -1,3 +1,9 @@
+MODIFIED VERSION. The three Pixelify Sans files bundled with this app were changed for
+legibility by tools/fonts/patch_pixelify.py: capital B and capital Z are redrawn, the standard
+ligatures (fi, fl, ff) are switched off, and the fonts are renamed "TT Pixelify" inside. The
+original is at https://github.com/eifetx/Pixelify-Sans. The modified files are distributed
+under the same licence, below.
+
 Copyright 2021 The Pixelify Sans Project Authors (https://github.com/eifetx/Pixelify-Sans)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.

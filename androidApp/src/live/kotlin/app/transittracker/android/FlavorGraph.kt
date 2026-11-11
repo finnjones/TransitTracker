@@ -107,7 +107,8 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
         state.value = Startup.Ready(
             AppDeps(
                 core = created,
-                planner = livePlanner(),
+                // The real planner: tt-server's /v1/places and /v1/plan through the core's client.
+                planner = created.planner,
                 settings = KeyValueSettingsStore(kv),
                 places = KeyValuePlacesStore(kv),
                 platform = platform,

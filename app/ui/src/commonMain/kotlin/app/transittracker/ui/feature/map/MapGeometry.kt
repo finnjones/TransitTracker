@@ -89,6 +89,9 @@ interface MapGeometrySource {
  *    straight paths, each snap searched from the previous stop's distance onward).
  * Nothing else (screens, state holders, tests of the fallback) changes.
  */
+/** A stop further than this from a line shape means the shape is not this service's. */
+private const val MAX_STOP_OFF_SHAPE_M = 400.0
+
 class CoreMapGeometry(
     private val core: TransitCore,
     private val projection: MapProjection = MapProjection.Sydney,
@@ -98,7 +101,7 @@ class CoreMapGeometry(
     private val serviceCache = HashMap<List<StopId>, ServiceGeometry>()
 
     override suspend fun service(detail: ServiceDetail): ServiceGeometry {
-        val key = detail.calls.map { it.stopId }
+        val key = detail.calls.map { it.stopId } + listOfNotNull(detail.shapeId)
         lock.withLock { serviceCache[key] }?.let { return it }
         val stops = ArrayList<Stop?>(detail.calls.size)
         var near: LatLng? = null
@@ -107,9 +110,32 @@ class CoreMapGeometry(
             stops += s
             if (s != null) near = s.position
         }
-        val geometry = geometryFromStops(detail.calls, stops.map { it?.position }, projection, stops)
+        val straight = geometryFromStops(detail.calls, stops.map { it?.position }, projection, stops)
+        val geometry = alongShape(straight, detail)
         lock.withLock { serviceCache[key] = geometry }
         return geometry
+    }
+
+    /**
+     * [straight] drawn along the service's own line shape when the timetable has one. The shape
+     * is ignored when it is missing, or when a stop lies far from it (a shape that does not
+     * belong to these stops), so the map never shows a line its stops are not on.
+     */
+    private suspend fun alongShape(straight: ServiceGeometry, detail: ServiceDetail): ServiceGeometry {
+        if (straight.schematic) return straight
+        val shapeId = detail.shapeId ?: return straight
+        val shape = runCatching { core.shape(shapeId) }.getOrDefault(emptyList()).map(projection::project)
+        if (shape.size < 2) return straight
+        val path = MapPath(shape)
+        var previous = 0.0
+        val distances = ArrayList<Double>(straight.stopPoints.size)
+        for (point in straight.stopPoints) {
+            val snap = path.snap(point, from = previous)
+            if (snap.offset > MAX_STOP_OFF_SHAPE_M) return straight
+            previous = snap.distance
+            distances += snap.distance
+        }
+        return straight.copy(path = path, stopDistances = distances)
     }
 
     override suspend fun lines(samples: List<ServiceDetail>): List<LineGeometry> {
@@ -124,6 +150,8 @@ class CoreMapGeometry(
     }
 
     private suspend fun locate(call: StopCall, near: LatLng?): Stop? {
+        // The core says where the stop is: no search needed.
+        call.position?.let { return Stop(id = call.stopId, name = call.stopName, position = it) }
         lock.withLock { if (stopCache.containsKey(call.stopId)) return stopCache[call.stopId] }
         val found = runCatching { core.searchStops(call.stopName, near) }.getOrDefault(emptyList())
         val match = matchStop(call, found, near)

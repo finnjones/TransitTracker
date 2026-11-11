@@ -89,9 +89,9 @@ src/main/kotlin/app/transittracker/android/
   PushMessagingService.kt       FCM token and messages
   ServerAddressScreen.kt        first-start server address (live, when not built in)
   NotificationData.kt           tap extras -> data map
-src/live/…/FlavorGraph.kt       real core (TransitCoreFactory) + stores
-src/live/…/LivePlanner.kt       journey planner for the live build (Unavailable for now: swap
-                                in the real client when it lands in shared/core)
+src/live/…/FlavorGraph.kt       real core (TransitCoreFactory) + stores; the journey planner is
+                                the core's own client (`core.planner`: tt-server's /v1/places
+                                and /v1/plan)
 src/demo/…/FlavorGraph.kt       AppDeps.fake on the real clock
 ```
 

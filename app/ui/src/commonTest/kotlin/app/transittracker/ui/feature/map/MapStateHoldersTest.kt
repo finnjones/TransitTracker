@@ -5,6 +5,7 @@ import app.transittracker.model.LatLng
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.ServiceDate
 import app.transittracker.model.ServiceTime
+import app.transittracker.model.ServiceDetail
 import app.transittracker.model.Stop
 import app.transittracker.model.TrackingState
 import app.transittracker.model.TransitCore
@@ -160,7 +161,13 @@ class MapStateHoldersTest {
         val blind = object : TransitCore by deps.core {
             override suspend fun searchStops(query: String, near: LatLng?): List<Stop> = emptyList()
         }
-        val s = tracking(deps, route, backgroundScope, geometry = CoreMapGeometry(blind)).ready()
+        // ... and a service whose calls carry no positions and no shape (an older timetable pack).
+        val inner = CoreMapGeometry(blind)
+        val geometry = object : MapGeometrySource by inner {
+            override suspend fun service(detail: ServiceDetail) =
+                inner.service(detail.copy(shapeId = null, calls = detail.calls.map { it.copy(position = null) }))
+        }
+        val s = tracking(deps, route, backgroundScope, geometry = geometry).ready()
         assertTrue(s.scene.schematic)
         assertTrue(s.description.contains("not to scale"))
         // The live vehicle is placed by its times, not by a GPS fix on an invented path.

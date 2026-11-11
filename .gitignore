@@ -1,0 +1,27 @@
+# Build
+.gradle/
+build/
+.kotlin/
+*.class
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+local.properties
+
+# Secrets and local runtime data - never commit
+.env
+*.env
+!.env.example
+*.keystore
+*.jks
+firebase-service-account*.json
+data/
+
+# OS
+.DS_Store
+
+# Claude Code local worktrees and session data
+.claude/

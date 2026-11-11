@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and lower. Only the backed-up key-value file (display settings, saved trips and
+     places) is backed up. The device token and id, push token, server address, cached data and
+     timetable packs live in other files (noBackupFilesDir, packs/) and are never included. -->
+<full-backup-content>
+    <include domain="file" path="kv/backup.properties" />
+</full-backup-content>

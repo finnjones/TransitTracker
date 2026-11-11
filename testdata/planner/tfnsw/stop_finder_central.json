@@ -1,0 +1,131 @@
+{
+ "version": "10.6.21.17",
+ "locations": [
+  {
+   "id": "200060",
+   "isGlobalId": true,
+   "name": "Central Station, Sydney",
+   "disassembledName": "Central Station",
+   "coord": [
+    -33.88408,
+    151.20629
+   ],
+   "type": "stop",
+   "matchQuality": 951,
+   "isBest": true,
+   "modes": [
+    1,
+    2,
+    4,
+    5,
+    7
+   ],
+   "productClasses": [
+    1,
+    2,
+    4,
+    5,
+    7
+   ],
+   "parent": {
+    "id": "placeID:95301160:1",
+    "name": "Sydney",
+    "type": "locality"
+   },
+   "properties": {
+    "stopId": "10101100"
+   }
+  },
+  {
+   "id": "streetID:1500001234:0:95308100:-1:Central Ave:Manly",
+   "isGlobalId": false,
+   "name": "Central Ave, Manly",
+   "disassembledName": "Central Ave",
+   "coord": [
+    -33.7974,
+    151.2856
+   ],
+   "type": "street",
+   "matchQuality": 820,
+   "isBest": false,
+   "parent": {
+    "id": "placeID:95302171:1",
+    "name": "Manly",
+    "type": "locality"
+   }
+  },
+  {
+   "id": "poiID:52345:95325123:-1:Central Coast Stadium:Gosford",
+   "isGlobalId": false,
+   "name": "Central Coast Stadium, Gosford",
+   "disassembledName": "Central Coast Stadium",
+   "coord": [
+    -33.4284,
+    151.3382
+   ],
+   "type": "poi",
+   "matchQuality": 700,
+   "isBest": false,
+   "parent": {
+    "id": "placeID:95302555:1",
+    "name": "Gosford",
+    "type": "locality"
+   }
+  },
+  {
+   "id": "2000338",
+   "isGlobalId": true,
+   "name": "Central Station, Platform 18, Sydney",
+   "disassembledName": "Central Station, Platform 18",
+   "coord": [
+    -33.884,
+    151.2067
+   ],
+   "type": "platform",
+   "matchQuality": 650,
+   "isBest": false,
+   "modes": [
+    1
+   ],
+   "productClasses": [
+    1
+   ],
+   "parent": {
+    "id": "placeID:95301160:1",
+    "name": "Sydney",
+    "type": "locality"
+   },
+   "properties": {
+    "stopId": "10101100"
+   }
+  },
+  {
+   "id": "placeID:95301099:1",
+   "isGlobalId": false,
+   "name": "Central Tilba",
+   "disassembledName": "Central Tilba",
+   "coord": [
+    -36.3129,
+    150.0735
+   ],
+   "type": "locality",
+   "matchQuality": 600,
+   "isBest": false,
+   "parent": {
+    "id": "placeID:95302481:1",
+    "name": "Central Tilba",
+    "type": "locality"
+   }
+  },
+  {
+   "id": "x1",
+   "name": "???",
+   "type": "unknown",
+   "coord": [
+    -33.0,
+    151.0
+   ],
+   "matchQuality": 1
+  }
+ ]
+}

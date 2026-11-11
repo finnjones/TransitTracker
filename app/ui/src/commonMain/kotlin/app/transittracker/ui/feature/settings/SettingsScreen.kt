@@ -362,5 +362,5 @@ private fun AboutGroup(state: SettingsUiState, actions: SettingsActions) {
         PixelText(DEVICE_ID_NOTE, style = TtTheme.type.reading15, color = c.textSecondary)
     }
     NavRow("Font and data licences", "Four fonts, one licence", actions.openLicences)
-    NavRow("Debug gallery", null, actions.openDebugGallery, hint = "FOR DEVELOPERS")
+    if (state.debugBuild) NavRow("Debug gallery", null, actions.openDebugGallery, hint = "FOR DEVELOPERS")
 }

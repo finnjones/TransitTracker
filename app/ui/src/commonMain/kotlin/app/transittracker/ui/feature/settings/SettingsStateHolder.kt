@@ -58,6 +58,8 @@ data class SettingsUiState(
     val test: TestState = TestState(),
     val appVersion: String = "",
     val deviceId: String? = null,
+    /** A developer build: the debug gallery row is shown. */
+    val debugBuild: Boolean = false,
 )
 
 /**
@@ -117,8 +119,11 @@ class SettingsStateHolder(
             test = t,
             appVersion = platform.appVersion,
             deviceId = ph.deviceId,
+            debugBuild = platform.isDebugBuild,
         )
-    }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, SettingsUiState(appVersion = platform.appVersion))
+    }.distinctUntilChanged().stateIn(
+        scope, SharingStarted.Eagerly, SettingsUiState(appVersion = platform.appVersion, debugBuild = platform.isDebugBuild),
+    )
 
     // ---- display: every change is stored at once
 

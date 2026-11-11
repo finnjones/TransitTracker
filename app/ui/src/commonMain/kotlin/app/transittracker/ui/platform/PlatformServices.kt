@@ -43,6 +43,9 @@ interface PlatformServices {
     /** e.g. "0.1.0 (12)". */
     val appVersion: String
 
+    /** True in a developer build; developer-only things (the debug gallery row in Settings) show only then. */
+    val isDebugBuild: Boolean get() = false
+
     /** The device id text shown in Settings > About (needed to revoke a device); null before joining. */
     val deviceId: StateFlow<String?>
 
@@ -63,6 +66,7 @@ class FakePlatformServices(
     deviceId: String? = "fake-device",
     reduceMotion: Boolean = false,
     batterySaver: Boolean = false,
+    override val isDebugBuild: Boolean = true,
 ) : PlatformServices {
     val location = MutableStateFlow(location)
     val locationPermissionState = MutableStateFlow(locationPermission)

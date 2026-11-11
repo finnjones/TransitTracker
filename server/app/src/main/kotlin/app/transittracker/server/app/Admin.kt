@@ -3,6 +3,7 @@ package app.transittracker.server.app
 import app.transittracker.model.WallClock
 import app.transittracker.model.WatchKind
 import app.transittracker.server.pipeline.PackBuildException
+import app.transittracker.server.pipeline.GtfsCheck
 import app.transittracker.server.pipeline.PackStore
 import app.transittracker.server.pipeline.PipelineOptions
 import app.transittracker.server.pipeline.PipelineTimetableRepository
@@ -25,6 +26,8 @@ Commands:
   backup <file>                             Write a consistent copy of the database to <file>
   import-gtfs <pack> <zip-or-dir...>        Build and publish a timetable pack from local GTFS zips or
                                             directories of GTFS .txt files (e.g. syd-rail)
+  check-gtfs <pack> <zip-or-dir...>         Dry run: load, merge, validate and build those inputs and
+                                            report what happened; publishes nothing
 
 Reads TT_DATA_DIR like tt-server; safe to run while the server is running (a running server
 loads a pack imported this way at its next start)."""
@@ -50,6 +53,7 @@ fun runAdmin(
     val rest = args.drop(1)
     return try {
         if (command == "import-gtfs") return importGtfs(rest, config, out, err, clock)
+        if (command == "check-gtfs") return checkGtfs(rest, config, out, err, clock)
         Database.open(config.dbPath).use { db -> runDbCommand(command, rest, db, out, clock) }
     } catch (e: UsageException) {
         err.println("tt-admin: ${e.message}")
@@ -168,6 +172,27 @@ private fun importGtfs(args: List<String>, config: ServerConfig, out: PrintStrea
             e.report?.errors?.take(20)?.forEach { issue -> err.println("  $issue") }
             1
         }
+    }
+}
+
+private fun checkGtfs(args: List<String>, config: ServerConfig, out: PrintStream, err: PrintStream, clock: WallClock): Int {
+    if (args.size < 2) throw UsageException("check-gtfs needs a pack name and at least one GTFS zip or directory")
+    val packName = args[0]
+    if (!PackStore.isSafeComponent(packName)) throw UsageException("bad pack name '$packName'")
+    val inputs = args.drop(1).map { Paths.get(it) }
+    inputs.firstOrNull { !Files.isRegularFile(it) && !Files.isDirectory(it) }?.let {
+        err.println("tt-admin: no such file or directory: $it")
+        return 1
+    }
+    val modes = config.packs.firstOrNull { it.name == packName }?.modes
+    val today = java.time.Instant.ofEpochMilli(clock.nowMillis()).atZone(java.time.ZoneId.of("Australia/Sydney")).toLocalDate()
+    val work = Files.createTempDirectory("tt-check-gtfs")
+    return try {
+        val result = GtfsCheck.run(packName, inputs, modes, PipelineOptions.fromEnv(), today, work)
+        result.lines.forEach(out::println)
+        if (result.ok) 0 else 1
+    } finally {
+        work.toFile().deleteRecursively()
     }
 }
 

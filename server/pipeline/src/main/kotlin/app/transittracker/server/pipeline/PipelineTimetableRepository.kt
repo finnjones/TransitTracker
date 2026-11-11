@@ -212,11 +212,20 @@ class PipelineTimetableRepository(
             val report = ValidationReport.Builder()
             val feeds = inputs.map { path -> GtfsBundle.open(path).use { GtfsLoader.load(it, report) } }
             externalValidator?.let { v -> inputs.filter { Files.isRegularFile(it) }.forEach { v.validate(it, report) } }
-            val feed = try {
-                GtfsMerger.merge(feeds)
+            val merged = try {
+                GtfsMerger.mergeWithReport(feeds)
             } catch (e: ConflictingIdException) {
+                e.conflicts.forEach { report.error("merge_conflict", "Conflicting $it") }
+                log.error("Cannot merge GTFS for {}: {} conflicting id(s)", name, e.conflicts.size)
+                e.conflicts.take(50).forEach { log.error("  {}", it) }
                 throw PackBuildException("Cannot merge GTFS for $name: ${e.message}", report.build(), e)
             }
+            merged.report.recordIn(report)
+            if (merged.report.notes.isNotEmpty()) {
+                log.info("Merged GTFS for {}: shared ids {}, {} reconciled, {} renamed", name, merged.report.sharedIds, merged.report.reconciled.size, merged.report.renamed.size)
+                merged.report.notes.take(50).forEach { log.info("  {}", it) }
+            }
+            val feed = merged.feed
             GtfsValidator.validate(feed, report, today)
             val validation = report.build()
             if (validation.hasErrors) {

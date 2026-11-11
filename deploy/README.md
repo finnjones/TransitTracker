@@ -198,6 +198,24 @@ have (the files must be inside the container, e.g. copied into the `tt-data` vol
 never need it: the server builds packs from TfNSW every night. A running server picks up an
 imported pack at its next start (`docker compose restart tt-server`).
 
+`tt-admin check-gtfs <pack> <zip-or-dir...>` is a dry run of the same build: it loads, merges,
+validates and builds the inputs in a scratch folder and prints what happened (ids shared between
+feeds, anything reconciled or renamed, every conflict, validation issues, and how many services
+from each input made it into the pack), without publishing anything. Use it when the nightly build
+fails, on the zips the server already downloaded:
+
+```bash
+./tt-admin check-gtfs syd-rail \
+  "$(docker compose exec -T tt-server sh -c 'ls -t /data/gtfs/v1_gtfs_schedule_sydneytrains/*.zip | head -1')" \
+  "$(docker compose exec -T tt-server sh -c 'ls -t /data/gtfs/v1_gtfs_schedule_metro/*.zip | head -1')"
+```
+
+When several feeds share ids (e.g. Epping or Central station in both the Sydney Trains and Metro
+feeds) the server merges them with a fixed policy: shared stations may differ slightly in position
+(up to 300 m for stations, 50 m for other stops) and in optional details, but must have the same
+name and type; service and shape ids that two feeds use for different things are renamed in the
+later feed (`<id>~2`). Details are in `GtfsMerger.kt`.
+
 ## 11. The status page
 
 On the server itself:

@@ -60,6 +60,8 @@ object Screenshots {
     val designSystem: List<Shot> = listOf(
         Shot("components-1-night") { ComponentGalleryPage1() },
         Shot("components-2-night") { ComponentGalleryPage2() },
+        Shot("components-3-night", heightDp = 360) { ComponentGalleryPage3() },
+        Shot("components-3-day", DayColors, heightDp = 360) { ComponentGalleryPage3() },
         Shot("components-1-day", DayColors) { ComponentGalleryPage1() },
         Shot("components-2-day", DayColors) { ComponentGalleryPage2() },
         Shot("vehicles-1-night") { VehicleGalleryPage1() },

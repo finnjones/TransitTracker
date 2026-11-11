@@ -42,6 +42,8 @@ import app.transittracker.ui.components.SectionLabel
 import app.transittracker.ui.components.StatusLine
 import app.transittracker.ui.components.StatusSize
 import app.transittracker.ui.components.Stepper
+import app.transittracker.ui.components.FieldInput
+import app.transittracker.ui.components.PixelTextField
 import app.transittracker.ui.components.StepperRow
 import app.transittracker.ui.components.SwitchRow
 import app.transittracker.ui.components.ToggleChip
@@ -101,6 +103,21 @@ fun ComponentGalleryPage1() = GalleryPage {
     StepperRow("From", "07:15", {}, {}, "Earlier start", "Later start", valueStyle = TtTheme.type.digits30)
     SwitchRow("Platform changes", true, {})
     SwitchRow("Back on time", false, {})
+}
+
+/** Page 3: text fields. */
+@Composable
+fun ComponentGalleryPage3() = GalleryPage {
+    SectionLabel("Text fields")
+    PixelTextField("", {}, "Place name", Modifier.fillMaxWidth(), placeholder = "Name this place")
+    PixelTextField("15 Albert Rd, Strathfield", {}, "Address", Modifier.fillMaxWidth(), input = FieldInput.SEARCH)
+    PixelTextField(
+        "Bondi Be", {}, "Search", Modifier.fillMaxWidth(), input = FieldInput.SEARCH,
+        leading = { PixelIcon(PixelIcons.MapPin, tint = TtTheme.colors.textSecondary) },
+        trailing = { Label("CLEAR", color = TtTheme.colors.textSecondary) },
+    )
+    PixelTextField("K7M5-S2QX", {}, "Invite code", Modifier.fillMaxWidth(), input = FieldInput.CODE, style = TtTheme.type.title22)
+    PixelTextField("Off line", {}, "Disabled", Modifier.fillMaxWidth(), enabled = false)
 }
 
 /** Page 2: day toggles, badges, status language, signs, seats, cars, icons, dialog. */

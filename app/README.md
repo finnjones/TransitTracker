@@ -83,6 +83,13 @@ PixelIconButton(icon, contentDescription, onClick, modifier, kind = ButtonKind.F
   // PRIMARY / SECONDARY have the lip and sink 2 dots when pressed (+ haptic tick); FLAT has no lip.
   // Footprint: faceHeight + 4 dots (PRIMARY/SECONDARY), faceHeight + 2 dots (FLAT).
 
+PixelTextField(value, onValueChange, label /* spoken name, not drawn */, modifier, placeholder = "",
+               input = FieldInput.NAME /* NAME | SEARCH | CODE | URL: picks the keyboard */, enabled = true,
+               height = 48.dp, style = type.name17, onSubmit = null, focusRequester = null,
+               leading = null, trailing = null)
+  // The only text input. Single line; border is Divider idle, Text with focus; digits are set in
+  // the numeral face as in PixelText. Do not use BasicTextField in screens.
+
 PixelSwitch(checked, modifier, onCheckedChange = null)   // visual; with a callback it is a 48 dp target
 SwitchRow(label, checked, onCheckedChange, modifier, enabled, divider = true)
 StepperButton(icon, label, onClick, modifier, enabled)

@@ -33,6 +33,10 @@ data class ServerConfig(
     val feeds: List<FeedDefinition> = DefaultSources.feeds,
     /** Admin token for /status and tt-admin over HTTP; null = /status only from localhost. */
     val adminToken: String? = null,
+    /** Save a raw copy of each live feed at most this often (for replay tests); 0 disables recording. */
+    val recordIntervalMinutes: Int = 10,
+    /** Days of raw feed recordings to keep. */
+    val recordRetentionDays: Int = 7,
 ) {
     val dbPath: Path get() = dataDir.resolve("tt-server.db")
     val packsDir: Path get() = dataDir.resolve("packs")
@@ -59,6 +63,8 @@ data class ServerConfig(
                 minAppVersion = env["TT_MIN_APP_VERSION"] ?: d.minAppVersion,
                 nightlyBuildHour = env["TT_NIGHTLY_BUILD_HOUR"]?.toInt() ?: d.nightlyBuildHour,
                 adminToken = env["TT_ADMIN_TOKEN"]?.takeIf { it.isNotBlank() },
+                recordIntervalMinutes = env["TT_RECORD_INTERVAL_MIN"]?.toInt() ?: d.recordIntervalMinutes,
+                recordRetentionDays = env["TT_RECORD_RETENTION_DAYS"]?.toInt() ?: d.recordRetentionDays,
             )
         }
     }

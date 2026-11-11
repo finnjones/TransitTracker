@@ -66,7 +66,9 @@ class LiveDataImpl(
     private val timetable: StateFlow<Timetable?>,
     private val fetcher: FeedFetcher,
     private val clock: WallClock,
-    private val recorder: FeedRecorder? = FeedRecorder(config.recordingsDir, clock),
+    private val recorder: FeedRecorder? = config.recordIntervalMinutes.takeIf { it > 0 }?.let {
+        FeedRecorder(config.recordingsDir, clock, minIntervalMs = it * 60_000L, retentionDays = config.recordRetentionDays)
+    },
     private val rateLimiter: RateLimiter = RateLimiter(config.maxCallsPerSecond),
     private val backoff: BackoffPolicy = BackoffPolicy(),
     private val retryDelayMs: Long = 5_000,

@@ -44,7 +44,9 @@ data class ServerConfig(
     val recordingsDir: Path get() = dataDir.resolve("recordings")
 
     companion object {
-        fun fromEnv(env: Map<String, String> = System.getenv()): ServerConfig {
+        fun fromEnv(environment: Map<String, String> = System.getenv()): ServerConfig {
+            // Blank values (e.g. `TT_PORT=` left empty in .env) mean "use the default".
+            val env = environment.filterValues { it.isNotBlank() }
             val d = ServerConfig()
             return ServerConfig(
                 port = env["TT_PORT"]?.toInt() ?: d.port,

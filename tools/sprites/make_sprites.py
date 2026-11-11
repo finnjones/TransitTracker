@@ -440,11 +440,12 @@ def save_gif(frames, path, scale, ms=FRAME_MS, background=None, pad=0):
 
 
 # name -> (builder taking frame, livery). Colours here are samples; the app tints at run time.
-T1, T9, M1 = "#F99D1C", "#D11F2F", "#168388"
+T1, T4, T9, M1 = "#F99D1C", "#005AA3", "#D11F2F", "#168388"
 LIGHT_RAIL, BUS, FERRY, COACH = "#EE343F", "#00B5EF", "#5AB031", "#C98A1B"
 
 MOVING = {
     "train-t1": lambda f: with_trail(train_car(T1, f), f, (4, 9, 6)),
+    "train-t4": lambda f: with_trail(train_car(T4, f), f, (4, 9, 6)),
     "train-t9": lambda f: with_trail(train_car(T9, f), f, (4, 9, 6)),
     "metro-m1": lambda f: with_trail(metro_car(M1, f), f, (5, 9, 7)),
     "lightrail": lambda f: with_trail(tram(LIGHT_RAIL, f), f, (6, 9, 7)),

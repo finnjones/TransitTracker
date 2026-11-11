@@ -11,13 +11,14 @@ This is the companion to
 plan ends at the `TransitCore` interface
 (`shared/model/.../TransitCore.kt`); this plan starts there.
 
-**Mockups:** thirteen artboards on a design canvas at
+**Mockups:** fifteen artboards on a design canvas at
 <https://claude.ai/artifact/UpjCRFqexTVYB9hfSqzERg>, private to its author
 until shared from its Share menu. It holds the three directions considered for
-the home screen, seven key screens in the chosen direction, a system sheet, a
-sheet of the animated vehicles and a tappable prototype of the page
-transitions. The artboards were written without a render check, so treat
-spacing in them as indicative.
+the home screen, four key screens in the chosen direction, a system sheet, a
+sheet of the animated vehicles, a tappable prototype of the page transitions,
+and a row for places and journeys (plan a journey, journey options, one
+journey step by step, saved places, add a place). The artboards were written
+without a render check, so treat spacing in them as indicative.
 
 **Sprites:** the vehicle artwork is in [design/sprites](design/sprites) and is
 drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
@@ -36,7 +37,9 @@ drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
 | F6 | Themes | To confirm | **Night** by default, **Day** for sunlight, follow the phone setting |
 | F7 | Sound | To confirm | **Off by default**; commuters are in quiet carriages |
 | F8 | Saved places | **Decided** | **Addresses can be saved** (Home, Work and others), kept on the phone only, and used as the start or end of a saved trip (section 5.7) |
-| F9 | How an address is found | To confirm | **The phone's own address lookup, plus "use where I am now".** TfNSW's lookup through the server is the alternative (section 5.7) |
+| F9 | How an address is found | To confirm | **TfNSW's lookup through the server, plus "use where I am now".** The server is needed for journey planning anyway, so the phone's own lookup is no longer the simpler choice (section 5.7) |
+| F10 | Journey planning | **Decided** | **The app recommends ways to get from A to B**, including changes between modes and the walking time between them (section 5.6) |
+| F11 | What works the journeys out | To confirm | **TfNSW's Trip Planner, through tt-server.** Alternatives: a planner on the phone, or OpenTripPlanner on the home server (section 8.5) |
 
 ---
 
@@ -49,9 +52,12 @@ drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
   which way it is going.** There is one sprite per mode: train, metro, light
   rail, bus, coach and ferry. Its state (moving, at a stop, late, timetable
   only, cancelled) is drawn into the sprite.
-- **Places and routes are saved.** A place is a named address with the stops
-  you would walk to. A saved trip (a route) can run between places, and then
-  shows when to leave the door as well as when the service leaves.
+- **It plans journeys.** Enter a start and an end, and the app recommends ways
+  to get there by public transport: which services, where to change, how long
+  each walk takes and how much time each change leaves you.
+- **Places and routes are saved.** A place is a named address. Any planned
+  journey can be saved as a route, which then sits on Home showing when to
+  leave the door as well as when the service leaves.
 - **Page changes are game-style and themed:** a train passes and wipes the
   next page in, carriage doors close and open, rows flip like a departure
   board. Each leaves the new page usable within 300 ms.
@@ -65,15 +71,17 @@ drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
 - **The app never hides how fresh its data is:** live, timetable-only and
   stale are always distinguishable, including in the animation.
 - **Built against the fake core first** (`FakeTransitCore`).
-- **Effort:** roughly 11–12 weeks for one developer through to friends using
-  it (section 9). This is an estimate, not a measurement.
+- **Effort:** roughly 14 weeks for one developer through to friends using it
+  (section 9), plus about two weeks of backend work for the journey planner
+  (section 8.5). These are estimates, not measurements.
 
 ---
 
 ## 1. What the front end is for
 
-TransitTracker answers **"When is my next service, and is it running on
-time?"** for a handful of known people. The typical use is a two-second glance
+TransitTracker answers two questions for a handful of known people: **"When
+is my next service, and is it running on time?"** and **"How do I get from
+here to there?"** The typical use of the first is a two-second glance
 on the way to a platform: one hand, bright sun or a dark street, sometimes no
 signal.
 
@@ -81,7 +89,7 @@ signal.
 
 | # | Principle | What it means in practice |
 |---|---|---|
-| 1 | Answer first | Home is the saved trips with countdowns. Search, maps and settings are one tap away, never in the way |
+| 1 | Answer first | Home is the saved routes with countdowns. Planning a new journey is one tap away; maps and settings never get in the way |
 | 2 | Motion is information | A moving vehicle means live data and shows position and direction. Things that are not live do not move |
 | 3 | Pixels for character, never at the cost of reading | Minimum sizes, contrast and a fallback font rule (section 2.3) |
 | 4 | Colour only for meaning | Line colours come from the timetable data; status colours follow the green / amber / red convention; everything else is charcoal and cream |
@@ -313,6 +321,11 @@ top of the Service screen.
   used, so a timetabled guess is never mistaken for a tracked train.
 - **Cost:** one `service(ref)` subscription for the headline service of each
   card on screen, nothing for cards off screen.
+- **A journey with several rides** uses the same idea as a row of legs: a
+  walking figure, then a vehicle, then a walking figure, and so on, each as
+  wide as the minutes it takes. Rides carry their line colour and badge; walks
+  are dotted. It appears on the recommended journey in the options list
+  (section 5.6).
 
 ### 3.4 Page transitions
 
@@ -324,7 +337,7 @@ the tabs).
 
 | Transition | Used for | What happens | New page usable after |
 |---|---|---|---|
-| **Vehicle pass** | Opening something from a list (a service from Home or the timetable), and going back | A vehicle crosses the screen and the new page is wiped in behind it. Going back, it runs the other way. The vehicle matches the service being opened, in mode and line colour | 300 ms; the vehicle never blocks touches. A four-car train or metro clears the screen by 640 ms, a bus or ferry by 400 ms |
+| **Vehicle pass** | Opening something from a list (a service from Home or the timetable, a journey from the options, where the vehicle is that of its first ride), and going back | A vehicle crosses the screen and the new page is wiped in behind it. Going back, it runs the other way. The vehicle matches the service being opened, in mode and line colour | 300 ms; the vehicle never blocks touches. A four-car train or metro clears the screen by 640 ms, a bus or ferry by 400 ms |
 | **Doors** | Entering and leaving the live map; arriving at Home after onboarding | Carriage doors with amber edge strips close over the page and open on the new one | 300 ms |
 | **Split-flap** | Switching bottom tabs; changing the day in a timetable; rows whose values changed after a refresh | Rows flip in from top to bottom, like a departure board | 280 ms for the first row, all rows by 500 ms |
 | **Cut** | Reduce motion, battery saver, opening from a notification, or a second tap during a transition | Instant | 0 ms |
@@ -404,8 +417,11 @@ flowchart TB
   Timetable -- vehicle pass --> Service
   Service -- doors --> Track["Live tracking"]
   Map --> Track
-  Trips --> NewTrip["New trip (3 steps)"]
-  NewTrip --> Places["Saved places"]
+  Trips --> Plan["Plan a journey"]
+  Plan --> Options["Journey options"]
+  Options -- vehicle pass --> Journey["One journey, step by step"]
+  Journey -- save route --> Trips
+  Plan --> Places["Saved places"]
   Settings --> Places
   Places --> AddPlace["Add or edit a place"]
   Trips --> Manage["Manage trips"]
@@ -429,7 +445,10 @@ of active alerts on the user's own trips.
 | Service | Every stop of one service, where the vehicle is, actions | `service`, `watchService` | F3 |
 | Live tracking | The vehicle on a line map with a countdown to your stop | `track`, `shape` | F4 |
 | Map | Lines, live vehicles, nearby stations | `vehicles`, `stopsNear`, `shape` | F4 |
-| New trip / edit trip | Build a trip from places or stations, lines and legs | `searchStops`, `stopsNear`, `linesAt`, `saveTrip` | F2 |
+| Plan a journey | Choose a start, an end and a time | new `searchPlaces`; `stopsNear` | F2b |
+| Journey options | Recommended ways to make the journey, compared | new `plan` | F2b |
+| One journey | Every walk, ride and change with its times; save it as a route | new `plan`; `saveTrip` | F2b |
+| Edit a saved route | Rename, folder, line filter, legs by hand | `linesAt`, `saveTrip` | F2 |
 | Saved places | Save addresses and the stops within walking distance of each | `stopsNear`, `linesAt` | F2 |
 | Manage trips | Reorder, rename, folder, delete | `reorderTrips`, `saveTrip`, `deleteTrip` | F2 |
 | Alerts | Disruptions, your trips first | `alerts` | F4 |
@@ -452,7 +471,7 @@ Four steps, each one screen, each skippable where the app can still work.
 | 1 | **Invite ticket.** A ticket graphic with an `XXXX-XXXX` code field and a JOIN button | The server's alphabet has no I, L, O, U, 0 or 1. Accept lower case, spaces and a missing dash. `InvalidCode` → "That code isn't valid or has been used". `Failed` → "Can't reach the server" with RETRY |
 | 2 | **Timetable download.** A train fills a track as the pack downloads | A real wait, so it gets a scene. Allowed on any network for first install |
 | 3 | **Notifications.** One sentence on what they are for, then the Android permission prompt | Skippable; Notify shows an ALLOW banner later |
-| 4 | **First trip.** Opens New trip; the doors transition then opens onto Home | "Also save the return trip" is on by default |
+| 4 | **First journey.** Opens Plan a journey; once a journey is saved as a route, the doors transition opens onto Home | "Also save the return" is on by default |
 
 ### 5.2 Trips (home)
 
@@ -545,29 +564,89 @@ left your stop the footer changes to "ARRIVES CENTRAL IN".
   seats, with NOTIFY ME and STOP LIST. Reached through the doors transition.
 - **Map tab:** the same map with all live vehicles on the lines of your saved
   trips, plus nearby stations when location is allowed. Tapping a station
-  offers "New trip from here".
+  offers "Plan a journey from here".
 - Here the position is the vehicle's reported GPS position, snapped to the
   line. A position older than 2 minutes is hidden (backend rule); the map then
   shows the ghost at the timetabled position and says "Position unavailable".
 - Location permission is asked only when the user taps NEAR ME, never at
   start-up.
 
-### 5.6 New trip, edit and manage
+### 5.6 Plan a journey
 
-Three steps with the trip shown as a ticket that fills in at the top:
+Enter a start and an end, and the app recommends ways to get there. This
+replaces the earlier "new trip" wizard: a route is now something you find and
+then save, not something you assemble by hand.
 
-1. **From:** saved places as one-tap buttons at the top; below them a search
-   field for a station or an address, with the system keyboard. Results are
-   nearest-first when location is allowed, otherwise best match first; recent
-   stations below. Each result shows the lines that call there.
-2. **To:** the same.
-3. **Options:** line filter (any by default), add a leg with a change station
-   and minimum connection time, custom name, folder, "also save the return
-   trip".
+**1. Where and when**
 
-Only stations are offered (results with no parent stop); the core expands a
-station to its platforms. Manage trips: drag to reorder, rename, move to a
-folder, delete with a two-button confirmation.
+| Field | How it is filled |
+|---|---|
+| From, To | A saved place (one tap), an address, a station or stop, or WHERE I AM |
+| When | LEAVE NOW, LEAVE AT a time, or ARRIVE BY a time |
+| Swap | One button reverses From and To |
+
+Recent searches sit underneath for one-tap repeats.
+
+**2. Journey options**
+
+Up to about five journeys, best first. Each shows:
+
+- when to leave, when you arrive, the total time, the number of changes and
+  the total walking;
+- a strip of its legs in order, each as wide as the minutes it takes (section
+  3.3). On the recommended journey the strip carries the animated walking
+  figure and vehicles;
+- its live state, including whether a late service still makes its
+  connection.
+
+Three buttons re-sort the same results: FASTEST, FEWER CHANGES, LESS WALKING.
+
+**3. One journey, step by step**
+
+```
+07:39  ⌂ Home                      LEAVE IN 1 MIN
+       ┊ walk 3 min · 250 m
+07:42  ■ Strathfield · Plat 3      [T9] to Gordon · 4 min late
+07:56  ■ Central · Plat 16
+       ┊ change · walk 4 min to Plat 24 · 3 min to spare
+08:03  ■ Central · Plat 24         [T4] to Bondi Junction · on time
+08:14  ■ Bondi Junction
+       ┊ change · walk 3 min to Stand B · 3 min to spare
+08:20  ■ Bondi Junction · Stand B  [333] to North Bondi · timetable
+08:31  ■ Bondi Beach
+       ┊ walk 2 min · 150 m
+08:33  ⚲ Campbell Pde              ARRIVE
+```
+
+Rules for walking and changes:
+
+| Rule | Detail |
+|---|---|
+| Every walk is a leg of its own | From the door to the first stop, between services at a change, and from the last stop to the door. Each shows minutes and distance |
+| A change shows its margin | "3 MIN TO SPARE" is the time left after the walk. Green at three minutes or more, amber under three, red when the walk no longer fits |
+| Live data moves the margins | If the first service runs late, the spare time at the next change shrinks on screen. When a connection can no longer be made, the journey says so and offers the next one |
+| Walk times come from the planner | They follow real footpaths and station layouts, not straight lines |
+| Honest about coverage | A ride on a mode without live data yet (buses at first) is marked TIMETABLE, so a journey can be part live and part timetabled |
+
+Two actions at the bottom:
+
+- **SAVE ROUTE** keeps the journey as a saved route on Home.
+- **GO** follows this journey: the screen steps through the legs as time
+  passes ("get off at the next stop", a countdown at each change) and warns
+  when a later connection is at risk. GO is planned for a later phase; SAVE
+  ROUTE is in the first.
+
+**Saved routes**
+
+A saved route remembers the pattern, not one departure: which stops, which
+lines, where to change and how long each walk takes. Home then shows the next
+time that pattern runs, with its leave-by time, as for a simple trip. Saved
+routes work offline for the modes whose timetables are on the phone. A route
+can be renamed, moved to a folder, limited to certain lines or adjusted by
+hand; routes are reordered by dragging and deleted with a two-button
+confirmation.
+
+Planning needs a connection; Home and saved routes do not.
 
 ### 5.7 Saved places, and trips between them
 
@@ -578,7 +657,7 @@ and a folder. A trip can start or end at a place instead of at one station.
 | Step | What happens |
 |---|---|
 | Add a place | Type an address, or tap USE WHERE I AM NOW. The app lists the stations within walking distance, nearest first, each with an estimated walk time. Switch off any you would not use; tap a walk time to correct it. Choose a name and an icon |
-| Use it in a trip | In New trip, pick a place for From, To or both. The trip then covers every switched-on stop at each end: Home to Work shows services from Strathfield or Homebush to Central, whichever comes first |
+| Use it in a journey | In Plan a journey, pick a place for From, To or both with one tap. The planner works from the address itself. Switching a stop off in the place removes journeys that start or end there |
 | On the home screen | The card is titled with the place names. Each service shows which stop it leaves from and a **leave-by time** (departure minus the walk to that stop), with the walking figure beside it |
 | Edit a place | Changing its stops updates every trip that uses it |
 
@@ -596,19 +675,17 @@ Rules:
 - **Places stay on the phone.** They are never sent to the server. Only the
   address text you type is sent, to whichever lookup service is used. Push
   watches keep using stations, not addresses.
-- **Walk times are estimates** from straight-line distance until you correct
-  them, and are labelled as estimates on the add-a-place screen.
-- **Walking distance:** stations within 1.5 km, nearest three at most. When
-  buses, light rail and ferries arrive, their stops within 500 m are added.
+- **Walk times come from the planner** where it has them, and from
+  straight-line distance otherwise. Either can be corrected, and estimates are
+  labelled on the add-a-place screen.
+- **Walking distance:** stations within 1.5 km, nearest three at most, plus
+  bus, light rail and ferry stops within 500 m.
 
-What it does not do yet:
+One limit:
 
-- **It does not work out changes for you.** A trip between two places covers
-  direct services, plus changes you set up yourself as legs. Finding the best
-  change between any two addresses needs a journey planner, which is a backend
-  addition (section 8.3).
-- **Trains and metro only at first**, so a place helps only when a station is
-  within walking distance. Places become much more useful once buses are in.
+- **Live data covers trains and metro at first.** The planner covers every
+  mode, so a journey from an address can use a bus straight away, but that bus
+  is shown as timetabled until bus live data is added.
 
 How an address is turned into a position (decision F9):
 
@@ -618,8 +695,10 @@ How an address is turned into a position (decision F9):
 | TfNSW's stop finder through the server | Made for NSW; the same on every phone | A new server endpoint; counts against the TfNSW quota; the Trip Planner product must be added to the API key |
 | USE WHERE I AM NOW | No lookup at all; private; works offline | You have to be standing there |
 
-Recommendation: ship USE WHERE I AM NOW and the phone's lookup first, and move
-to TfNSW's only if results are poor.
+Recommendation: TfNSW's lookup through the server, with USE WHERE I AM NOW
+alongside it. The server is needed for journey planning anyway, and it gives
+the same results on every phone. The phone's own lookup stays as a fallback
+for when the server cannot be reached.
 
 ### 5.8 Alerts
 
@@ -680,6 +759,8 @@ later addition.
 | Loading from local data | Nothing: local queries are fast enough to show results directly. No spinners on Home |
 | Waiting on the network (join, save watch, test push) | The button shows a three-frame "working" animation and is disabled; a result line appears under it |
 | Offline or server down | Timetable results with the Info lamp, ghost vehicles and the offline banner. Notify shows the cached list read-only |
+| Planning with no connection | Plan a journey says planning is offline and offers the saved routes and recent journeys instead |
+| No journey found | A plain sentence, and the nearest stops to each end so the user can see why |
 | Stale live data | Section 2.7; vehicles stop animating |
 | No services | A plain sentence with the next first service; an empty track |
 | Timetable missing or out of date | Banner with progress or a prompt to connect |
@@ -763,10 +844,12 @@ needs nothing new.
 | Watch limit | Ten per device is a server constant; saving an eleventh throws | Expose the limit in config; the UI catches the error either way | F5 |
 | Return trips | No notion of a reverse trip | UI creates a second saved trip with legs reversed. No core change | F2 |
 | Saved places | Nothing in the contract. A leg already takes a set of origin and destination stops, and each departure says which stop it leaves from, so trips between places and leave-by times need no core change | Places are stored by the front end, with the place IDs each trip uses. Optionally add them to `SavedTrip` later so a backup stays in one piece | F2 |
-| Address to position | None | The phone's lookup behind a small interface; or `GET /v1/places?q=` on the server in front of TfNSW's stop finder | F2 |
-| Trips with a change between two places | Legs must be set up by hand | A journey planner: TfNSW's Trip Planner through the server, or a search on the phone | Later |
+| Address to position | None | `suspend fun searchPlaces(query, near)` returning addresses, stations and stops, served by the backend (section 8.5); the phone's lookup as a fallback | F2 |
+| Plan a journey between two places | Nothing: the core only answers for saved stop-to-stop trips | `suspend fun plan(request): PlanResult`, returning journeys made of walk and ride legs, served by the backend (section 8.5) | F2b |
+| Save a planned journey as a route | `saveTrip` takes legs with sets of stops and lines | A helper that turns a journey's rides into legs, with each walk as that leg's minimum connection time. No change to the stored format | F2b |
+| Live state of a planned journey | The live overlay works per saved trip or per service | `fun follow(journey): Flow<JourneyState>`, which re-applies live data to each ride and recomputes the spare time at each change | F2b for the margins; later for GO |
 | A push watch for a place with several stations | `WatchDto` takes one origin station | Watch the nearest switched-on station by default and let the user pick; or allow several stations per watch | F5 |
-| "From where I am now" to a saved place | Needs a query for an unsaved trip | The same `preview(legs, count)` as above | Later |
+| "Where I am" as a start or end | None | The planner takes a position directly | F2b |
 
 Settings (theme, time format, density) and alarm definitions are front-end
 data, kept in the app's own store.
@@ -786,6 +869,47 @@ data, kept in the app's own store.
   with ten trips on screen, and a week of real commutes compared with station
   displays (shared with the backend plan's manual test).
 
+### 8.5 What the journey planner needs from the backend
+
+The backend plan assumed saved stop-to-stop trips, with free-form journey
+planning "later, if ever" (its assumption A5). Planning is now a requirement,
+so something has to work the journeys out.
+
+| Option | How | For | Against |
+|---|---|---|---|
+| **TfNSW's Trip Planner, through tt-server** (recommended) | The server passes a journey request to TfNSW's Trip Planner API with the key it already holds, and returns a trimmed result | Covers every mode today, including those whose timetables are not on the phone yet; walks follow real footpaths; little to build; nothing new to run | Needs a connection; each search is a call against the daily quota; the choice of journeys is TfNSW's |
+| A planner on the phone | Search the timetable packs on the device | Works offline; no quota | Weeks of work; needs every mode's timetable on the phone (the bus pack is large); walks would be straight-line guesses |
+| OpenTripPlanner on the home server | Run the open-source planner with TfNSW timetables and OpenStreetMap | Full control; real street walking; no quota | A heavy service to run and keep fed with data; the most upkeep |
+
+What the recommended option adds to the server:
+
+| Addition | Detail |
+|---|---|
+| `GET /v1/places?q=…&near=…` | Addresses, stations and stops matching the text, from TfNSW's stop finder. Typing is debounced on the phone and answers are cached briefly on the server |
+| `POST /v1/plan` | A start and an end (a position or a stop), a time, and leave-after or arrive-by. Returns journeys as walk and ride legs with times, stops, platforms, line, trip ID where known, and walking minutes and metres |
+| API key | The Trip Planner product added to the existing Open Data Hub application |
+| Limits | A per-device limit (for example 30 searches an hour); identical searches within a minute served from cache |
+| Privacy | Start and end points go to TfNSW from the server with no device identifier, and are neither stored nor logged |
+| Matching rides to our own data | Each ride is matched to the phone's timetable by trip ID, falling back to line, stop and scheduled time. TfNSW's developer forum reports that the planner's trip IDs do not always match the live feeds, so a ride that cannot be matched keeps the planner's own times and is shown as TIMETABLE |
+
+Notes:
+
+- **Quota:** one search is one call, and typing an address a few more. For
+  ten people that is a few hundred calls a day at most, against the 60,000 a
+  day the backend plan works to.
+- **Check before building:** TfNSW upgraded these APIs in August 2025, so
+  field names should be taken from the current Swagger description and the
+  Trip Planner API manual, not from older examples.
+- **Effort:** about two weeks across the server and the core: the two
+  endpoints with tests on recorded responses, the mapping into walk and ride
+  legs, the matching, and `plan` and `searchPlaces` in the core. This is an
+  estimate.
+
+Sources: [Trip Planner APIs dataset](https://opendata.transport.nsw.gov.au/dataset/trip-planner-apis),
+[Trip Planner API manual v3.2](https://developer.transport.nsw.gov.au/sites/default/files/2023-08/Trip%20Planner%20API%20manual-opendataproduction%20v3.2.pdf),
+[forum: RealtimeTripID differences for the same journey](https://opendataforum.transport.nsw.gov.au/t/realtimetripid-differences-for-the-same-journey/2032),
+[forum: walking legs in the trip API](https://opendataforum.transport.nsw.gov.au/t/trip-api-requires-walking-with-no-walking-leg/7930).
+
 ---
 
 ## 9. Delivery plan
@@ -796,14 +920,16 @@ Rough weeks for one developer; estimates only.
 |---|---|---|---|---|
 | **F0. Setup** | App shell builds and runs | Android target on shared modules; empty Compose app opens on a phone with the fake core; fonts bundled; tokens in code | P1 | 1 |
 | **F1. System, motion and Home** | The look and the movement are real | Component gallery complete; six vehicles animate in every state; journey strip positions a vehicle from fake data; three transitions work in the gallery; Home works on fake data | P1 | 2.5 |
-| **F2. Join, places and trips** | A friend can set it up | Onboarding against the real server; timetable download; saved places with address lookup and walk times; new trip between places or stations, edit, manage, return trip; leave-by times on Home | P2 | 2.5 |
+| **F2. Join and places** | A friend can set it up | Onboarding against the real server; timetable download; saved places with address lookup; edit and manage saved routes | P2, and the places endpoint in 8.5 | 2 |
+| **F2b. Plan a journey** | From A to B, with changes and walks | Search by place, address, stop or where I am; journey options with leg strips; the step-by-step journey with live margins at each change; save as a route; leave-by times on Home | The planner endpoint in 8.5 | 3 |
 | **F3. Timetable and service** | The daily loop | Trip timetable and Service screens with live, stale and offline states on real data; transitions wired into navigation | P3 | 1.5 |
 | **F4. Alerts and map** | The full picture | Alerts tab; line map with vehicles seen from above; live tracking | P4 and the first two rows of 8.3 | 1.5 |
 | **F5. Notify** | "Your train is late" on a locked phone | Watch list and editor; push token; channels; notification tap opens the service | P5 | 1.5 |
 | **F6. Finish** | Share it | Settings, Day theme with outlined vehicles, accessibility pass, App Distribution, update notice | P6 | 1 |
-| **F7. Later** | As wanted | Alarms, widget, sounds, iOS shell, buses with a street map, optional themes | P7 | ongoing |
+| **F7. Later** | As wanted | GO (following a journey leg by leg), alarms, widget, sounds, iOS shell, live data and a street map for buses, optional themes | P7 | ongoing |
 
-**F0–F6: about 11–12 weeks.**
+**F0–F6: about 14 weeks, plus about two weeks of backend work for the planner
+(section 8.5).**
 
 ---
 
@@ -816,7 +942,10 @@ Rough weeks for one developer; estimates only.
 | Transitions become tiresome on the hundredth use | 300 ms to a usable page; a tap skips them; reduce motion turns them off; review after the week of real commutes |
 | A leave-by time is wrong because the walk estimate is wrong | Estimates are labelled and can be corrected per stop; the service's own departure time stays the headline |
 | An address is not found, or is placed in the wrong spot | USE WHERE I AM NOW always works; the stops found are shown for the user to confirm before saving |
-| Places are of little use while only trains and metro are loaded | Said plainly when no station is within walking distance; bring buses forward if addresses matter most |
+| The planner cannot be reached, or the quota runs out | Home and saved routes keep working from the phone's timetable; Plan a journey says planning is offline; searches are limited per device and cached |
+| A recommended change is too tight in practice | The spare time is shown at every change, recomputed from live data, and turns amber under three minutes |
+| A journey that mixes live and timetabled rides reads as fully live | Every ride carries its own lamp, and the options list says which modes are live |
+| A planned ride cannot be matched to our live data | It keeps the planner's times and is marked TIMETABLE; the app never guesses |
 | Pixel fonts are hard to read for long text or for some people | Minimum sizes; the reading test; system-font fallback for long text; font scaling |
 | Artwork takes longer than expected | The six moving vehicles already exist and are generated from code; the remaining list in 3.7 is small |
 | Status colours clash with line colours | Position and shape rules in 2.4 and 2.7; line colour never signals status |
@@ -831,12 +960,14 @@ Rough weeks for one developer; estimates only.
 
 - Is Compose Multiplatform acceptable (F4), given the backend plan said
   screens stay native?
-- Which address lookup (F9)?
+- Is TfNSW's Trip Planner through the server acceptable as the planning engine
+  (F11)? It means planning needs a connection, though Home and saved routes do
+  not.
+- Should GO (following a journey leg by leg) be in the first build, or later
+  as planned?
 - Does "save routes" also mean following a line on its own (the 333, or T1)
   without a from and a to? That would be a short list of favourite lines
   feeding Alerts and the Map. It is not in this plan yet.
-- Should the app work out changes between two addresses by itself? That needs
-  a journey planner on the backend.
 - Should cancelled services stay visible on Home, or collapse to a one-line
   note?
 - How many following services per card: two (as drawn) or more with fewer

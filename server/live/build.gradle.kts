@@ -4,7 +4,10 @@ plugins {
     alias(libs.plugins.wire)
 }
 
-kotlin { jvmToolchain(21) }
+kotlin {
+    jvmToolchain(21)
+    sourceSets.test { languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi") }
+}
 
 wire {
     // Pinned .proto files live at the repository root so other modules (and tools) can share them.

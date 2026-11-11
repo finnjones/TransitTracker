@@ -105,18 +105,18 @@ straight away.
 ### 2.1 Feeds
 
 All calls go to `https://api.transport.nsw.gov.au` with header
-`Authorization: apikey <key>`. **Check exact paths against the TfNSW
-developer portal and the _TfNSW GTFS / GTFS-R Implementation Specification
-v2 (June 2025)_ before building:** Sydney Trains and Metro are moving from
-v1 to v2 live feeds, and published sources disagree on the current alerts
-path.
+`Authorization: apikey <key>`. The Sydney Trains and Metro paths below were checked against the
+live API on 11 Nov 2026 (`DefaultSources` in `ServerConfig.kt`): every one answered 200 and decoded.
 
-| Need | Feed | Example path (verify) | Notes |
+| Need | Feed | Path (verified 11 Nov 2026) | Notes |
 |---|---|---|---|
-| Timetable | GTFS static, per mode, "for realtime" | `/v1/gtfs/schedule/sydneytrains` | Use the per-mode bundles, whose trip IDs match the live feeds, not the "complete" planning bundle |
-| Delays, cancellations, platforms | GTFS-R trip updates | `/v2/gtfs/realtime/sydneytrains`, `/v2/gtfs/realtime/metro` | Protobuf; Sydney Trains has TfNSW extensions (carriages, occupancy) |
-| Train positions | GTFS-R vehicle positions | `/v2/gtfs/vehiclepos/sydneytrains`, `/v2/gtfs/vehiclepos/metro` | Needs the TfNSW extension `.proto` from the dataset page |
-| Disruptions | GTFS-R alerts | `/v2/gtfs/alerts/{mode}` | Add the "Realtime Alerts v2" product to your API application |
+| Timetable | GTFS static, per mode, "for realtime" | `/v1/gtfs/schedule/sydneytrains`, `/v2/gtfs/schedule/metro` | Use the per-mode bundles, whose trip IDs match the live feeds, not the "complete" planning bundle. Sydney Trains has no v2 bundle (404). The **v1 Metro bundle is frozen** (version 17092024, Metro North West only, no service in the current window): use v2 |
+| Delays, cancellations, platforms | GTFS-R trip updates | `/v2/gtfs/realtime/sydneytrains`, `/v2/gtfs/realtime/metro` | Protobuf. Sydney Trains sends TfNSW's pre-standard `StopTimeUpdate` field 6 (departure occupancy, a varint) where GTFS-R now has the `stop_time_properties` message; `TfnswWireFixes` renumbers it to 7 before decoding. No `start_date` is sent (inferred) |
+| Train positions | GTFS-R vehicle positions | `/v2/gtfs/vehiclepos/sydneytrains`, `/v2/gtfs/vehiclepos/metro` | TfNSW extension 1007 (`consist`): car counts 8 (trains) and 6 (metro) decoded |
+| Disruptions | GTFS-R alerts | `/v2/gtfs/alerts/sydneytrains`, `/v2/gtfs/alerts/metro` | |
+
+TfNSW's 5 calls a second behave like a spike arrest: a burst of three calls within 60 ms got HTTP
+429. The server's limiter therefore spaces calls evenly (4 a second, no burst).
 
 Other modes (light rail, Sydney Ferries, Manly Fast Ferry, buses, NSW
 TrainLink) follow the same pattern.
@@ -305,8 +305,12 @@ Planner (`/v1/tp/stop_finder`, `/v1/tp/trip`) with the server's key and trims th
 - **Privacy.** Positions, place ids and search text go only to TfNSW, are not stored and are never
   logged; logs carry counts, status and duration.
 - **Without a key** `TT_REPLAY_DIR/planner/` answers from fixture files
-  (`testdata/planner/README.md`). The mapping was built from the published Swagger and a third-party
-  capture, **not yet verified against the live API**: the checklist is in that README.
+  (`testdata/planner/README.md`). The mapping was checked against the live API on 11 Nov 2026
+  (18 real journey requests plus no-route and error cases; raw answers in `testdata/planner/live/`); findings and what is still open are
+  in that README. Notably: the planner's real-time trip id equals the GTFS trip id for every
+  Sydney Trains and Metro ride, but Sydney Trains' GTFS splits trains running through the City at
+  Central into two trips, so rides past Central (T1 Western to Town Hall/Wynyard, T9) stay
+  unmatched: one `tripId` per leg cannot describe them.
 
 ### 5.1 Live data payload (sketch)
 

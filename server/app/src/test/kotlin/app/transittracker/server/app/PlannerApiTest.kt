@@ -64,10 +64,11 @@ class FixturePlannerFetcher(
         calls.incrementAndGet()
         if (throttled) return PlannerFetch.HttpError(429, "quota")
         val file = when (endpoint) {
-            PlannerEndpoint.TRIP -> trip
-            PlannerEndpoint.STOP_FINDER -> "stop_finder_central.json"
+            PlannerEndpoint.TRIP -> "tfnsw/$trip"
+            PlannerEndpoint.STOP_FINDER -> "tfnsw/stop_finder_central.json"
+            PlannerEndpoint.COORD -> "live/coord-central.json"
         }
-        return PlannerFetch.Success(Files.readString(Fixtures.testdata.resolve("planner/tfnsw").resolve(file)))
+        return PlannerFetch.Success(Files.readString(Fixtures.testdata.resolve("planner").resolve(file)))
     }
 }
 
@@ -156,6 +157,25 @@ class PlannerApiTest {
             assertEquals("bad_request", response.problemCode())
         }
         assertEquals(0, fetcher.calls.get())
+    }
+
+    @Test
+    fun `stops near answers the stops of every mode, nearest first`() = api {
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/v1/stops/near?lat=-33.884&lon=151.2068").status)
+        val token = token()
+        val response = client.get("/v1/stops/near?lat=-33.884&lon=151.2068&radius=600") { bearerAuth(token) }
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        assertEquals("no-store", response.headers[HttpHeaders.CacheControl])
+        val stops = Codecs.json.decodeFromString(PlacesResponse.serializer(), response.bodyAsText()).places
+        assertEquals("Central Station", stops.first().name)
+        assertTrue(stops.any { Mode.BUS in it.modes })
+        assertTrue(stops.any { it.modes == listOf(Mode.LIGHT_RAIL) })
+        for (query in listOf("", "?lat=-33.884", "?lat=x&lon=151.2", "?lat=-33.884&lon=151.2&radius=x", "?lat=-33.884&lon=151.2&radius=5000", "?lat=51.5&lon=0.1")) {
+            val bad = client.get("/v1/stops/near$query") { bearerAuth(token) }
+            assertEquals(HttpStatusCode.BadRequest, bad.status, query)
+            assertEquals("bad_request", bad.problemCode())
+        }
+        assertEquals(1, fetcher.calls.get())
     }
 
     @Test

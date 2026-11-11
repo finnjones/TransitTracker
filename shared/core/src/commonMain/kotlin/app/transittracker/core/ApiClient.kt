@@ -197,6 +197,12 @@ class ApiClient(
         },
     )
 
+    /** `GET /v1/stops/near`: stops of every mode within [radiusMeters] of [position], nearest first. */
+    suspend fun stopsNear(position: LatLng, radiusMeters: Int): ApiResult<PlacesResponse> = call(
+        HttpMethod.Get, ApiPaths.STOPS_NEAR,
+        query = listOf("lat" to position.lat.toString(), "lon" to position.lon.toString(), "radius" to radiusMeters.toString()),
+    )
+
     /** `POST /v1/plan` (JSON): journeys for [request]. */
     suspend fun plan(request: PlanRequest): ApiResult<PlanResponse> =
         call(HttpMethod.Post, ApiPaths.PLAN, body = ApiJson.encodeToString(PlanRequest.serializer(), request))

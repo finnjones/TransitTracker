@@ -2,6 +2,7 @@ package app.transittracker.ui.places
 
 import app.transittracker.core.KeyValueStore
 import app.transittracker.model.LatLng
+import app.transittracker.model.Mode
 import app.transittracker.model.StopId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,7 @@ enum class PlaceIcon { HOME, WORK, PIN }
  * A stop within walking distance of a place (plan 5.7). [stopId] is the station (or stand) id;
  * [walkMinutes] comes from the planner or straight-line distance ([estimated] true) and the user
  * can correct it; a switched-off stop ([enabled] false) is not used by trips from this place.
+ * [modes] is what calls there, for stops whose lines the phone's timetable does not know (buses).
  */
 @Serializable
 data class PlaceStop(
@@ -31,6 +33,7 @@ data class PlaceStop(
     val distanceMeters: Int,
     val enabled: Boolean = true,
     val estimated: Boolean = false,
+    val modes: List<Mode> = emptyList(),
 )
 
 /** A named address the user saved: Home, Work, the gym. Never leaves the phone. */

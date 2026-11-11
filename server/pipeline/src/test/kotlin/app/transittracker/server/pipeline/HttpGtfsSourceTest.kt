@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 class HttpGtfsSourceTest {
@@ -51,6 +52,14 @@ class HttpGtfsSourceTest {
         val e = assertFailsWith<HttpStatusException> { source.fetch("/x", null, target) }
         assertEquals(502, e.status)
         assertEquals(3, requests.get())
+    }
+
+    @Test
+    fun theErrorSaysWhatTheGatewayAnswered() = runTest {
+        statuses = ArrayDeque(listOf(502, 502, 502))
+        val e = assertFailsWith<HttpStatusException> { source.fetch("/x", null, target) }
+        assertTrue("Bad Gateway" in e.message.orEmpty(), e.message)
+        assertTrue("key" !in e.message.orEmpty().replace("Bad Gateway", ""), "the API key never appears")
     }
 
     @Test

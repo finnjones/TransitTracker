@@ -1,8 +1,10 @@
 name: CI
 
+# Pushes to a branch with a pull request are covered by the pull_request run, so only main and
+# tags run on push; otherwise every commit would build twice.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
     tags: ["v*"]
   pull_request:
 
@@ -14,30 +16,84 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Runners are 2-4 cores; let Gradle use all of them, with a little more heap than the default 2g.
+  GRADLE_FLAGS: >-
+    --console=plain --build-cache
+    -Dorg.gradle.workers.max=4
+    -Dorg.gradle.jvmargs=-Xmx3g
   # Android versionCode (and versionName 0.1.<n>): every run is newer than the one before, so the
-  # app's CHECK FOR UPDATES offers each release published below.
+  # app's CHECK FOR UPDATES offers each release published by android-release.
   TT_VERSION_CODE: ${{ github.run_number }}
 
 jobs:
-  build:
-    name: Build and test
+  # The four jobs below run side by side; wall-clock time is the slowest one, not the sum.
+
+  # Shared logic, the front end's JVM tests and every server module. No Android SDK is configured
+  # (-Ptt.android=false), which is also how deploy/Dockerfile builds, so this is fast to configure.
+  jvm:
+    name: JVM tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
-
       # Caches the Gradle distribution and dependencies; also validates the wrapper jar.
       - uses: gradle/actions/setup-gradle@v5
+      - name: Test
+        run: >-
+          ./gradlew $GRADLE_FLAGS -Ptt.android=false
+          jvmTest
+          :server:spi:test :server:pipeline:test :server:live:test
+          :server:watch:test :server:planner:test :server:app:test
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-reports-jvm
+          path: "**/build/reports/tests/"
+          retention-days: 7
 
-      - name: Build
-        run: ./gradlew build --console=plain
+  # Robolectric tests: the Android halves of shared/* and the app shell (demo and live, debug only).
+  android-tests:
+    name: Android tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Test
+        run: >-
+          ./gradlew $GRADLE_FLAGS
+          testAndroidHostTest :androidApp:testDemoDebugUnitTest :androidApp:testLiveDebugUnitTest
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-reports-android
+          path: "**/build/reports/tests/"
+          retention-days: 7
 
-      # The runner has an Android SDK, so `build` also assembles :androidApp. The debug APKs
-      # (demo and live) are kept for installing by hand; see androidApp/README.md.
+  # Debug APKs (demo and live) and lint, kept for installing by hand; see androidApp/README.md.
+  android-build:
+    name: Android APKs and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Assemble and lint
+        run: >-
+          ./gradlew $GRADLE_FLAGS
+          :androidApp:assembleDemoDebug :androidApp:assembleLiveDebug
+          :androidApp:lintDemoDebug :androidApp:lintLiveDebug
       - name: Upload Android debug APKs
         uses: actions/upload-artifact@v5
         with:
@@ -45,13 +101,12 @@ jobs:
           path: androidApp/build/outputs/apk/*/debug/*.apk
           if-no-files-found: error
           retention-days: 14
-
-      - name: Upload test reports
+      - name: Upload lint reports
         if: failure()
         uses: actions/upload-artifact@v5
         with:
-          name: test-reports
-          path: "**/build/reports/tests/"
+          name: lint-reports
+          path: "**/build/reports/lint-results-*.html"
           retention-days: 7
 
   # Pushes to main: a signed live APK as a GitHub release ("android-<run number>"), which the
@@ -59,7 +114,8 @@ jobs:
   # (androidApp/README.md, "Updates"); without them this job only warns.
   android-release:
     name: Publish Android release
-    needs: build
+    # After the Android tests and lint pass, so a broken build is never offered to phones.
+    needs: [android-tests, android-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -101,7 +157,7 @@ jobs:
           TT_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           TT_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           TT_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew :androidApp:assembleLiveRelease --console=plain
+        run: ./gradlew $GRADLE_FLAGS :androidApp:assembleLiveRelease
 
       - name: Publish release
         if: steps.key.outputs.ready == 'true'
@@ -121,9 +177,9 @@ jobs:
 
   image-check:
     name: Build image (no push)
-    needs: build
-    # Branches other than main and pull requests: prove deploy/Dockerfile still builds.
-    if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/'))
+    # No `needs`: the Dockerfile compiles the server itself, so this runs alongside the tests.
+    # Pull requests only: prove deploy/Dockerfile still builds.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -139,7 +195,7 @@ jobs:
 
   image:
     name: Publish image
-    needs: build
+    needs: jvm
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     runs-on: ubuntu-latest
     permissions:

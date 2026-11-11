@@ -14,6 +14,8 @@ object NoPlanner : Planner {
 
     override suspend fun places(query: String, near: LatLng?, limit: Int): PlacesResponse = unavailable()
 
+    override suspend fun stopsNear(position: LatLng, radiusMeters: Int): PlacesResponse = unavailable()
+
     override suspend fun plan(request: PlanRequest): PlanResponse = unavailable()
 
     override fun status() = PlannerStatus(

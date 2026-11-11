@@ -39,6 +39,10 @@ data class DataSectionState(
     val attribution: String = "",
     /** The server's own message, if it has one. */
     val message: String? = null,
+    /** Why the timetable has not arrived (server has none, download failed, not joined...). */
+    val problem: String? = null,
+    /** CHECK NOW is running. */
+    val checking: Boolean = false,
 )
 
 /** SEND TEST: nothing yet, working, or the result line. */
@@ -81,6 +85,7 @@ class SettingsStateHolder(
     private val tickMs: Long = 15_000,
 ) : StateHolder<SettingsUiState>(scope) {
     private val test = MutableStateFlow(TestState())
+    private val checking = MutableStateFlow(false)
 
     private val ticker: Flow<Long> = flow {
         while (true) {
@@ -104,9 +109,15 @@ class SettingsStateHolder(
         platform.notificationPermission, platform.batterySaver, platform.systemReduceMotion, platform.deviceId,
     ) { p, b, m, id -> Phone(p, b, m, id) }
 
-    private val updates: Flow<UpdateState?> = platform.updater?.state ?: flowOf(null)
+    private class Actions(val test: TestState, val checking: Boolean, val update: UpdateState?)
 
-    override val state: StateFlow<SettingsUiState> = combine(dataInputs, settings.settings, phone, test, updates) { d, ui, ph, t, u ->
+    /** What the page's own buttons have started: SEND TEST, CHECK NOW and the app update. */
+    private val actions = combine(test, checking, platform.updater?.state ?: flowOf(null)) { t, chk, u -> Actions(t, chk, u) }
+
+    override val state: StateFlow<SettingsUiState> = combine(dataInputs, settings.settings, phone, actions) { d, ui, ph, a ->
+        val t = a.test
+        val chk = a.checking
+        val u = a.update
         val status = d.status
         SettingsUiState(
             loaded = true,
@@ -117,6 +128,9 @@ class SettingsStateHolder(
                 packs = status?.packs.orEmpty().map { packRow(it, today(d.now, zone)) },
                 attribution = status?.attribution.orEmpty(),
                 message = status?.statusMessage?.takeIf { it.isNotBlank() },
+                problem = status?.timetableProblem?.takeIf { it.isNotBlank() }
+                    ?: if (status != null && !status.joined) "This phone has not joined a server yet, so there is no timetable to download." else null,
+                checking = chk,
             ),
             display = ui,
             systemReduceMotion = ph.systemMotion,
@@ -137,6 +151,19 @@ class SettingsStateHolder(
             debugBuild = platform.isDebugBuild,
         ),
     )
+
+    /** CHECK NOW: ask the server for the timetable again. */
+    fun checkNow() {
+        if (checking.value) return
+        scope.launch {
+            checking.value = true
+            try {
+                core.checkForUpdates()
+            } finally {
+                checking.value = false
+            }
+        }
+    }
 
     // ---- display: every change is stored at once
 

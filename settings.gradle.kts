@@ -15,6 +15,11 @@ pluginManagement {
                 includeGroupByRegex("com\\.google\\..*")
             }
         }
+        // Google's mirror of Maven Central (on Google Cloud Storage) before the plugin portal,
+        // which redirects most plugin artifacts to Maven Central: Maven Central answers 429 Too
+        // Many Requests to busy shared networks such as cloud sessions. Maven Central stays last
+        // as a fallback.
+        maven("https://maven-central.storage-download.googleapis.com/maven2/") { name = "MavenCentralGoogleMirror" }
         gradlePluginPortal()
         mavenCentral()
     }
@@ -22,6 +27,8 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
+        // Maven Central through Google's mirror first; Maven Central itself is the fallback.
+        maven("https://maven-central.storage-download.googleapis.com/maven2/") { name = "MavenCentralGoogleMirror" }
         mavenCentral()
         google {
             // Only Google's own artifacts come from Google's repository: AndroidX, the Android

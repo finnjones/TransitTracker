@@ -202,6 +202,59 @@ class TfnswPlannerTest {
     // ---- quota and failures ----
 
     @Test
+    fun `stops near a position ask coord for stops of every mode and map the live answer`() = runTest {
+        val p = planner()
+        val answer = p.stopsNear(central, 600)
+        val (endpoint, params) = fetcher.calls.single()
+        assertEquals(PlannerEndpoint.COORD, endpoint)
+        assertEquals(
+            listOf(
+                "outputFormat" to "rapidJSON", "coord" to "151.206840:-33.883970:EPSG:4326", "coordOutputFormat" to "EPSG:4326",
+                "inclFilter" to "1", "type_1" to "STOP", "radius_1" to "600",
+            ),
+            params,
+        )
+        val stops = answer.places
+        assertEquals(16, stops.size)
+        assertTrue(stops.all { it.kind == PlaceKind.STOP })
+        // Nearest first; the name comes from STOP_NAME_WITH_PLACE, not "undefined, undefined".
+        val first = stops.first()
+        assertEquals("200060", first.id)
+        assertEquals("Central Station", first.name)
+        assertEquals("Sydney", first.detail)
+        assertEquals("200060", first.stopId) // in the timetable
+        assertEquals(listOf(Mode.TRAIN, Mode.METRO, Mode.LIGHT_RAIL, Mode.BUS, Mode.COACH), first.modes)
+        val bus = stops.single { it.id == "G201081" }
+        assertEquals("Elizabeth St at Devonshire St", bus.name)
+        assertEquals("Surry Hills", bus.detail)
+        assertEquals(null, bus.stopId) // buses are not in the rail timetable
+        assertEquals(listOf(Mode.BUS), bus.modes)
+        assertEquals(listOf(Mode.LIGHT_RAIL), stops.single { it.name == "Capitol Square Light Rail" }.modes)
+    }
+
+    @Test
+    fun `stops near a position are cached by position to about 11 m`() = runTest {
+        val p = planner()
+        p.stopsNear(central, 600)
+        p.stopsNear(LatLng(central.lat + 0.00001, central.lon - 0.00001), 600)
+        assertEquals(1, fetcher.calls.size)
+        p.stopsNear(central, 1500) // another radius is another question
+        assertEquals(2, fetcher.calls.size)
+        clock.advance(61 * 60_000L)
+        p.stopsNear(central, 600)
+        assertEquals(3, fetcher.calls.size)
+    }
+
+    @Test
+    fun `stops near a position outside NSW or with a bad radius are 400`() = runTest {
+        val p = planner()
+        assertEquals(400 to "bad_request", code { p.stopsNear(LatLng(51.5, -0.12), 500) })
+        assertEquals(400 to "bad_request", code { p.stopsNear(central, 0) })
+        assertEquals(400 to "bad_request", code { p.stopsNear(central, 2_001) })
+        assertTrue(fetcher.calls.isEmpty())
+    }
+
+    @Test
     fun `calls draw on the shared quota and stop when it is used up`() = runTest {
         val shared = quota(budget = 2)
         assertTrue(shared.acquire(), "a live feed call earlier today")

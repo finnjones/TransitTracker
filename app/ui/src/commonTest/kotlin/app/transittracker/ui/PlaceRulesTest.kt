@@ -13,6 +13,7 @@ import app.transittracker.ui.feature.places.estimateWalkMinutes
 import app.transittracker.ui.feature.places.formatDistance
 import app.transittracker.ui.feature.places.formatWalk
 import app.transittracker.ui.feature.places.keepChoices
+import app.transittracker.ui.feature.places.modesLabel
 import app.transittracker.ui.feature.places.movedIds
 import app.transittracker.ui.feature.places.placeSaveProblem
 import app.transittracker.ui.feature.places.rankPlaces
@@ -103,21 +104,53 @@ class PlaceRulesTest {
     }
 
     @Test
-    fun busLightRailAndFerryStopsCountOnlyWithin500Metres() {
+    fun busAndCoachStopsCountWithin500MetresLightRailAndFerryWithin1Km() {
         val candidates = listOf(
             stop("bus-near", 300.0, setOf(Mode.BUS)),
             stop("bus-far", 700.0, setOf(Mode.BUS)),
             stop("lr", 450.0, setOf(Mode.LIGHT_RAIL)),
             stop("ferry", 520.0, setOf(Mode.FERRY)),
+            stop("ferry-far", 1100.0, setOf(Mode.FERRY)),
             stop("coach", 100.0, setOf(Mode.COACH)),
             stop("noinfo", 100.0, emptySet()),
         )
         val ids = walkingStops(origin, candidates).map { it.stopId }
-        // Nearest first; the ones past 500 m are out.
+        // Nearest first; buses past 500 m and ferries past 1 km are out.
         assertEquals(setOf("coach", "noinfo"), ids.take(2).toSet())
-        assertEquals(listOf("bus-near", "lr"), ids.drop(2))
+        assertEquals(listOf("bus-near", "lr", "ferry"), ids.drop(2))
         assertTrue("bus-far" !in ids)
-        assertTrue("ferry" !in ids)
+        assertTrue("ferry-far" !in ids)
+    }
+
+    @Test
+    fun onlyTheNearestTwoLightRailOrFerryStopsAreOfferedAndAStopTheyShareWithBusesCountsAsLightRail() {
+        val candidates = listOf(
+            stop("lr1", 529.0, setOf(Mode.LIGHT_RAIL)),
+            stop("lr-bus", 600.0, setOf(Mode.LIGHT_RAIL, Mode.BUS)),
+            stop("lr3", 979.0, setOf(Mode.LIGHT_RAIL)),
+            stop("bus", 259.0, setOf(Mode.BUS)),
+        )
+        val found = walkingStops(origin, candidates)
+        assertEquals(listOf("bus", "lr1", "lr-bus"), found.map { it.stopId })
+        assertEquals(listOf(Mode.LIGHT_RAIL, Mode.BUS), found.single { it.stopId == "lr-bus" }.modes)
+    }
+
+    @Test
+    fun aStationFromTheTimetableAndThePlannerIsOfferedOnceWithEveryMode() {
+        val platform = stop("p1", 120.0, rail, parent = "station")
+        val fromTimetable = stop("station", 100.0, rail)
+        val fromPlanner = stop("station", 100.0, setOf(Mode.TRAIN, Mode.BUS))
+        val found = walkingStops(origin, listOf(platform, fromTimetable, fromPlanner))
+        assertEquals(listOf("station"), found.map { it.stopId })
+        assertEquals(listOf(Mode.TRAIN, Mode.BUS), found.single().modes)
+    }
+
+    @Test
+    fun stopsWithoutLinesSayWhatCallsThere() {
+        assertEquals("BUS", modesLabel(listOf(Mode.BUS)))
+        assertEquals("LIGHT RAIL · BUS", modesLabel(listOf(Mode.BUS, Mode.LIGHT_RAIL, Mode.BUS)))
+        assertNull(modesLabel(emptyList()))
+        assertNull(modesLabel(listOf(Mode.OTHER)))
     }
 
     @Test
@@ -229,7 +262,7 @@ class PlaceRulesTest {
             placeSaveProblem("Home", hasPosition = false, hasStops = false, enabledStops = 0),
         )
         assertEquals(
-            "No stations are within walking distance of here. Try another address.",
+            "No stations or stops are within walking distance of here. Try another address.",
             placeSaveProblem("Home", hasPosition = true, hasStops = false, enabledStops = 0),
         )
         assertEquals(

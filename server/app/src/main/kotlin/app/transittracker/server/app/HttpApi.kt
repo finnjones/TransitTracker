@@ -157,6 +157,7 @@ fun Application.transitTrackerApi(deps: ApiDependencies) {
             }
             post(ApiPaths.WATCH_TEST) { testWatch(call, deps) }
             get(ApiPaths.PLACES) { places(call, deps) }
+            get(ApiPaths.STOPS_NEAR) { stopsNear(call, deps) }
             post(ApiPaths.PLAN) { plan(call, deps) }
         }
     }
@@ -504,6 +505,25 @@ private suspend fun places(call: ApplicationCall, deps: ApiDependencies) {
     }
     val limit = params["limit"]?.let { it.toIntOrNull() ?: throw ApiException(400, "bad_request", "limit must be a number") } ?: 10
     val response = deps.planner.places(query, near, limit).copy(serverTimeMs = deps.clock.nowMillis())
+    call.response.header(HttpHeaders.CacheControl, "no-store")
+    call.respondPayload(PlacesResponse.serializer(), response)
+}
+
+/**
+ * `GET /v1/stops/near?lat=<..>&lon=<..>&radius=<metres>`: stops of every mode near a position, for
+ * adding a place. The position is personal like a search: it goes only to TfNSW and is not logged.
+ * Shares the place-search rate limit.
+ */
+private suspend fun stopsNear(call: ApplicationCall, deps: ApiDependencies) {
+    call.rateLimit(deps.limits.places, call.device.deviceId)
+    val params = call.request.queryParameters
+    fun number(name: String): Double {
+        val raw = params[name] ?: throw ApiException(400, "bad_request", "Query parameter '$name' is required")
+        return raw.toDoubleOrNull() ?: throw ApiException(400, "bad_request", "$name must be a number")
+    }
+    val position = LatLng(number("lat"), number("lon"))
+    val radius = params["radius"]?.let { it.toIntOrNull() ?: throw ApiException(400, "bad_request", "radius must be a whole number") } ?: 1_500
+    val response = deps.planner.stopsNear(position, radius).copy(serverTimeMs = deps.clock.nowMillis())
     call.response.header(HttpHeaders.CacheControl, "no-store")
     call.respondPayload(PlacesResponse.serializer(), response)
 }

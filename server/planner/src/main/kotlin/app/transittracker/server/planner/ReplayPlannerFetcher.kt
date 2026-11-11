@@ -23,10 +23,11 @@ import kotlin.math.roundToLong
  * - `stop_finder-<query>.json`: the answer for one search (`<query>` lower-cased, runs of anything
  *   but letters and digits replaced by `-`, e.g. `stop_finder-central.json`); else
  * - `stop_finder.json`: every search, keeping only locations whose name contains each word searched;
+ * - `coord.json`: every stops-near-a-position request (the same answer wherever is asked);
  * - `trip.json`: every journey request. Its times are moved by whole weeks to the week of the
  *   requested date, so a recorded weekday journey stays on the same weekday and time of day.
  *
- * Files are raw `/v1/tp/stop_finder` and `/v1/tp/trip` bodies, as saved by
+ * Files are raw `/v1/tp/stop_finder`, `/v1/tp/coord` and `/v1/tp/trip` bodies, as saved by
  * `tt-admin planner-capture`. Replay calls are not counted against the TfNSW budget.
  */
 class ReplayPlannerFetcher(private val dir: Path) : PlannerFetcher {
@@ -41,6 +42,7 @@ class ReplayPlannerFetcher(private val dir: Path) : PlannerFetcher {
             when (endpoint) {
                 PlannerEndpoint.STOP_FINDER -> stopFinder(values["name_sf"].orEmpty())
                 PlannerEndpoint.TRIP -> trip(values["itdDate"])
+                PlannerEndpoint.COORD -> coord()
             }
         }
     }
@@ -58,6 +60,12 @@ class ReplayPlannerFetcher(private val dir: Path) : PlannerFetcher {
             words.all { it in text }
         }
         return PlannerFetch.Success(JsonObject(root + ("locations" to JsonArray(locations))).toString())
+    }
+
+    private fun coord(): PlannerFetch {
+        val file = dir.resolve("coord.json")
+        if (!Files.isRegularFile(file)) return PlannerFetch.NotConfigured("no coord.json under $dir")
+        return PlannerFetch.Success(Files.readString(file))
     }
 
     private fun trip(itdDate: String?): PlannerFetch {

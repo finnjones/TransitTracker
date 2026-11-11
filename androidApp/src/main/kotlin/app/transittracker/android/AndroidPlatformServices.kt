@@ -32,9 +32,13 @@ import app.transittracker.ui.platform.PermissionState
 import app.transittracker.ui.platform.PlatformServices
 import app.transittracker.ui.platform.ReleaseFeedUpdater
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -140,48 +144,87 @@ class AndroidPlatformServices(
     override suspend fun currentLocation(): LatLng? {
         if (!hasLocationPermission()) return null
         val lm = app.getSystemService(LocationManager::class.java) ?: return null
-        val providers = buildList {
-            if (granted(Manifest.permission.ACCESS_FINE_LOCATION)) add(LocationManager.GPS_PROVIDER)
-            add(LocationManager.NETWORK_PROVIDER)
-        }.filter { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
-        if (providers.isEmpty()) return null
+        // Location switched off for the whole phone: no provider will ever answer.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && !lm.isLocationEnabled) return null
+        val known = lastKnown(lm)
         // A fix from the last two minutes is good enough for "where am I".
-        providers.mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
-            .filter { SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos < FRESH_NANOS }
+        if (known != null && age(known) < FRESH_NANOS) return known.toLatLng()
+        val providers = liveProviders(lm)
+        // Ask every provider at once and take whichever answers first: GPS alone often never
+        // gets a fix indoors or on a train, while the network or fused provider answers in seconds.
+        val fix = if (providers.isEmpty()) null else withTimeoutOrNull(LOCATION_TIMEOUT_MS) { firstFix(lm, providers) }
+        // Nothing new in time: an older fix still beats "could not find where you are".
+        return (fix ?: known?.takeIf { age(it) < USABLE_NANOS })?.toLatLng()
+    }
+
+    /** The providers worth asking for a new fix, best first. GPS needs the precise permission. */
+    private fun liveProviders(lm: LocationManager): List<String> = buildList {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && lm.hasProvider(LocationManager.FUSED_PROVIDER)) {
+            add(LocationManager.FUSED_PROVIDER)
+        }
+        if (granted(Manifest.permission.ACCESS_FINE_LOCATION)) add(LocationManager.GPS_PROVIDER)
+        add(LocationManager.NETWORK_PROVIDER)
+    }.filter { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
+
+    /** The newest fix any provider (passive included) already holds. */
+    @SuppressLint("MissingPermission")
+    private fun lastKnown(lm: LocationManager): Location? =
+        runCatching { lm.getProviders(true) }.getOrDefault(emptyList())
+            .mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
             .maxByOrNull { it.elapsedRealtimeNanos }
-            ?.let { return it.toLatLng() }
-        val fix = withTimeoutOrNull(LOCATION_TIMEOUT_MS) { singleFix(lm, providers.first()) }
-        return fix?.toLatLng()
+
+    private fun age(location: Location): Long = SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos
+
+    /** The first fix from any of [providers]; null once they have all given up. */
+    private suspend fun firstFix(lm: LocationManager, providers: List<String>): Location? = coroutineScope {
+        val first = CompletableDeferred<Location?>()
+        val attempts = providers.map { provider ->
+            launch { singleFix(lm, provider)?.let { first.complete(it) } }
+        }
+        launch {
+            attempts.joinAll()
+            first.complete(null)
+        }
+        try {
+            first.await()
+        } finally {
+            coroutineContext.cancelChildren()
+        }
     }
 
     @SuppressLint("MissingPermission")
     private suspend fun singleFix(lm: LocationManager, provider: String): Location? =
         suspendCancellableCoroutine { cont ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val signal = CancellationSignal()
-                cont.invokeOnCancellation { signal.cancel() }
-                lm.getCurrentLocation(provider, signal, ContextCompat.getMainExecutor(app)) { location ->
-                    if (cont.isActive) cont.resume(location)
-                }
-            } else {
-                val listener = object : LocationListener {
-                    override fun onLocationChanged(location: Location) {
-                        lm.removeUpdates(this)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val signal = CancellationSignal()
+                    cont.invokeOnCancellation { signal.cancel() }
+                    lm.getCurrentLocation(provider, signal, ContextCompat.getMainExecutor(app)) { location ->
                         if (cont.isActive) cont.resume(location)
                     }
+                } else {
+                    val listener = object : LocationListener {
+                        override fun onLocationChanged(location: Location) {
+                            lm.removeUpdates(this)
+                            if (cont.isActive) cont.resume(location)
+                        }
 
-                    @Deprecated("Deprecated in Java")
-                    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
+                        @Deprecated("Deprecated in Java")
+                        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
 
-                    override fun onProviderEnabled(provider: String) = Unit
+                        override fun onProviderEnabled(provider: String) = Unit
 
-                    override fun onProviderDisabled(provider: String) {
-                        lm.removeUpdates(this)
-                        if (cont.isActive) cont.resume(null)
+                        override fun onProviderDisabled(provider: String) {
+                            lm.removeUpdates(this)
+                            if (cont.isActive) cont.resume(null)
+                        }
                     }
+                    cont.invokeOnCancellation { main.post { lm.removeUpdates(listener) } }
+                    lm.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
                 }
-                cont.invokeOnCancellation { main.post { lm.removeUpdates(listener) } }
-                lm.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
+            } catch (e: RuntimeException) {
+                // The provider vanished or the permission was taken away mid-request: no fix from it.
+                if (cont.isActive) cont.resume(null)
             }
         }
 
@@ -272,7 +315,8 @@ class AndroidPlatformServices(
         val LOCATION_PERMISSIONS = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         private const val KEY_ASKED_LOCATION = "asked.location"
         private const val KEY_ASKED_NOTIFICATIONS = "asked.notifications"
-        private const val LOCATION_TIMEOUT_MS = 15_000L
+        private const val LOCATION_TIMEOUT_MS = 20_000L
         private const val FRESH_NANOS = 2 * 60 * 1_000_000_000L
+        private const val USABLE_NANOS = 15 * 60 * 1_000_000_000L
     }
 }

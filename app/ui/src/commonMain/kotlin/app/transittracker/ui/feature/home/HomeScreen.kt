@@ -68,6 +68,8 @@ import app.transittracker.ui.components.pixelFill
 import app.transittracker.ui.format.CountdownText
 import app.transittracker.ui.format.DefaultLineColor
 import app.transittracker.ui.format.Lamp
+import app.transittracker.ui.format.ageSpoken
+import app.transittracker.ui.format.ageWords
 import app.transittracker.ui.format.countdown
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.format.formatDayDate
@@ -194,7 +196,7 @@ private fun DataChipView(chip: DataChip) {
     val dot = TtTheme.dot
     val (lamp, role, word, extra, spoken) = when (chip) {
         is DataChip.Live -> {
-            val age = chip.ageMs?.let { ageWords(it) }
+            val age = chip.ageMs?.let { if (it < 5_000) "NOW" else ageWords(it) }
             ChipLook(Lamp.CIRCLE, ColorRole.GO, "LIVE", age, "Live data" + (chip.ageMs?.let { ", updated ${ageSpoken(it)} ago" } ?: ""))
         }
         DataChip.Stale -> ChipLook(Lamp.RING, ColorRole.SECONDARY, "STALE", null, "Live data is stale")
@@ -216,16 +218,6 @@ private fun DataChipView(chip: DataChip) {
 }
 
 private data class ChipLook(val lamp: Lamp, val role: ColorRole, val word: String, val extra: String?, val spoken: String)
-
-private fun ageWords(ms: Long): String {
-    val s = ms / 1000
-    return if (s < 60) "${s}S" else "${s / 60} MIN"
-}
-
-private fun ageSpoken(ms: Long): String {
-    val s = ms / 1000
-    return if (s < 60) "$s seconds" else "${s / 60} minutes"
-}
 
 // ---------------------------------------------------------------- banners
 

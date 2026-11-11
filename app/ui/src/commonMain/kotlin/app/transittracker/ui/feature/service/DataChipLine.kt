@@ -11,11 +11,14 @@ import androidx.compose.ui.unit.dp
 import app.transittracker.ui.components.Label
 import app.transittracker.ui.components.StatusLamp
 import app.transittracker.ui.format.Lamp
+import app.transittracker.ui.format.ageSpoken
+import app.transittracker.ui.format.ageWords
+import app.transittracker.ui.format.liveAgeWords
 import app.transittracker.ui.theme.TtTheme
 
 /**
  * The data chip without a frame (Service mockup): lamp, "LIVE" and the age of the data
- * ("12S AGO"); STALE and TIMETABLE use the Ring lamp (plan 2.7). Read as one sentence.
+ * ("NOW", "12S AGO"); STALE and TIMETABLE use the Ring lamp (plan 2.7). Read as one sentence.
  */
 @Composable
 fun DataChipLine(kind: ChipKind, ageMs: Long?, modifier: Modifier = Modifier) {
@@ -40,17 +43,6 @@ fun DataChipLine(kind: ChipKind, ageMs: Long?, modifier: Modifier = Modifier) {
     ) {
         StatusLamp(lamp, color, size = 10.dp)
         Label(word, color = color, bold = true)
-        if (age != null) Label(ageWords(age) + if (kind == ChipKind.STALE) " OLD" else " AGO", color = c.textSecondary)
+        if (age != null) Label(if (kind == ChipKind.STALE) ageWords(age) + " OLD" else liveAgeWords(age), color = c.textSecondary)
     }
-}
-
-/** "12S" under a minute, else "3 MIN". */
-fun ageWords(ms: Long): String {
-    val s = (ms / 1000).coerceAtLeast(0)
-    return if (s < 60) "${s}S" else "${s / 60} MIN"
-}
-
-internal fun ageSpoken(ms: Long): String {
-    val s = (ms / 1000).coerceAtLeast(0)
-    return if (s < 60) (if (s == 1L) "1 second" else "$s seconds") else (s / 60).let { if (it == 1L) "1 minute" else "$it minutes" }
 }

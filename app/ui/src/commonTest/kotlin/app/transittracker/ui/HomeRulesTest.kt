@@ -91,6 +91,10 @@ class HomeRulesTest {
         assertEquals(listOf(BannerKind.OFFLINE), banners(live.copy(serverReachable = false, liveStale = true), "20261111").map { it.kind })
         assertEquals(listOf(BannerKind.OUT_OF_DATE), banners(live, "20270101").map { it.kind })
         assertEquals("Server says hi", banners(live.copy(statusMessage = "Server says hi"), "20261111").single().text)
+        // Joined, but the first timetable has not arrived yet.
+        val none = live.copy(packs = listOf(PackStatus("syd-rail", null, null, false, downloading = true)))
+        assertEquals("Getting the timetable. Your trips appear when it is ready.", banners(none, "20261111").single().text)
+        assertEquals(listOf(BannerKind.UPDATING), banners(live.copy(packs = emptyList()), "20261111").map { it.kind })
     }
 
     @Test

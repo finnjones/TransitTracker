@@ -28,6 +28,7 @@ Commands:
                                             directories of GTFS .txt files (e.g. syd-rail)
   check-gtfs <pack> <zip-or-dir...>         Dry run: load, merge, validate and build those inputs and
                                             report what happened; publishes nothing
+$PLANNER_CAPTURE_USAGE
 
 Reads TT_DATA_DIR like tt-server; safe to run while the server is running (a running server
 loads a pack imported this way at its next start)."""
@@ -54,6 +55,7 @@ fun runAdmin(
     return try {
         if (command == "import-gtfs") return importGtfs(rest, config, out, err, clock)
         if (command == "check-gtfs") return checkGtfs(rest, config, out, err, clock)
+        if (command == "planner-capture") return plannerCapture(rest, config, out, err, clock)
         Database.open(config.dbPath).use { db -> runDbCommand(command, rest, db, out, clock) }
     } catch (e: UsageException) {
         err.println("tt-admin: ${e.message}")

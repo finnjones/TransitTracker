@@ -1,0 +1,699 @@
+{
+ "version": "10.6.21.17",
+ "systemMessages": [],
+ "journeys": [
+  {
+   "rating": 0,
+   "isAdditional": false,
+   "interchanges": 0,
+   "legs": [
+    {
+     "duration": 720,
+     "isRealtimeControlled": true,
+     "realtimeStatus": [
+      "MONITORED"
+     ],
+     "origin": {
+      "isGlobalId": true,
+      "id": "2135233",
+      "name": "Strathfield Station, Platform 3, Strathfield",
+      "disassembledName": "Strathfield Station, Platform 3",
+      "type": "platform",
+      "coord": [
+       -33.87177,
+       151.09425
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "213510",
+       "name": "Strathfield Station, Platform 3, Strathfield",
+       "disassembledName": "Strathfield Station, Platform 3",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95310587:1",
+        "name": "Strathfield",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101151"
+       },
+       "coord": [
+        -33.87177,
+        151.09425
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 3",
+       "area": "1",
+       "platform": "STR3",
+       "platformName": "Platform 3",
+       "plannedPlatformName": "Platform 3",
+       "occupancy": "MANY_SEATS"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T21:17:00Z",
+      "departureTimePlanned": "2026-11-10T21:17:00Z",
+      "departureTimeEstimated": "2026-11-10T21:17:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "2000336",
+      "name": "Central Station, Platform 16, Sydney",
+      "disassembledName": "Central Station, Platform 16",
+      "type": "platform",
+      "coord": [
+       -33.88397,
+       151.20684
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "200060",
+       "name": "Central Station, Platform 16, Sydney",
+       "disassembledName": "Central Station, Platform 16",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95304184:1",
+        "name": "Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101100"
+       },
+       "coord": [
+        -33.88397,
+        151.20684
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 16",
+       "area": "1",
+       "platform": "CEN16",
+       "platformName": "Platform 16",
+       "plannedPlatformName": "Platform 16"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T21:29:00Z",
+      "arrivalTimePlanned": "2026-11-10T21:29:00Z",
+      "arrivalTimeEstimated": "2026-11-10T21:29:00Z"
+     },
+     "transportation": {
+      "id": "nsw:020T9: :H:sj2",
+      "name": "Sydney Trains Network T9 Northern Line",
+      "disassembledName": "T9",
+      "number": "T9 Northern Line",
+      "description": "Hornsby to Gordon via Strathfield",
+      "product": {
+       "id": 1,
+       "class": 1,
+       "name": "Sydney Trains Network",
+       "iconId": 1
+      },
+      "operator": {
+       "id": "x0001",
+       "name": "Sydney Trains"
+      },
+      "destination": {
+       "id": "10101100",
+       "name": "Gordon via Central",
+       "type": "stop"
+      },
+      "properties": {
+       "isTTB": true,
+       "tripCode": 541,
+       "timetablePeriod": "NSW JP",
+       "lineDisplay": "LINE",
+       "globalId": "3001",
+       "AVMSTripID": "121A.1450.133.8.T.8.86753002",
+       "RealtimeTripId": "121A.1450.133.8.T.8.86753002",
+       "gtfsTripId": "3001.nsw-2-T9.1.TA.1840.sj2"
+      },
+      "iconId": 1
+     },
+     "stopSequence": [
+      {
+       "isGlobalId": true,
+       "id": "2135233",
+       "name": "Strathfield Station, Platform 3, Strathfield",
+       "disassembledName": "Strathfield Station, Platform 3",
+       "type": "platform",
+       "coord": [
+        -33.87177,
+        151.09425
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "213510",
+        "name": "Strathfield Station, Platform 3, Strathfield",
+        "disassembledName": "Strathfield Station, Platform 3",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95310587:1",
+         "name": "Strathfield",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101151"
+        },
+        "coord": [
+         -33.87177,
+         151.09425
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 3",
+        "area": "1",
+        "platform": "STR3",
+        "platformName": "Platform 3",
+        "plannedPlatformName": "Platform 3",
+        "occupancy": "MANY_SEATS"
+       },
+       "departureTimePlanned": "2026-11-10T21:17:00Z",
+       "departureTimeEstimated": "2026-11-10T21:17:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "2134231",
+       "name": "Burwood Station, Platform 1, Burwood",
+       "disassembledName": "Burwood Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.87738,
+        151.10355
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "213410",
+        "name": "Burwood Station, Platform 1, Burwood",
+        "disassembledName": "Burwood Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95307832:1",
+         "name": "Burwood",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101150"
+        },
+        "coord": [
+         -33.87738,
+         151.10355
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "PLATFORM1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       },
+       "arrivalTimePlanned": "2026-11-10T21:05:00Z",
+       "arrivalTimeEstimated": "2026-11-10T21:05:00Z",
+       "departureTimePlanned": "2026-11-10T21:05:00Z",
+       "departureTimeEstimated": "2026-11-10T21:05:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "2000336",
+       "name": "Central Station, Platform 16, Sydney",
+       "disassembledName": "Central Station, Platform 16",
+       "type": "platform",
+       "coord": [
+        -33.88397,
+        151.20684
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "200060",
+        "name": "Central Station, Platform 16, Sydney",
+        "disassembledName": "Central Station, Platform 16",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95304184:1",
+         "name": "Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101100"
+        },
+        "coord": [
+         -33.88397,
+         151.20684
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 16",
+        "area": "1",
+        "platform": "CEN16",
+        "platformName": "Platform 16",
+        "plannedPlatformName": "Platform 16"
+       },
+       "arrivalTimePlanned": "2026-11-10T21:29:00Z",
+       "arrivalTimeEstimated": "2026-11-10T21:29:00Z"
+      }
+     ],
+     "coords": [
+      [
+       -33.87177,
+       151.09425
+      ],
+      [
+       -33.87738,
+       151.10355
+      ],
+      [
+       -33.88397,
+       151.20684
+      ]
+     ],
+     "properties": {
+      "PlanLowFloorVehicle": "1",
+      "PlanWheelChairAccess": "1"
+     },
+     "infos": []
+    }
+   ],
+   "daysOfService": {
+    "rvb": "1"
+   }
+  },
+  {
+   "rating": 0,
+   "isAdditional": false,
+   "interchanges": 0,
+   "legs": [
+    {
+     "duration": 720,
+     "isRealtimeControlled": true,
+     "realtimeStatus": [
+      "MONITORED"
+     ],
+     "origin": {
+      "isGlobalId": true,
+      "id": "2135233",
+      "name": "Strathfield Station, Platform 3, Strathfield",
+      "disassembledName": "Strathfield Station, Platform 3",
+      "type": "platform",
+      "coord": [
+       -33.87177,
+       151.09425
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "213510",
+       "name": "Strathfield Station, Platform 3, Strathfield",
+       "disassembledName": "Strathfield Station, Platform 3",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95310587:1",
+        "name": "Strathfield",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101151"
+       },
+       "coord": [
+        -33.87177,
+        151.09425
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 3",
+       "area": "1",
+       "platform": "STR3",
+       "platformName": "Platform 3",
+       "plannedPlatformName": "Platform 3",
+       "occupancy": "FEW_SEATS"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T21:02:00Z",
+      "departureTimePlanned": "2026-11-10T21:02:00Z",
+      "departureTimeEstimated": "2026-11-10T21:02:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "2000336",
+      "name": "Central Station, Platform 16, Sydney",
+      "disassembledName": "Central Station, Platform 16",
+      "type": "platform",
+      "coord": [
+       -33.88397,
+       151.20684
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "200060",
+       "name": "Central Station, Platform 16, Sydney",
+       "disassembledName": "Central Station, Platform 16",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95304184:1",
+        "name": "Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101100"
+       },
+       "coord": [
+        -33.88397,
+        151.20684
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 16",
+       "area": "1",
+       "platform": "CEN16",
+       "platformName": "Platform 16",
+       "plannedPlatformName": "Platform 16"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T21:14:00Z",
+      "arrivalTimePlanned": "2026-11-10T21:14:00Z",
+      "arrivalTimeEstimated": "2026-11-10T21:14:00Z"
+     },
+     "transportation": {
+      "id": "nsw:020T9: :H:sj2",
+      "name": "Sydney Trains Network T9 Northern Line",
+      "disassembledName": "T9",
+      "number": "T9 Northern Line",
+      "description": "Hornsby to Gordon via Strathfield",
+      "product": {
+       "id": 1,
+       "class": 1,
+       "name": "Sydney Trains Network",
+       "iconId": 1
+      },
+      "operator": {
+       "id": "x0001",
+       "name": "Sydney Trains"
+      },
+      "destination": {
+       "id": "10101100",
+       "name": "Gordon via Central",
+       "type": "stop"
+      },
+      "properties": {
+       "isTTB": true,
+       "tripCode": 541,
+       "timetablePeriod": "NSW JP",
+       "lineDisplay": "LINE",
+       "globalId": "3001",
+       "AVMSTripID": "121A.1450.133.8.T.8.86753001",
+       "RealtimeTripId": "121A.1450.133.8.T.8.86753001",
+       "gtfsTripId": "3001.nsw-2-T9.1.TA.1840.sj2"
+      },
+      "iconId": 1
+     },
+     "stopSequence": [
+      {
+       "isGlobalId": true,
+       "id": "2135233",
+       "name": "Strathfield Station, Platform 3, Strathfield",
+       "disassembledName": "Strathfield Station, Platform 3",
+       "type": "platform",
+       "coord": [
+        -33.87177,
+        151.09425
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "213510",
+        "name": "Strathfield Station, Platform 3, Strathfield",
+        "disassembledName": "Strathfield Station, Platform 3",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95310587:1",
+         "name": "Strathfield",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101151"
+        },
+        "coord": [
+         -33.87177,
+         151.09425
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 3",
+        "area": "1",
+        "platform": "STR3",
+        "platformName": "Platform 3",
+        "plannedPlatformName": "Platform 3",
+        "occupancy": "FEW_SEATS"
+       },
+       "departureTimePlanned": "2026-11-10T21:02:00Z",
+       "departureTimeEstimated": "2026-11-10T21:02:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "2134231",
+       "name": "Burwood Station, Platform 1, Burwood",
+       "disassembledName": "Burwood Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.87738,
+        151.10355
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "213410",
+        "name": "Burwood Station, Platform 1, Burwood",
+        "disassembledName": "Burwood Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95307832:1",
+         "name": "Burwood",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101150"
+        },
+        "coord": [
+         -33.87738,
+         151.10355
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "PLATFORM1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       },
+       "arrivalTimePlanned": "2026-11-10T21:05:00Z",
+       "arrivalTimeEstimated": "2026-11-10T21:05:00Z",
+       "departureTimePlanned": "2026-11-10T21:05:00Z",
+       "departureTimeEstimated": "2026-11-10T21:05:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "2000336",
+       "name": "Central Station, Platform 16, Sydney",
+       "disassembledName": "Central Station, Platform 16",
+       "type": "platform",
+       "coord": [
+        -33.88397,
+        151.20684
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "200060",
+        "name": "Central Station, Platform 16, Sydney",
+        "disassembledName": "Central Station, Platform 16",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95304184:1",
+         "name": "Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101100"
+        },
+        "coord": [
+         -33.88397,
+         151.20684
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 16",
+        "area": "1",
+        "platform": "CEN16",
+        "platformName": "Platform 16",
+        "plannedPlatformName": "Platform 16"
+       },
+       "arrivalTimePlanned": "2026-11-10T21:14:00Z",
+       "arrivalTimeEstimated": "2026-11-10T21:14:00Z"
+      }
+     ],
+     "coords": [
+      [
+       -33.87177,
+       151.09425
+      ],
+      [
+       -33.87738,
+       151.10355
+      ],
+      [
+       -33.88397,
+       151.20684
+      ]
+     ],
+     "properties": {
+      "PlanLowFloorVehicle": "1",
+      "PlanWheelChairAccess": "1"
+     },
+     "infos": []
+    }
+   ],
+   "daysOfService": {
+    "rvb": "1"
+   }
+  },
+  {
+   "rating": 0,
+   "isAdditional": false,
+   "interchanges": 0,
+   "legs": [
+    {
+     "duration": 900,
+     "distance": 14000,
+     "origin": {
+      "isGlobalId": true,
+      "id": "2135233",
+      "name": "Strathfield Station, Platform 3, Strathfield",
+      "disassembledName": "Strathfield Station, Platform 3",
+      "type": "platform",
+      "coord": [
+       -33.87177,
+       151.09425
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "213510",
+       "name": "Strathfield Station, Platform 3, Strathfield",
+       "disassembledName": "Strathfield Station, Platform 3",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95310587:1",
+        "name": "Strathfield",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101151"
+       },
+       "coord": [
+        -33.87177,
+        151.09425
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 3",
+       "area": "1",
+       "platform": "STR3",
+       "platformName": "Platform 3",
+       "plannedPlatformName": "Platform 3"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T21:05:00Z",
+      "departureTimePlanned": "2026-11-10T21:05:00Z",
+      "departureTimeEstimated": "2026-11-10T21:05:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "2000336",
+      "name": "Central Station, Platform 16, Sydney",
+      "disassembledName": "Central Station, Platform 16",
+      "type": "platform",
+      "coord": [
+       -33.88397,
+       151.20684
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "200060",
+       "name": "Central Station, Platform 16, Sydney",
+       "disassembledName": "Central Station, Platform 16",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95304184:1",
+        "name": "Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101100"
+       },
+       "coord": [
+        -33.88397,
+        151.20684
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 16",
+       "area": "1",
+       "platform": "CEN16",
+       "platformName": "Platform 16",
+       "plannedPlatformName": "Platform 16"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T21:20:00Z",
+      "arrivalTimePlanned": "2026-11-10T21:20:00Z",
+      "arrivalTimeEstimated": "2026-11-10T21:20:00Z"
+     },
+     "transportation": {
+      "product": {
+       "class": 105,
+       "name": "Taxi",
+       "iconId": 105
+      }
+     }
+    }
+   ],
+   "daysOfService": {
+    "rvb": "1"
+   }
+  }
+ ]
+}

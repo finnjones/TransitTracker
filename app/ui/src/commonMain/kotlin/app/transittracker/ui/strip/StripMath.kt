@@ -124,7 +124,8 @@ fun journeyStripModel(
     ghost: Boolean = false,
 ): JourneyStripModel {
     if (calls.isEmpty()) return JourneyStripModel(emptyList(), null, null, "")
-    val live = calls.indices.filter { !calls[it].skipped }
+    // A cancelled run has every call skipped: draw the run as timetabled rather than nothing.
+    val live = calls.indices.filter { !calls[it].skipped }.ifEmpty { calls.indices.toList() }
     val yours = live.firstOrNull { calls[it].stopId == yourStopId } ?: live.first()
     val dest = live.lastOrNull { calls[it].stopId == destinationStopId && it > yours } ?: live.last()
     val progress = vehicleProgress(calls, nowMs)

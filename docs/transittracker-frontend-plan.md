@@ -178,14 +178,27 @@ are starting values; each must pass 4.5 : 1 on a real phone before shipping.
 
 ### 2.5 Type
 
-Three faces, all published on Google Fonts under the SIL Open Font License
-(confirm each licence file when bundling them in the app).
+Four faces, all published on Google Fonts under the SIL Open Font License.
+The licence files are bundled with the app.
 
 | Face | Role | Sizes |
 |---|---|---|
 | **Doto** (Black) | Dot-matrix numerals: countdowns, the clock, time pickers | 30 / 44 / 60 / 76 |
 | **Pixelify Sans** (400–700) | Station names, rows, buttons with long labels, reading text | 15 / 17 / 20 / 22 |
 | **Silkscreen** (400, 700) | Small capital labels, status words, button labels | 10 / 11 / 12 / 13 |
+| **Jersey 15** | Every numeral outside a Doto countdown: times, platforms, minutes, route numbers | Follows the text around it |
+
+Two changes were made for legibility once the screens were rendered at a
+phone's pixel density:
+
+- **Numerals.** Pixelify's 5 reads as an S and Silkscreen Bold's 4 closes up
+  ("15:58" looked like "18:88"). Digits are set in Jersey 15 automatically,
+  whatever the surrounding face.
+- **Letters.** Pixelify's capital B read as G ("Gerowra"), its capital Z as 2
+  ("2etland"), and its joined fi, fl and ff as other letters ("StrathAeld").
+  The bundled copy of the font has B and Z redrawn and those joins switched
+  off (`tools/fonts/patch_pixelify.py`). The licence allows a modified
+  version; the file is renamed inside and the licence text says so.
 
 Times use 24-hour format by default with a 12-hour setting. Countdowns show
 minutes ("4 MIN"); "NOW" under one minute; a clock time instead of a countdown

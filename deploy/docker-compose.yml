@@ -1,0 +1,57 @@
+# TransitTracker home server: tt-server behind a Tailscale Funnel sidecar.
+# See deploy/README.md. Run from this directory:  docker compose up -d
+#
+# Nothing is published on the host or your router: the only way in from the internet is
+# Tailscale Funnel (HTTPS on 443 -> tt-server:8080), as configured in tailscale/serve.json.
+
+name: transittracker
+
+services:
+  tailscale:
+    image: tailscale/tailscale:stable
+    hostname: ${TS_HOSTNAME:-tt}            # public URL becomes https://<hostname>.<tailnet>.ts.net
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}            # only needed for the first start; state is kept in the volume
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json    # HTTPS 443 -> 127.0.0.1:8080, Funnel on
+      TS_USERSPACE: "false"
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./tailscale:/config:ro
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      # Tailscale's examples also add sys_module; only needed if the host has not loaded the tun module.
+    restart: unless-stopped
+
+  tt-server:
+    # Builds from this repository by default. To use the image CI publishes instead, set TT_IMAGE
+    # in .env (e.g. ghcr.io/<owner>/<repo>/tt-server:latest) and run `docker compose pull`.
+    image: ${TT_IMAGE:-transittracker/tt-server:local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file: .env
+    environment:
+      # Fixed inside the container (the volume and serve.json depend on them); overrides .env.
+      TT_DATA_DIR: /data
+      TT_PORT: "8080"
+    volumes:
+      - tt-data:/data
+      - ./secrets:/secrets:ro               # put firebase-service-account.json here
+    # Share the Tailscale container's network so Funnel reaches tt-server on 127.0.0.1:8080.
+    network_mode: service:tailscale
+    depends_on:
+      - tailscale
+    restart: unless-stopped
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  tailscale-state:
+  tt-data:

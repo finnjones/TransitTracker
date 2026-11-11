@@ -22,3 +22,6 @@ data/
 
 # OS
 .DS_Store
+
+# Claude Code local worktrees and session data
+.claude/

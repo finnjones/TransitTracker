@@ -12,7 +12,17 @@ Outputs, per vehicle:
 With --mockups DIR it also writes transparent 2x and 4x GIFs, and 4x PNGs of the
 stopped frames, for design mockups.
 
-Usage:  python3 tools/sprites/make_sprites.py [out_dir] [--mockups DIR]     (needs Pillow)
+App sheets (what :app:ui loads; the stripe is tinted with the line colour at run time):
+  app/<name>.png          base sheet: the vehicle with its livery pixels left transparent
+  app/<name>-livery.png   livery mask: white where the line colour goes, transparent elsewhere
+  app/<name>-outline.png  1-dot outline around the sprite, for the Day theme (drawn in ink)
+Every app frame has 1 transparent dot of padding on each side (room for the outline).
+Vehicle sheets have five frames: four moving frames, then one "at a stop" frame (doors open
+and lit). The walker sheet has nine: walk 0-3, stand 4, run 5-8. With --app DIR the app
+sheets are also written to DIR under resource names (sprite_<name>[_livery|_outline].png);
+pass app/ui/src/commonMain/composeResources/drawable to refresh the app.
+
+Usage:  python3 tools/sprites/make_sprites.py [out_dir] [--mockups DIR] [--app DIR]   (needs Pillow)
 """
 import os
 import sys
@@ -470,10 +480,190 @@ STOPPED = {
 
 PANEL = "#181816"
 
+# ---------------------------------------------------------------- app sheets
+
+# Drawn in place of the line colour so the livery pixels can be separated out.
+LIVERY = "#00FF01"
+MASK = "#FFFFFF"
+INK = "#000000"
+
+
+def run_figure(frame):
+    """A person running, 8 x 12: leaning forward, long stride, arms bent."""
+    stride = (
+        "....XX..",
+        "...XXXX.",
+        "....XX..",
+        "..aXXX.b",
+        ".a.XXXb.",
+        "...XX...",
+        "...XX...",
+        "..XXXX..",
+        ".a....b.",
+        "a......b",
+        "a.......",
+        "........",
+    )
+    passing = (
+        "........",
+        "....XX..",
+        "...XXXX.",
+        "....XX..",
+        "...XXXb.",
+        "..aXX.b.",
+        "...XX...",
+        "...XXX..",
+        "...a.Xb.",
+        "...a.b..",
+        "..a.....",
+        "........",
+    )
+    if frame % 2 == 1:
+        rows, colours = passing, {"X": BODY, "a": SHADE, "b": BODY}
+    elif frame == 0:
+        rows, colours = stride, {"X": BODY, "a": SHADE, "b": BODY}
+    else:
+        rows, colours = stride, {"X": BODY, "a": BODY, "b": SHADE}
+    g = Grid(8, 12)
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch in colours:
+                g.set(x, y, colours[ch])
+    return g
+
+
+def standing_figure():
+    """A person standing still, 8 x 12."""
+    rows = (
+        "...XX...",
+        "..XXXX..",
+        "...XX...",
+        "..XXXX..",
+        ".aXXXXa.",
+        ".a.XX.a.",
+        "...XX...",
+        "...XX...",
+        "...aX...",
+        "...aX...",
+        "...aX...",
+        "..aaXX..",
+    )
+    g = Grid(8, 12)
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch == "X":
+                g.set(x, y, BODY)
+            elif ch == "a":
+                g.set(x, y, SHADE)
+    return g
+
+
+def other_marker(livery, frame, doors_open=False):
+    """The marker for a mode the app does not know: a plain arrow in the line colour, 13 x 14."""
+    rows = (
+        ".......L.....",
+        ".......LL....",
+        ".......LLL...",
+        "LLLLLLLLLLL..",
+        "LLLLLLLLLLLL.",
+        "LLLLLLLLLLL..",
+        ".......LLL...",
+        ".......LL....",
+        ".......L.....",
+    )
+    g = Grid(13, 14)
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch == "L":
+                g.set(x, y + 3, livery)
+    return g
+
+
+def padded(grid, pad=1):
+    g = Grid(grid.w + 2 * pad, grid.h + 2 * pad)
+    g.blit(grid, pad, pad)
+    return g
+
+
+def split_layers(grid):
+    """(base, livery mask, outline) grids for one padded frame."""
+    base, mask, outline = Grid(grid.w, grid.h), Grid(grid.w, grid.h), Grid(grid.w, grid.h)
+    for y in range(grid.h):
+        for x in range(grid.w):
+            c = grid.px[y][x]
+            if c == LIVERY:
+                mask.set(x, y, MASK)
+            elif c is not None:
+                base.set(x, y, c)
+            elif any(0 <= x + dx < grid.w and 0 <= y + dy < grid.h and grid.px[y + dy][x + dx] is not None
+                     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                outline.set(x, y, INK)
+    return base, mask, outline
+
+
+def vehicle_frames(build, trail_rows):
+    """Four moving frames and one stopped frame, all the same size."""
+    if trail_rows is None:
+        return [build(f, False) for f in range(FRAMES)] + [build(0, True)]
+    moving = [with_trail(build(f, False), f, trail_rows) for f in range(FRAMES)]
+    stopped = with_trail(build(0, True), 0, (0, 0, 0), moving=False)
+    return moving + [stopped]
+
+
+def long_frames(build, trail_rows):
+    moving = [with_trail(build(f), f, trail_rows) for f in range(FRAMES)]
+    return moving + [with_trail(build(0), 0, (0, 0, 0), moving=False)]
+
+
+APP = {
+    "train": lambda: vehicle_frames(lambda f, d: train_car(LIVERY, f, doors_open=d), (4, 9, 6)),
+    "metro": lambda: vehicle_frames(lambda f, d: metro_car(LIVERY, f, doors_open=d), (5, 9, 7)),
+    "lightrail": lambda: vehicle_frames(lambda f, d: tram(LIVERY, f, doors_open=d), (6, 9, 7)),
+    "bus": lambda: vehicle_frames(lambda f, d: bus(LIVERY, f, doors_open=d), (4, 8, 6)),
+    "coach": lambda: vehicle_frames(lambda f, d: coach(LIVERY, f, doors_open=d), (4, 8, 6)),
+    "ferry": lambda: vehicle_frames(lambda f, d: ferry(LIVERY, f, doors_open=d), None),
+    "other": lambda: vehicle_frames(lambda f, d: other_marker(LIVERY, f, d), (6, 9, 8)),
+    # Transition vehicles (section 3.4). The fifth frame is the same consist standing still.
+    "train_long": lambda: long_frames(lambda f: consist(train_car, LIVERY, f, 4), (4, 9, 6)),
+    "metro_long": lambda: long_frames(lambda f: consist(metro_car, LIVERY, f, 4), (5, 9, 7)),
+    "lightrail_pair": lambda: long_frames(lambda f: coupled(tram(LIVERY, f), tram(LIVERY, f)), (6, 9, 7)),
+    # Walk 0-3, stand 4, run 5-8.
+    "walker": lambda: [walker(f) for f in range(FRAMES)] + [standing_figure()] + [run_figure(f) for f in range(FRAMES)],
+}
+
+
+def save_grids(grids, path):
+    w, h = grids[0].w, grids[0].h
+    sheet = Image.new("RGBA", (w * len(grids), h), (0, 0, 0, 0))
+    for i, f in enumerate(grids):
+        sheet.paste(to_image(f), (i * w, 0))
+    sheet.save(path, optimize=True)
+
+
+def write_app_sheets(out, resources=None):
+    os.makedirs(out, exist_ok=True)
+    if resources:
+        os.makedirs(resources, exist_ok=True)
+    for name, build in APP.items():
+        frames = [padded(f) for f in build()]
+        assert len({(f.w, f.h) for f in frames}) == 1, name
+        layers = [split_layers(f) for f in frames]
+        for i, suffix in enumerate(("", "-livery", "-outline")):
+            grids = [layer[i] for layer in layers]
+            save_grids(grids, os.path.join(out, name.replace("_", "-") + suffix + ".png"))
+            if resources:
+                save_grids(grids, os.path.join(resources, "sprite_" + name + suffix.replace("-", "_") + ".png"))
+        print(f"  app {name}: {len(frames)} frames of {frames[0].w} x {frames[0].h}")
+
 
 def main():
     args = sys.argv[1:]
     mockups = None
+    app_resources = None
+    if "--app" in args:
+        i = args.index("--app")
+        app_resources = args[i + 1]
+        del args[i:i + 2]
     if "--mockups" in args:
         i = args.index("--mockups")
         mockups = args[i + 1]
@@ -496,6 +686,7 @@ def main():
         save_gif([frame], os.path.join(preview, name + ".gif"), scale=4, background=PANEL, pad=3)
         if mockups:
             to_image(frame, 4).save(os.path.join(mockups, name + "@4x.png"))
+    write_app_sheets(os.path.join(out, "app"), app_resources)
     print("wrote sheets to", out, "and previews to", preview)
 
 

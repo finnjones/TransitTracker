@@ -11,10 +11,10 @@ This is the companion to
 plan ends at the `TransitCore` interface
 (`shared/model/.../TransitCore.kt`); this plan starts there.
 
-**Mockups:** eleven artboards on a design canvas at
+**Mockups:** thirteen artboards on a design canvas at
 <https://claude.ai/artifact/UpjCRFqexTVYB9hfSqzERg>, private to its author
 until shared from its Share menu. It holds the three directions considered for
-the home screen, five key screens in the chosen direction, a system sheet, a
+the home screen, seven key screens in the chosen direction, a system sheet, a
 sheet of the animated vehicles and a tappable prototype of the page
 transitions. The artboards were written without a render check, so treat
 spacing in them as indicative.
@@ -35,6 +35,8 @@ drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
 | F5 | Map | To confirm | **Our own pixel line map** for rail; a street map only when buses arrive. Matches the look, needs no map key or billing, works on both platforms |
 | F6 | Themes | To confirm | **Night** by default, **Day** for sunlight, follow the phone setting |
 | F7 | Sound | To confirm | **Off by default**; commuters are in quiet carriages |
+| F8 | Saved places | **Decided** | **Addresses can be saved** (Home, Work and others), kept on the phone only, and used as the start or end of a saved trip (section 5.7) |
+| F9 | How an address is found | To confirm | **The phone's own address lookup, plus "use where I am now".** TfNSW's lookup through the server is the alternative (section 5.7) |
 
 ---
 
@@ -47,6 +49,9 @@ drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
   which way it is going.** There is one sprite per mode: train, metro, light
   rail, bus, coach and ferry. Its state (moving, at a stop, late, timetable
   only, cancelled) is drawn into the sprite.
+- **Places and routes are saved.** A place is a named address with the stops
+  you would walk to. A saved trip (a route) can run between places, and then
+  shows when to leave the door as well as when the service leaves.
 - **Page changes are game-style and themed:** a train passes and wipes the
   next page in, carriage doors close and open, rows flip like a departure
   board. Each leaves the new page usable within 300 ms.
@@ -60,7 +65,7 @@ drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
 - **The app never hides how fresh its data is:** live, timetable-only and
   stale are always distinguishable, including in the animation.
 - **Built against the fake core first** (`FakeTransitCore`).
-- **Effort:** roughly 10–11 weeks for one developer through to friends using
+- **Effort:** roughly 11–12 weeks for one developer through to friends using
   it (section 9). This is an estimate, not a measurement.
 
 ---
@@ -189,6 +194,7 @@ stay crisp on every screen. Vehicles are covered in section 3.
 | Status lamps | 7 × 7 | Circle (on time), triangle (changed), cross (cancelled), plus (extra), ring (timetable / stale) |
 | Navigation | 12 × 12 | Train, map pin, warning triangle, bell, sliders |
 | Controls | 7 × 7 | Arrows, plus, minus |
+| Places | 12 × 12 | House, briefcase, pin |
 | Scenes | free | Platform at night (empty state), ticket (invite), train filling a track (timetable download) |
 | App and notification icons | 24 × 24 base | Train front; a single-colour version for the status bar |
 
@@ -340,6 +346,7 @@ Rules:
 | Value changes after a refresh | The changed row flips (split-flap) so the eye catches a new delay |
 | Countdown tick | Digits swap in two frames |
 | Platform change | Section 2.7 |
+| Walk to the stop | A walking figure ![Walker](design/sprites/preview/walker.gif) stands beside every walk time; it walks when it is time to leave and runs when you are cutting it fine (section 5.7) |
 | Pull to refresh | The trip's own vehicle crosses the top of the list |
 | Timetable download | A train fills a track as the progress bar |
 
@@ -371,6 +378,7 @@ in the app the stripe is tinted from `Route.color`.
 | Doors-open frames for train, bus and ferry | Overhead views of the other five modes for the map |
 | Transition vehicles for all six modes | Outlined versions for the Day theme |
 | Train from above for the map | The `OTHER` marker |
+| Walking figure | A running version of the walking figure |
 
 ---
 
@@ -397,6 +405,9 @@ flowchart TB
   Service -- doors --> Track["Live tracking"]
   Map --> Track
   Trips --> NewTrip["New trip (3 steps)"]
+  NewTrip --> Places["Saved places"]
+  Settings --> Places
+  Places --> AddPlace["Add or edit a place"]
   Trips --> Manage["Manage trips"]
   Notify --> Watch["Watch editor"]
   Service --> Watch
@@ -418,7 +429,8 @@ of active alerts on the user's own trips.
 | Service | Every stop of one service, where the vehicle is, actions | `service`, `watchService` | F3 |
 | Live tracking | The vehicle on a line map with a countdown to your stop | `track`, `shape` | F4 |
 | Map | Lines, live vehicles, nearby stations | `vehicles`, `stopsNear`, `shape` | F4 |
-| New trip / edit trip | Build a trip from stations, lines and legs | `searchStops`, `stopsNear`, `linesAt`, `saveTrip` | F2 |
+| New trip / edit trip | Build a trip from places or stations, lines and legs | `searchStops`, `stopsNear`, `linesAt`, `saveTrip` | F2 |
+| Saved places | Save addresses and the stops within walking distance of each | `stopsNear`, `linesAt` | F2 |
 | Manage trips | Reorder, rename, folder, delete | `reorderTrips`, `saveTrip`, `deleteTrip` | F2 |
 | Alerts | Disruptions, your trips first | `alerts` | F4 |
 | Notify | List and edit push watches | `watches`, `saveWatch`, `deleteWatch`, `sendTestNotification` | F5 |
@@ -451,11 +463,12 @@ Four steps, each one screen, each skippable where the app can still work.
 ├──────────────────────────────────────┤
 │ TO WORK                              │  folder
 │ ┌──────────────────────────────────┐ │
-│ │ Strathfield ▶ Central [T9] Gordon│ │
+│ │ Home ▶ Work           [T9] Gordon│ │  a trip between two saved places
+│ │ STRATHFIELD TO CENTRAL           │ │
 │ │ 4 MIN               07:38 struck │ │  headline service
 │ │                     07:42        │ │
 │ │                     ARR 07:56    │ │
-│ │ ▲ 4 MIN LATE  ■■■□ FEW  [PLAT 3] │ │
+│ │ ▲ 4 MIN LATE LEAVE 07:39 [PLAT 3]│ │  leave-by time with the walking figure
 │ │ ■──[▓▓▓]▸──□─────▣──────────□    │ │  journey strip, vehicle moving
 │ │ RHODES           YOU      CENTRAL│ │
 │ │ ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄ │ │
@@ -475,6 +488,9 @@ Four steps, each one screen, each skippable where the app can still work.
   makes every card compact.
 - Tap a service to open it (vehicle pass); tap a card title for the full
   timetable; long-press a card to reorder or edit.
+- A trip between saved places is titled with the place names, with the
+  stations beneath, and shows a leave-by time (section 5.7). A trip between
+  two stations shows seats in that slot instead.
 - A cancelled service stays visible, struck through, but never takes the
   headline: the next running service does.
 - Multi-leg trips show each leg's badge and the change: "[T9] → [M1] · change
@@ -540,9 +556,10 @@ left your stop the footer changes to "ARRIVES CENTRAL IN".
 
 Three steps with the trip shown as a ticket that fills in at the top:
 
-1. **From:** search field with the system keyboard; results nearest-first when
-   location is allowed, otherwise best match first; recent stations below.
-   Each result shows the lines that call there.
+1. **From:** saved places as one-tap buttons at the top; below them a search
+   field for a station or an address, with the system keyboard. Results are
+   nearest-first when location is allowed, otherwise best match first; recent
+   stations below. Each result shows the lines that call there.
 2. **To:** the same.
 3. **Options:** line filter (any by default), add a leg with a change station
    and minimum connection time, custom name, folder, "also save the return
@@ -552,7 +569,59 @@ Only stations are offered (results with no parent stop); the core expands a
 station to its platforms. Manage trips: drag to reorder, rename, move to a
 folder, delete with a two-button confirmation.
 
-### 5.7 Alerts
+### 5.7 Saved places, and trips between them
+
+A **place** is a named address: Home, Work, the gym. A **trip** is the app's
+word for a saved route: where from, where to, which lines, any changes, a name
+and a folder. A trip can start or end at a place instead of at one station.
+
+| Step | What happens |
+|---|---|
+| Add a place | Type an address, or tap USE WHERE I AM NOW. The app lists the stations within walking distance, nearest first, each with an estimated walk time. Switch off any you would not use; tap a walk time to correct it. Choose a name and an icon |
+| Use it in a trip | In New trip, pick a place for From, To or both. The trip then covers every switched-on stop at each end: Home to Work shows services from Strathfield or Homebush to Central, whichever comes first |
+| On the home screen | The card is titled with the place names. Each service shows which stop it leaves from and a **leave-by time** (departure minus the walk to that stop), with the walking figure beside it |
+| Edit a place | Changing its stops updates every trip that uses it |
+
+The leave-by label has three states, because the app does not know whether you
+are still at home or already on the platform:
+
+| State | Label | Walking figure |
+|---|---|---|
+| Plenty of time | LEAVE BY 07:39 | Stands |
+| Within two minutes of leave-by | LEAVE NOW | Walks |
+| Past leave-by, service not yet gone | RUN | Runs; the service stays visible |
+
+Rules:
+
+- **Places stay on the phone.** They are never sent to the server. Only the
+  address text you type is sent, to whichever lookup service is used. Push
+  watches keep using stations, not addresses.
+- **Walk times are estimates** from straight-line distance until you correct
+  them, and are labelled as estimates on the add-a-place screen.
+- **Walking distance:** stations within 1.5 km, nearest three at most. When
+  buses, light rail and ferries arrive, their stops within 500 m are added.
+
+What it does not do yet:
+
+- **It does not work out changes for you.** A trip between two places covers
+  direct services, plus changes you set up yourself as legs. Finding the best
+  change between any two addresses needs a journey planner, which is a backend
+  addition (section 8.3).
+- **Trains and metro only at first**, so a place helps only when a station is
+  within walking distance. Places become much more useful once buses are in.
+
+How an address is turned into a position (decision F9):
+
+| Option | For | Against |
+|---|---|---|
+| The phone's own address lookup | No server work; free; available on Android and iOS | Quality varies by phone; the address text goes to Google or Apple |
+| TfNSW's stop finder through the server | Made for NSW; the same on every phone | A new server endpoint; counts against the TfNSW quota; the Trip Planner product must be added to the API key |
+| USE WHERE I AM NOW | No lookup at all; private; works offline | You have to be standing there |
+
+Recommendation: ship USE WHERE I AM NOW and the phone's lookup first, and move
+to TfNSW's only if results are poor.
+
+### 5.8 Alerts
 
 A filter (MY TRIPS · n / ALL LINES), then cards: severity icon and word, the
 dates it applies, headline, line badges and which saved trip it touches;
@@ -560,7 +629,7 @@ tapping expands the description and a MORE INFO link when the alert has one.
 Trips with nothing active show a green "ALL CLEAR" line, which is the common
 case and worth saying.
 
-### 5.8 Notify (push watches)
+### 5.9 Notify (push watches)
 
 - **List:** each commute watch as a card ("Strathfield ▶ Central · Mon–Fri ·
   07:15–08:00 · late by 5 min") with a pause switch; one-off "this train"
@@ -573,23 +642,24 @@ case and worth saying.
 - **Banners:** notifications not allowed (ALLOW); push not available on the
   server; battery-saver tip for phones that stop background delivery.
 
-### 5.9 Alarms (later)
+### 5.10 Alarms (later)
 
 Phone alarms before departure or arrival for a saved trip, set from the trip
 timetable. The core works out the times (`nextAlarmTimes`); the Android layer
 stores and schedules them. Location alarms ("wake me before my stop") are a
 later addition.
 
-### 5.10 Settings
+### 5.11 Settings
 
 | Group | Contents |
 |---|---|
+| Places | The saved places list |
 | Data | Live status and last update; timetable packs with version and valid-to date; attribution text from the server |
 | Display | Theme (Night / Day / Follow phone), 12 or 24-hour time, card density, reduce motion, sounds, haptics |
 | Notifications | Permission state, a shortcut to the Android channel settings, battery-saver tip, test notification |
 | About | App version, device ID (needed to revoke a device), font and data licences, new-build notice |
 
-### 5.11 Outside the app
+### 5.12 Outside the app
 
 | Surface | Plan |
 |---|---|
@@ -692,6 +762,11 @@ needs nothing new.
 | Refresh on demand | `checkForUpdates()` and `refreshWatches()` exist on `DefaultTransitCore` but not on the interface | Add to the interface | F5, F6 |
 | Watch limit | Ten per device is a server constant; saving an eleventh throws | Expose the limit in config; the UI catches the error either way | F5 |
 | Return trips | No notion of a reverse trip | UI creates a second saved trip with legs reversed. No core change | F2 |
+| Saved places | Nothing in the contract. A leg already takes a set of origin and destination stops, and each departure says which stop it leaves from, so trips between places and leave-by times need no core change | Places are stored by the front end, with the place IDs each trip uses. Optionally add them to `SavedTrip` later so a backup stays in one piece | F2 |
+| Address to position | None | The phone's lookup behind a small interface; or `GET /v1/places?q=` on the server in front of TfNSW's stop finder | F2 |
+| Trips with a change between two places | Legs must be set up by hand | A journey planner: TfNSW's Trip Planner through the server, or a search on the phone | Later |
+| A push watch for a place with several stations | `WatchDto` takes one origin station | Watch the nearest switched-on station by default and let the user pick; or allow several stations per watch | F5 |
+| "From where I am now" to a saved place | Needs a query for an unsaved trip | The same `preview(legs, count)` as above | Later |
 
 Settings (theme, time format, density) and alarm definitions are front-end
 data, kept in the app's own store.
@@ -721,14 +796,14 @@ Rough weeks for one developer; estimates only.
 |---|---|---|---|---|
 | **F0. Setup** | App shell builds and runs | Android target on shared modules; empty Compose app opens on a phone with the fake core; fonts bundled; tokens in code | P1 | 1 |
 | **F1. System, motion and Home** | The look and the movement are real | Component gallery complete; six vehicles animate in every state; journey strip positions a vehicle from fake data; three transitions work in the gallery; Home works on fake data | P1 | 2.5 |
-| **F2. Join and trips** | A friend can set it up | Onboarding against the real server; timetable download; new trip, edit, manage, return trip | P2 | 1.5 |
+| **F2. Join, places and trips** | A friend can set it up | Onboarding against the real server; timetable download; saved places with address lookup and walk times; new trip between places or stations, edit, manage, return trip; leave-by times on Home | P2 | 2.5 |
 | **F3. Timetable and service** | The daily loop | Trip timetable and Service screens with live, stale and offline states on real data; transitions wired into navigation | P3 | 1.5 |
 | **F4. Alerts and map** | The full picture | Alerts tab; line map with vehicles seen from above; live tracking | P4 and the first two rows of 8.3 | 1.5 |
 | **F5. Notify** | "Your train is late" on a locked phone | Watch list and editor; push token; channels; notification tap opens the service | P5 | 1.5 |
 | **F6. Finish** | Share it | Settings, Day theme with outlined vehicles, accessibility pass, App Distribution, update notice | P6 | 1 |
 | **F7. Later** | As wanted | Alarms, widget, sounds, iOS shell, buses with a street map, optional themes | P7 | ongoing |
 
-**F0–F6: about 10–11 weeks.**
+**F0–F6: about 11–12 weeks.**
 
 ---
 
@@ -739,6 +814,9 @@ Rough weeks for one developer; estimates only.
 | Animation costs frame rate or battery | The budget in 3.6: 8 frames a second, on-screen only, foreground only; measured on a mid-range phone in F1 |
 | A vehicle's position on the strip is taken as exact | It is drawn from times, and the ghost sprite is used whenever there is no live data; the map is the place for GPS |
 | Transitions become tiresome on the hundredth use | 300 ms to a usable page; a tap skips them; reduce motion turns them off; review after the week of real commutes |
+| A leave-by time is wrong because the walk estimate is wrong | Estimates are labelled and can be corrected per stop; the service's own departure time stays the headline |
+| An address is not found, or is placed in the wrong spot | USE WHERE I AM NOW always works; the stops found are shown for the user to confirm before saving |
+| Places are of little use while only trains and metro are loaded | Said plainly when no station is within walking distance; bring buses forward if addresses matter most |
 | Pixel fonts are hard to read for long text or for some people | Minimum sizes; the reading test; system-font fallback for long text; font scaling |
 | Artwork takes longer than expected | The six moving vehicles already exist and are generated from code; the remaining list in 3.7 is small |
 | Status colours clash with line colours | Position and shape rules in 2.4 and 2.7; line colour never signals status |
@@ -753,6 +831,12 @@ Rough weeks for one developer; estimates only.
 
 - Is Compose Multiplatform acceptable (F4), given the backend plan said
   screens stay native?
+- Which address lookup (F9)?
+- Does "save routes" also mean following a line on its own (the 333, or T1)
+  without a from and a to? That would be a short list of favourite lines
+  feeding Alerts and the Map. It is not in this plan yet.
+- Should the app work out changes between two addresses by itself? That needs
+  a journey planner on the backend.
 - Should cancelled services stay visible on Home, or collapse to a one-line
   note?
 - How many following services per card: two (as drawn) or more with fewer

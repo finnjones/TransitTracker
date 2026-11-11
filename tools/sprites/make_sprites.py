@@ -278,6 +278,51 @@ def ferry(livery, frame, doors_open=False):
     return g
 
 
+def walker(frame):
+    """A person walking, 8 x 12: shown beside walk times and when it is time to leave."""
+    stride = (
+        "...XX...",
+        "..XXXX..",
+        "...XX...",
+        "..XXXX..",
+        ".a.XX.b.",
+        "a..XX..b",
+        "...XX...",
+        "...XX...",
+        "..a..b..",
+        "..a..b..",
+        ".a....b.",
+        "a......b",
+    )
+    passing = (
+        "...XX...",
+        "..XXXX..",
+        "...XX...",
+        "..XXXX..",
+        "..XXXX..",
+        "..XXXX..",
+        "...XX...",
+        "...XX...",
+        "...aX...",
+        "...aX...",
+        "...aX...",
+        "...aXX..",
+    )
+    # Limbs on the far side are shaded; they swap sides on each stride.
+    if frame % 2 == 1:
+        rows, colours = passing, {"X": BODY, "a": SHADE}
+    elif frame == 0:
+        rows, colours = stride, {"X": BODY, "a": SHADE, "b": BODY}
+    else:
+        rows, colours = stride, {"X": BODY, "a": BODY, "b": SHADE}
+    g = Grid(8, 12)
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch in colours:
+                g.set(x, y, colours[ch])
+    return g
+
+
 # ---------------------------------------------------------------- composition
 
 def with_trail(body, frame, rows, moving=True):
@@ -412,6 +457,7 @@ MOVING = {
     "metro-m1-long": lambda f: with_trail(consist(metro_car, M1, f, 4), f, (5, 9, 7)),
     "lightrail-pair": lambda f: with_trail(coupled(tram(LIGHT_RAIL, f), tram(LIGHT_RAIL, f)), f, (6, 9, 7)),
     "train-t9-top": lambda f: train_top(T9, f),
+    "walker": walker,
 }
 
 STOPPED = {

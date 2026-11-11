@@ -41,7 +41,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 
-class MutableClock(var now: Long = 1_762_819_200_000L) : WallClock {
+class MutableClock(@Volatile var now: Long = 1_762_819_200_000L) : WallClock {
     override fun nowMillis(): Long = now
     fun advance(ms: Long) {
         now += ms
@@ -142,4 +142,14 @@ class FakeWatchService : WatchService {
     override suspend fun sendTest(deviceId: String, watchId: String): PushResult = testResult
     override fun status() = WatchStatus(totalWatches = watches.values.sumOf { it.size }, activeWatches = 0, sentToday = 0, failedToday = 0)
     override fun start(scope: CoroutineScope) = Unit
+}
+
+/** Test fixtures under the repository's `testdata` directory (path from the `tt.testdata` property). */
+object Fixtures {
+    val testdata: Path = java.nio.file.Paths.get(
+        System.getProperty("tt.testdata") ?: error("System property tt.testdata is not set (see server/app/build.gradle.kts)"),
+    )
+
+    /** The synthetic `mini-rail` GTFS feed (see testdata/gtfs/README.md). */
+    val miniRail: Path = testdata.resolve("gtfs/mini-rail")
 }

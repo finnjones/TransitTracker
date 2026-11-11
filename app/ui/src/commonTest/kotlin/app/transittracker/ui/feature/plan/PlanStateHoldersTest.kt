@@ -5,6 +5,7 @@ import app.transittracker.model.PlanEndpoint
 import app.transittracker.model.PlanRequest
 import app.transittracker.model.PlanTimeKind
 import app.transittracker.model.rides
+import app.transittracker.model.LatLng
 import app.transittracker.ui.app.AppDeps
 import app.transittracker.ui.fake.CoreScenario
 import app.transittracker.ui.fake.FakeSetup
@@ -128,6 +129,22 @@ class PlanStateHoldersTest {
         assertEquals(PlanTimeKind.ARRIVE_BY, route.timeKind)
         assertEquals(SampleData.NOW_MS / 60_000 * 60_000 + 22 * 60_000, route.timeMs) // 07:40 + 20 min
         assertEquals(listOf(RecentSearch(home, work)), recents.recent.value)
+    }
+
+    @Test
+    fun aStationFromTheMapFillsFromUnlessASavedPlaceIsGiven() = runTest {
+        val deps = AppDeps.fake()
+        val station = JourneyEnd("Strathfield", LatLng(-33.8718, 151.0943))
+        fun holder(fromPlace: String?) = PlanJourneyStateHolder(
+            deps.planner, deps.core, deps.places, deps.platform, deps.clock, InMemoryRecentSearches(),
+            fromPlace, null, backgroundScope, initialFrom = station,
+        )
+        val s = holder(null).state.first { it.from != null }
+        assertEquals(station, s.from!!.end)
+        assertEquals(EndIcon.STOP, s.from!!.icon)
+        assertEquals(Field.TO, s.target)
+        // A saved place given for From wins over the station.
+        assertEquals("Home", holder(FakeSetup.HOME).state.first { it.from != null }.from!!.end.name)
     }
 
     @Test

@@ -136,6 +136,8 @@ class PlanJourneyStateHolder(
     scope: CoroutineScope,
     private val searchDebounceMs: Long = 300,
     private val tickMs: Long = 30_000,
+    /** A start that is not a saved place (a station tapped on the map); a saved place given for From wins. */
+    initialFrom: JourneyEnd? = null,
 ) : StateHolder<PlanFormUiState>(scope) {
     private val form = MutableStateFlow(
         clock.nowMillis().let { PlanFormUiState(pickedMs = initialPickedTime(it), nowMs = it) },
@@ -160,10 +162,11 @@ class PlanJourneyStateHolder(
     }.stateIn(scope, SharingStarted.Eagerly, form.value)
 
     init {
-        if (initialFromPlaceId != null || initialToPlaceId != null) {
+        if (initialFromPlaceId != null || initialToPlaceId != null || initialFrom != null) {
             scope.launch {
                 val places = placesStore.currentPlaces()
                 val from = places.firstOrNull { it.id == initialFromPlaceId }?.let(::choiceOf)
+                    ?: initialFrom?.let { EndChoice(it, "", EndIcon.STOP) }
                 val to = places.firstOrNull { it.id == initialToPlaceId }?.let(::choiceOf)
                 form.update { it.copy(from = it.from ?: from, to = it.to ?: to) }
             }

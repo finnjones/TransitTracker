@@ -197,6 +197,11 @@ app's first screen. Other commands:
 ./tt-admin help
 ```
 
+`tt-admin import-gtfs <pack> <zip-or-dir...>` builds a timetable pack from GTFS files you already
+have (the files must be inside the container, e.g. copied into the `tt-data` volume). You normally
+never need it: the server builds packs from TfNSW every night. A running server picks up an
+imported pack at its next start (`docker compose restart tt-server`).
+
 ## 11. The status page
 
 On the server itself:

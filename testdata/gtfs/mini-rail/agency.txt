@@ -1,0 +1,3 @@
+agency_id,agency_name,agency_url,agency_timezone,agency_lang
+ST,Mini Trains,https://example.invalid/trains,Australia/Sydney,en
+SM,Mini Metro,https://example.invalid/metro,Australia/Sydney,en

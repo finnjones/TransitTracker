@@ -75,7 +75,7 @@ fun PlanJourneyScreen(route: Route.PlanJourney) {
     val holder = rememberStateHolder(route) { scope ->
         PlanJourneyStateHolder(
             deps.planner, deps.core, deps.places, deps.platform, deps.clock, RecentSearches.of(deps),
-            route.fromPlaceId, route.toPlaceId, scope,
+            route.fromPlaceId, route.toPlaceId, scope, initialFrom = route.from,
         )
     }
     PlanJourneyPage(holder, route.fromOnboarding)

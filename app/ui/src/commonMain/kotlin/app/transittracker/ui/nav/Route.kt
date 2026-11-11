@@ -93,6 +93,8 @@ sealed interface Route {
         val fromPlaceId: String? = null,
         val toPlaceId: String? = null,
         val fromOnboarding: Boolean = false,
+        /** A start that is not a saved place: a station tapped on the map. [fromPlaceId] wins when both are given. */
+        val from: JourneyEnd? = null,
     ) : Route {
         override val title get() = "Plan a journey"
     }

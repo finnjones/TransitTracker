@@ -200,7 +200,7 @@ Every screen is a `Route` (serializable data, saved with the back stack; never p
 | `TripTimetable` | `tripId`, `serviceDate: ServiceDate? = null` (today) | `feature/timetable/TripTimetableScreen.kt` |
 | `Service` | `ref: ServiceRef`, `boardStopId?`, `alightStopId?` | `feature/service/ServiceScreen.kt` |
 | `Tracking` | `ref`, `boardStopId?`, `alightStopId?` | `feature/map/TrackingScreen.kt` |
-| `PlanJourney` | `fromPlaceId?`, `toPlaceId?`, `fromOnboarding = false` | `feature/plan/PlanJourneyScreen.kt` |
+| `PlanJourney` | `fromPlaceId?`, `toPlaceId?`, `fromOnboarding = false`, `from: JourneyEnd?` (a start that is not a saved place: a station tapped on the map) | `feature/plan/PlanJourneyScreen.kt` |
 | `JourneyOptions` | `from: JourneyEnd`, `to: JourneyEnd`, `timeMs?`, `timeKind`, `fromOnboarding` | `feature/plan/JourneyOptionsScreen.kt` |
 | `JourneyDetail` | `from`, `to`, `itinerary: Itinerary`, `fromOnboarding` | `feature/plan/JourneyScreen.kt` |
 | `SavedPlaces` | | `feature/places/PlacesScreen.kt` |

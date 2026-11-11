@@ -42,6 +42,7 @@ import app.transittracker.ui.components.PixelText
 import app.transittracker.ui.components.RouteBadge
 import app.transittracker.ui.components.StatusLine
 import app.transittracker.ui.motion.flapRow
+import app.transittracker.ui.nav.JourneyEnd
 import app.transittracker.ui.nav.LocalNavigator
 import app.transittracker.ui.nav.Route
 import app.transittracker.ui.state.rememberStateHolder
@@ -90,7 +91,11 @@ internal fun MapTabPage(
             openTracking = { card -> card.ref?.let { nav.push(Route.Tracking(it)) } },
             openService = { card -> card.ref?.let { nav.push(Route.Service(it)) } },
             // PlanJourney takes saved place ids only: start from the saved place that uses this station.
-            planFrom = { card -> nav.push(Route.PlanJourney(fromPlaceId = card.placeId)) },
+            planFrom = { card ->
+                // From the saved place that uses this station, else from the station itself.
+                val station = card.position?.takeIf { card.placeId == null }?.let { JourneyEnd(card.name, it) }
+                nav.push(Route.PlanJourney(fromPlaceId = card.placeId, from = station))
+            },
             planJourney = { nav.push(Route.PlanJourney()) },
         )
     }

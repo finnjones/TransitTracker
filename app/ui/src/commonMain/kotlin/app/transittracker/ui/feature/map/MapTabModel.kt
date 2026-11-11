@@ -1,5 +1,6 @@
 package app.transittracker.ui.feature.map
 
+import app.transittracker.model.LatLng
 import app.transittracker.model.DataStatus
 import app.transittracker.model.DepartureStatus
 import app.transittracker.model.Mode
@@ -66,6 +67,8 @@ data class StationCard(
     val lines: List<Route>?,
     /** A saved place that uses this station (Plan a journey starts there). */
     val placeId: String?,
+    /** Where the station is, so Plan a journey can start from it when no saved place does. */
+    val position: LatLng? = null,
 )
 
 data class MapUiState(
@@ -168,7 +171,10 @@ fun buildMapState(i: MapInputs, nowMs: Long): MapUiState {
         vehicleCardOf(v, i.lines)
     }
     val stationCard = selectedStation?.let { s ->
-        StationCard(s.name, s.stopId, s.lines, i.places.firstOrNull { p -> p.stops.any { it.stopId == s.stopId } }?.id)
+        StationCard(
+            s.name, s.stopId, s.lines, i.places.firstOrNull { p -> p.stops.any { it.stopId == s.stopId } }?.id,
+            MapProjection.Sydney.unproject(s.point),
+        )
     }
 
     val (banner, role) = when {

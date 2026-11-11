@@ -1,0 +1,9 @@
+from_stop_id,to_stop_id,transfer_type,min_transfer_time
+CEN_P1,CEN_M1,2,240
+CEN_M1,CEN_P1,2,240
+CEN_P2,CEN_M2,2,240
+CEN_M2,CEN_P2,2,240
+CHA_P1,CHA_M1,2,180
+CHA_M1,CHA_P1,2,180
+CHA_P2,CHA_M2,2,180
+CHA_M2,CHA_P2,2,180

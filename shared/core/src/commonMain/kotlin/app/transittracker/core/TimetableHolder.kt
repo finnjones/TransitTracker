@@ -1,6 +1,7 @@
 package app.transittracker.core
 
 import app.transittracker.model.Timetable
+import app.transittracker.timetable.CompositeTimetable
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -70,6 +71,7 @@ class TimetableHolder(private val ioContext: CoroutineContext) {
         }
         if (leased.isEmpty()) return null
         try {
+            // The view is never closed: the leased packs are closed by this holder once retired.
             val view = if (leased.size == 1) leased[0].timetable else CompositeTimetable(leased.map { it.timetable })
             return withContext(ioContext) { block(view) }
         } finally {

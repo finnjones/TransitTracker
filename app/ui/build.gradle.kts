@@ -1,3 +1,6 @@
+import com.android.build.api.dsl.KotlinMultiplatformAndroidLibraryTarget
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.compose.multiplatform)
@@ -5,11 +8,25 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Android target only when settings.gradle.kts found an Android SDK (:androidApp uses it).
+val androidEnabled = gradle.extra["tt.android"] == true
+if (androidEnabled) apply(plugin = "com.android.kotlin.multiplatform.library")
+
 kotlin {
     jvmToolchain(21)
-    // JVM: screenshot harness and tests today. androidTarget() and the iOS targets are added
-    // with the Android shell; keep commonMain free of java.* so they compile.
+    // JVM: screenshot harness and tests. Android: the app (:androidApp). iOS targets come later;
+    // keep commonMain free of java.* so they compile.
     jvm()
+    if (androidEnabled) {
+        (this as ExtensionAware).extensions.configure<KotlinMultiplatformAndroidLibraryTarget>("android") {
+            namespace = "app.transittracker.ui"
+            compileSdk = libs.versions.android.compileSdk.get().toInt()
+            minSdk = libs.versions.android.minSdk.get().toInt()
+            compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+            // Compose resources (fonts, sprites, licences) are packaged as Android resources/assets.
+            androidResources { enable = true }
+        }
+    }
 
     sourceSets {
         commonMain.dependencies {

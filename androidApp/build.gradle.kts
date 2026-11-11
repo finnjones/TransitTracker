@@ -106,3 +106,8 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
 }
+
+// List each unit test in the build log, so CI shows what ran.
+tasks.withType<Test>().configureEach {
+    testLogging { events("passed", "skipped", "failed") }
+}

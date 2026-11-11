@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":server:pipeline"))
     implementation(project(":server:live"))
     implementation(project(":server:watch"))
+    implementation(project(":server:planner"))
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.status.pages)

@@ -29,3 +29,29 @@ fun decodePolyline(encoded: String, precision: Int = 5): List<LatLng> {
     }
     return points
 }
+
+/** Encodes [points] as a Google encoded polyline (the inverse of [decodePolyline]). */
+fun encodePolyline(points: List<LatLng>, precision: Int = 5): String {
+    var factor = 1.0
+    repeat(precision) { factor *= 10 }
+    val out = StringBuilder()
+    var lastLat = 0L
+    var lastLon = 0L
+    fun put(value: Long) {
+        var v = if (value < 0) (value shl 1).inv() else value shl 1
+        while (v >= 0x20) {
+            out.append(((0x20 or (v and 0x1f).toInt()) + 63).toChar())
+            v = v shr 5
+        }
+        out.append((v.toInt() + 63).toChar())
+    }
+    for (p in points) {
+        val lat = kotlin.math.round(p.lat * factor).toLong()
+        val lon = kotlin.math.round(p.lon * factor).toLong()
+        put(lat - lastLat)
+        put(lon - lastLon)
+        lastLat = lat
+        lastLon = lon
+    }
+    return out.toString()
+}

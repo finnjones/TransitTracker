@@ -102,6 +102,12 @@ class DefaultTransitCore internal constructor(
     private var started = false
     private val checkMutex = Mutex()
 
+    /**
+     * Journey planning over tt-server (`/v1/places`, `/v1/plan`). Results say `Offline` when the
+     * server cannot be reached and `Unavailable` when it has no planner right now.
+     */
+    val planner: app.transittracker.model.JourneyPlanner = RemoteJourneyPlanner(api)
+
     /** Results of the latest pack update check. */
     val lastPackReport: Flow<List<PackUpdateResult>> = updater.lastReport
 
@@ -120,7 +126,7 @@ class DefaultTransitCore internal constructor(
         poller.start()
         scope.launch {
             while (true) {
-                checkForUpdates()
+                updatePacks()
                 delay(config.packCheckIntervalMs)
             }
         }
@@ -134,7 +140,7 @@ class DefaultTransitCore internal constructor(
      * Fetches `/v1/config`, applies poll intervals and installs newer packs. Runs on start, every
      * [CoreConfig.packCheckIntervalMs] and after joining. Returns null when not joined or offline.
      */
-    suspend fun checkForUpdates(): List<PackUpdateResult>? = checkMutex.withLock {
+    suspend fun updatePacks(): List<PackUpdateResult>? = checkMutex.withLock {
         if (loadToken() == null) return null
         sendPendingPushToken()
         val result = api.config()
@@ -144,6 +150,12 @@ class DefaultTransitCore internal constructor(
         kv.put(KvKeys.CONFIG, ApiJson.encodeToString(ConfigResponse.serializer(), cfg))
         updater.update(cfg.packs)
     }
+
+    /**
+     * Pull to refresh: [updatePacks] now. True when the server answered (whether or not a pack
+     * was installed); false when not joined or offline.
+     */
+    override suspend fun checkForUpdates(): Boolean = updatePacks() != null
 
     private fun applyConfig(cfg: ConfigResponse) {
         configState.value = cfg
@@ -174,7 +186,7 @@ class DefaultTransitCore internal constructor(
                 tokenState.value = result.value.deviceToken
                 tokenLoaded.value = true
                 scope.launch {
-                    checkForUpdates()
+                    updatePacks()
                     refreshWatches()
                 }
                 JoinResult.Joined(result.value.deviceId)
@@ -341,6 +353,19 @@ class DefaultTransitCore internal constructor(
         if (loadToken() != null) scope.launch { poller.ensureAlerts() }
     }
 
+    override fun alertsFor(tripId: String): Flow<List<Alert>> {
+        val trip = tripStore.trips.map { list -> list.firstOrNull { it.id == tripId } }.distinctUntilChanged()
+        return combine(trip, alerts, holder.generation) { t, list, _ -> t to list }
+            .mapLatest { (t, list) ->
+                if (t == null || list.isEmpty()) {
+                    emptyList()
+                } else {
+                    holder.read { tt -> alertsForTrip(t, list, tt) } ?: alertsForTrip(t, list, null)
+                }
+            }
+            .distinctUntilChanged()
+    }
+
     override val dataStatus: Flow<DataStatus> = combine(
         updater.status,
         poller.snapshot,
@@ -359,6 +384,9 @@ class DefaultTransitCore internal constructor(
             joined = joined,
             attribution = cfg?.attribution ?: DEFAULT_ATTRIBUTION,
             statusMessage = cfg?.statusMessage,
+            features = cfg?.features.orEmpty(),
+            minAppVersion = cfg?.minAppVersion ?: "0",
+            maxWatches = cfg?.maxWatches ?: DEFAULT_MAX_WATCHES,
         )
     }.distinctUntilChanged()
 
@@ -376,7 +404,7 @@ class DefaultTransitCore internal constructor(
         .filterNotNull()
 
     /** Reloads watches from the server into the offline cache. Returns false if that failed. */
-    suspend fun refreshWatches(): Boolean {
+    override suspend fun refreshWatches(): Boolean {
         if (loadToken() == null) return false
         val result = api.watches()
         if (result !is ApiResult.Success) return false
@@ -495,6 +523,9 @@ class DefaultTransitCore internal constructor(
         const val TICK_MS = 30_000L
         const val SEARCH_LIMIT = 30
         const val DEFAULT_ATTRIBUTION = "Data: Transport for NSW (CC BY 4.0)"
+
+        /** [DataStatus.maxWatches] before the server's `/v1/config` has been seen. */
+        const val DEFAULT_MAX_WATCHES = 10
     }
 }
 

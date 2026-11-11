@@ -43,6 +43,10 @@ object ApiPaths {
     const val WATCH = "/v1/watches/{id}"
     /** POST /v1/watches/{id}/test */
     const val WATCH_TEST = "/v1/watches/{id}/test"
+    /** GET /v1/places?q=text&lat=..&lon=..&limit=.. -> PlacesResponse (see Planning.kt) */
+    const val PLACES = "/v1/places"
+    /** POST /v1/plan (PlanRequest) -> PlanResponse (see Planning.kt) */
+    const val PLAN = "/v1/plan"
     const val HEALTH = "/health"
     const val STATUS = "/status"
 }
@@ -112,6 +116,8 @@ data class ConfigResponse(
     @ProtoNumber(5) val statusMessage: String? = null,
     @ProtoNumber(6) val features: Map<String, Boolean> = emptyMap(),
     @ProtoNumber(7) val packs: List<PackInfo> = emptyList(),
+    /** Most push watches one device may have. */
+    @ProtoNumber(8) val maxWatches: Int = 10,
 )
 
 @Serializable

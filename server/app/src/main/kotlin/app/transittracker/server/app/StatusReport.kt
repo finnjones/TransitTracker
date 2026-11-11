@@ -16,6 +16,24 @@ data class StatusReport(
     val packs: List<PackInfo>,
     val activeDevices: Int,
     val recentNotifications: List<NotificationView>,
+    val planner: PlannerStatusView = PlannerStatusView(),
+)
+
+/** Serializable copy of [app.transittracker.server.spi.PlannerStatus]: counts only, no requests. */
+@Serializable
+data class PlannerStatusView(
+    val available: Boolean = false,
+    val source: String = "off",
+    val placesRequests: Int = 0,
+    val planRequests: Int = 0,
+    val cacheHits: Int = 0,
+    val upstreamCalls: Int = 0,
+    val upstreamFailures: Int = 0,
+    val matchedRides: Int = 0,
+    val unmatchedRides: Int = 0,
+    val lastCallMs: Long? = null,
+    val lastHttpStatus: Int? = null,
+    val backoffUntilMs: Long? = null,
 )
 
 /** Serializable copy of [app.transittracker.server.spi.LiveStatus]. */
@@ -58,6 +76,7 @@ data class NotificationView(
 internal fun buildStatusReport(deps: ApiDependencies): StatusReport {
     val live = deps.live.status()
     val watch = deps.watches.status()
+    val planner = deps.planner.status()
     return StatusReport(
         serverTimeMs = deps.clock.nowMillis(),
         timetableVersion = deps.timetables.current.value?.version,
@@ -76,6 +95,12 @@ internal fun buildStatusReport(deps: ApiDependencies): StatusReport {
         activeDevices = deps.devices.activeCount(),
         recentNotifications = deps.notifications.recent(25).map {
             NotificationView(it.atMs, it.deviceId, it.watchId, it.tripId, it.serviceDate, it.kind, it.title, it.result)
+        },
+        planner = with(planner) {
+            PlannerStatusView(
+                available, source, placesRequests, planRequests, cacheHits, upstreamCalls, upstreamFailures,
+                matchedRides, unmatchedRides, lastCallMs, lastHttpStatus, backoffUntilMs,
+            )
         },
     )
 }
@@ -117,7 +142,7 @@ internal fun renderStatusHtml(report: StatusReport): String = buildString {
     append(" · Timetable: ").append(esc(report.timetableVersion ?: "not loaded"))
     append(" · Active devices: ").append(report.activeDevices).append("</p>")
 
-    append("<h2>Live data</h2><p>TfNSW calls today: ")
+    append("<h2>Live data</h2><p>TfNSW calls today (live feeds and journey planner): ")
         .append(report.live.callsToday).append(" / ").append(report.live.dailyBudget).append("</p>")
     table(
         listOf("Feed", "Kind", "Last fetch", "Last success", "Data time", "HTTP", "Errors", "Backoff until", "Matched", "Unmatched", "Stale"),
@@ -128,6 +153,19 @@ internal fun renderStatusHtml(report: StatusReport): String = buildString {
                 if (it.stale) "STALE" else "ok",
             )
         },
+    )
+
+    append("<h2>Journey planner</h2>")
+    table(
+        listOf("Source", "Searches", "Plans", "Cache hits", "TfNSW calls", "Failures", "Rides matched", "Rides unmatched", "Last call", "HTTP", "Backoff until"),
+        listOf(
+            report.planner.let {
+                listOf(
+                    it.source, it.placesRequests, it.planRequests, it.cacheHits, it.upstreamCalls, it.upstreamFailures,
+                    it.matchedRides, it.unmatchedRides, formatTime(it.lastCallMs), it.lastHttpStatus, formatTime(it.backoffUntilMs),
+                )
+            },
+        ),
     )
 
     append("<h2>Watches</h2>")

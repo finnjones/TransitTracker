@@ -56,7 +56,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * @param fetcher downloads raw feeds ([HttpFeedFetcher] in production, [ReplayFetcher] offline)
  * @param clock wall clock used for ages, staleness and the daily budget
  * @param recorder saves sampled raw feeds; null disables recording
- * @param rateLimiter limits calls to TfNSW (remote fetchers only)
+ * @param rateLimiter limits calls to TfNSW (remote fetchers only); used only to build the default [quota]
+ * @param quota the server-wide TfNSW daily budget and per-second limiter, shared with the journey
+ *   planner (remote fetchers only)
  * @param backoff backoff schedule after throttling or errors
  * @param retryDelayMs wait before the single retry after a 5xx (non-throttle) or network error
  * @param warmTickMs how often the keep-warm loop started by [start] runs
@@ -69,13 +71,12 @@ class LiveDataImpl(
     private val recorder: FeedRecorder? = config.recordIntervalMinutes.takeIf { it > 0 }?.let {
         FeedRecorder(config.recordingsDir, clock, minIntervalMs = it * 60_000L, retentionDays = config.recordRetentionDays)
     },
-    private val rateLimiter: RateLimiter = RateLimiter(config.maxCallsPerSecond),
+    rateLimiter: RateLimiter = TfnswQuota.rateLimiter(config.maxCallsPerSecond),
+    private val quota: TfnswQuota = TfnswQuota.fromConfig(config, clock, rateLimiter),
     private val backoff: BackoffPolicy = BackoffPolicy(),
     private val retryDelayMs: Long = 5_000,
     private val warmTickMs: Long = 1_000,
 ) : LiveData {
-
-    private val budget = DailyCallBudget(config.dailyCallBudget, config.dataDir.resolve(CALL_COUNTER_FILE), clock)
 
     private val sources: Map<Pair<String, FeedKind>, Source> = buildMap {
         for (feed in config.feeds) for (kind in FeedKind.entries) {
@@ -181,8 +182,9 @@ class LiveDataImpl(
     override fun status(): LiveStatus {
         val now = clock.nowMillis()
         return LiveStatus(
-            callsToday = budget.callsToday,
-            dailyBudget = config.dailyCallBudget,
+            // Shared with the journey planner: this is every TfNSW call made today with the key.
+            callsToday = quota.callsToday,
+            dailyBudget = quota.dailyBudget,
             feeds = sources.values.map { s ->
                 val data = if (s.kind == FeedKind.TRIP_UPDATES) tripData[s.feed.id] else null
                 FeedStatus(
@@ -309,7 +311,7 @@ class LiveDataImpl(
             }
             is FetchResult.Success -> {
                 val message = try {
-                    FeedMessage.ADAPTER.decode(result.bytes)
+                    FeedMessage.ADAPTER.decode(TfnswWireFixes.normalise(result.bytes))
                 } catch (e: Exception) {
                     onFailure(source, 200, "undecodable feed: $e", fetchedAt)
                     return Refresh.FAILED
@@ -350,10 +352,7 @@ class LiveDataImpl(
     }
 
     private suspend fun callOnce(source: Source): FetchResult? {
-        if (fetcher.isRemote) {
-            if (!budget.tryConsume()) return null
-            rateLimiter.acquire()
-        }
+        if (fetcher.isRemote && !quota.acquire()) return null
         return fetcher.fetch(source.feed, source.kind)
     }
 
@@ -508,7 +507,7 @@ class LiveDataImpl(
         if (now - lastSuccess > 2 * minAgeMs) return true
         val dataTime = source.dataTimeMs
         if (dataTime != null && now - dataTime > maxOf(2 * minAgeMs, TRIP_STALE_MS)) return true
-        if (fetcher.isRemote && budget.exhausted) return true
+        if (fetcher.isRemote && quota.exhausted) return true
         return false
     }
 
@@ -603,8 +602,8 @@ class LiveDataImpl(
         /** Vehicle positions older than this are hidden. */
         const val VEHICLE_MAX_AGE_MS: Long = 2 * 60_000L
 
-        /** File in [ServerConfig.dataDir] holding today's TfNSW call count. */
-        const val CALL_COUNTER_FILE: String = "live-calls-today.txt"
+        /** File in [ServerConfig.dataDir] holding today's TfNSW call count (see [TfnswQuota]). */
+        const val CALL_COUNTER_FILE: String = TfnswQuota.CALL_COUNTER_FILE
 
         private val log = LoggerFactory.getLogger(LiveDataImpl::class.java)
     }

@@ -80,6 +80,10 @@ The repository is private: GitHub will ask for your username and a
    - **Public Transport - Realtime Trip Update** (v2: delays and cancellations)
    - **Public Transport - Realtime Vehicle Positions** (v2: the map)
    - **Public Transport - Realtime Alerts** (v2: disruptions)
+   - **Trip Planner APIs** (journey planning and the address/stop search: `/v1/tp/trip` and
+     `/v1/tp/stop_finder`). If the key was made before journey planning existed, add this product
+     to the same application: the key stays the same. Without it `/v1/plan` and `/v1/places`
+     answer `503 planner_unavailable` and the app hides journey planning.
 4. Copy the **API key** shown for the application. It goes in `.env` as `TFNSW_API_KEY` (step 7).
    Treat it like a password: it never goes on a phone or into git.
 
@@ -207,14 +211,28 @@ fails, on the zips the server already downloaded:
 ```bash
 ./tt-admin check-gtfs syd-rail \
   "$(docker compose exec -T tt-server sh -c 'ls -t /data/gtfs/v1_gtfs_schedule_sydneytrains/*.zip | head -1')" \
-  "$(docker compose exec -T tt-server sh -c 'ls -t /data/gtfs/v1_gtfs_schedule_metro/*.zip | head -1')"
+  "$(docker compose exec -T tt-server sh -c 'ls -t /data/gtfs/v2_gtfs_schedule_metro/*.zip | head -1')"
+```
+
+`tt-admin planner-capture` makes **one real Trip Planner call** with the server's key (counted in
+today's budget) and saves TfNSW's raw JSON answer to a file: no request headers, no key. Use it to
+capture real answers for checking the journey mapping or for replay (`TT_REPLAY_DIR/planner/`, see
+`testdata/planner/README.md`). The file holds the places you asked about, so keep it private:
+
+```bash
+./tt-admin planner-capture places "strathfield" /data/captures/stop_finder-strathfield.json
+./tt-admin planner-capture plan -33.8718,151.0943 -33.8840,151.2063 --at 2026-11-12T08:00 /data/captures/trip.json
+docker compose cp tt-server:/data/captures ./captures
 ```
 
 When several feeds share ids (e.g. Epping or Central station in both the Sydney Trains and Metro
 feeds) the server merges them with a fixed policy: shared stations may differ slightly in position
 (up to 300 m for stations, 50 m for other stops) and in optional details, but must have the same
 name and type; service and shape ids that two feeds use for different things are renamed in the
-later feed (`<id>~2`). Details are in `GtfsMerger.kt`.
+later feed (`<id>~2`). Details are in `GtfsMerger.kt`. On the real feeds (11 Nov 2026) 33 stops are
+shared (Central, Martin Place, Sydenham, Epping, Chatswood and the Bankstown line stations), all
+reconciled, nothing renamed. If the log warns that an input "has no trips in the pack window", that
+source is stale or wrong (the old `/v1/gtfs/schedule/metro` bundle did exactly that).
 
 ## 11. The status page
 
@@ -231,8 +249,10 @@ the server also wants the `TT_ADMIN_TOKEN` from `.env` (two locks):
 curl -H "Authorization: Bearer <TT_ADMIN_TOKEN>" https://tt.<your-domain>/status   # needs an Access session or service token too
 ```
 
-It shows TfNSW calls used today, the age of each live feed, timetable packs, device count
-and recent notifications. Requests through the tunnel without the token get `403`.
+It shows TfNSW calls used today (live feeds and journey planner together: one budget per key),
+the age of each live feed, journey planner counts (searches, plans, cache hits, TfNSW calls,
+rides matched to the timetable or not), timetable packs, device count and recent notifications.
+No searches, addresses or positions are shown or logged. Requests through the tunnel without the token get `403`.
 
 ## 12. Nightly backups
 

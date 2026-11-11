@@ -1,0 +1,1935 @@
+{
+ "version": "10.6.21.17",
+ "systemMessages": [],
+ "journeys": [
+  {
+   "rating": 0,
+   "isAdditional": false,
+   "interchanges": 1,
+   "legs": [
+    {
+     "duration": 240,
+     "distance": 260,
+     "origin": {
+      "id": "streetID:312550282:0:16898564:-1:Eddy Ave:Haymarket:Eddy Ave::Eddy Ave:2000:ANY:DIVA_STREET",
+      "isGlobalId": false,
+      "name": "Eddy Ave, Haymarket",
+      "disassembledName": "Eddy Ave",
+      "type": "street",
+      "coord": [
+       -33.8843,
+       151.2073
+      ],
+      "niveau": 0,
+      "parent": {
+       "id": "placeID:95302480:1",
+       "name": "Haymarket",
+       "type": "locality"
+      },
+      "properties": {},
+      "departureTimeBaseTimetable": "2026-11-10T19:56:00Z",
+      "departureTimePlanned": "2026-11-10T19:56:00Z",
+      "departureTimeEstimated": "2026-11-10T19:56:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "CEN_P1",
+      "name": "Central Station, Platform 1, Sydney",
+      "disassembledName": "Central Station, Platform 1",
+      "type": "platform",
+      "coord": [
+       -33.8831,
+       151.2064
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "CEN",
+       "name": "Central Station, Platform 1, Sydney",
+       "disassembledName": "Central Station, Platform 1",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95304184:1",
+        "name": "Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "CEN"
+       },
+       "coord": [
+        -33.8831,
+        151.2064
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 1",
+       "area": "1",
+       "platform": "CEN1",
+       "platformName": "Platform 1",
+       "plannedPlatformName": "Platform 1"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T20:00:00Z",
+      "arrivalTimePlanned": "2026-11-10T20:00:00Z",
+      "arrivalTimeEstimated": "2026-11-10T20:00:00Z"
+     },
+     "transportation": {
+      "product": {
+       "class": 100,
+       "name": "footpath",
+       "iconId": 100
+      },
+      "properties": {
+       "tripCode": 0,
+       "lineDisplay": "LINE"
+      }
+     },
+     "stopSequence": [
+      {
+       "id": "streetID:312550282:0:16898564:-1:Eddy Ave:Haymarket:Eddy Ave::Eddy Ave:2000:ANY:DIVA_STREET",
+       "isGlobalId": false,
+       "name": "Eddy Ave, Haymarket",
+       "disassembledName": "Eddy Ave",
+       "type": "street",
+       "coord": [
+        -33.8843,
+        151.2073
+       ],
+       "niveau": 0,
+       "parent": {
+        "id": "placeID:95302480:1",
+        "name": "Haymarket",
+        "type": "locality"
+       },
+       "properties": {}
+      },
+      {
+       "isGlobalId": true,
+       "id": "CEN_P1",
+       "name": "Central Station, Platform 1, Sydney",
+       "disassembledName": "Central Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.8831,
+        151.2064
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "CEN",
+        "name": "Central Station, Platform 1, Sydney",
+        "disassembledName": "Central Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95304184:1",
+         "name": "Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "CEN"
+        },
+        "coord": [
+         -33.8831,
+         151.2064
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "CEN1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       }
+      }
+     ],
+     "coords": [
+      [
+       -33.8843,
+       151.2073
+      ],
+      [
+       -33.8837,
+       151.20685
+      ],
+      [
+       -33.8831,
+       151.2064
+      ]
+     ],
+     "footPathInfo": [
+      {
+       "position": "IDEST",
+       "duration": 240,
+       "footPathElem": []
+      }
+     ],
+     "infos": []
+    },
+    {
+     "duration": 660,
+     "isRealtimeControlled": true,
+     "realtimeStatus": [
+      "MONITORED"
+     ],
+     "origin": {
+      "isGlobalId": true,
+      "id": "CEN_P1",
+      "name": "Central Station, Platform 1, Sydney",
+      "disassembledName": "Central Station, Platform 1",
+      "type": "platform",
+      "coord": [
+       -33.8831,
+       151.2064
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "CEN",
+       "name": "Central Station, Platform 1, Sydney",
+       "disassembledName": "Central Station, Platform 1",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95304184:1",
+        "name": "Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "CEN"
+       },
+       "coord": [
+        -33.8831,
+        151.2064
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 1",
+       "area": "1",
+       "platform": "CEN1",
+       "platformName": "Platform 1",
+       "plannedPlatformName": "Platform 1",
+       "occupancy": "MANY_SEATS"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T20:00:00Z",
+      "departureTimePlanned": "2026-11-10T20:00:00Z",
+      "departureTimeEstimated": "2026-11-10T20:02:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "NSY_P1",
+      "name": "North Sydney Station, Platform 1, North Sydney",
+      "disassembledName": "North Sydney Station, Platform 1",
+      "type": "platform",
+      "coord": [
+       -33.8405,
+       151.2074
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "NSY",
+       "name": "North Sydney Station, Platform 1, North Sydney",
+       "disassembledName": "North Sydney Station, Platform 1",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95306586:1",
+        "name": "North Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "NSY"
+       },
+       "coord": [
+        -33.8405,
+        151.2074
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 1",
+       "area": "1",
+       "platform": "NSY1",
+       "platformName": "Platform 1",
+       "plannedPlatformName": "Platform 1"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T20:11:00Z",
+      "arrivalTimePlanned": "2026-11-10T20:11:00Z",
+      "arrivalTimeEstimated": "2026-11-10T20:13:00Z"
+     },
+     "transportation": {
+      "id": "nsw:020T1: :H:sj2",
+      "name": "Sydney Trains Network T1 North Shore & Western Line",
+      "disassembledName": "T1",
+      "number": "T1 North Shore & Western Line",
+      "description": "City to Berowra via Gordon",
+      "product": {
+       "id": 1,
+       "class": 1,
+       "name": "Sydney Trains Network",
+       "iconId": 1
+      },
+      "operator": {
+       "id": "x0001",
+       "name": "Sydney Trains"
+      },
+      "destination": {
+       "id": "10101100",
+       "name": "Chatswood",
+       "type": "stop"
+      },
+      "properties": {
+       "isTTB": true,
+       "tripCode": 541,
+       "timetablePeriod": "NSW JP",
+       "lineDisplay": "LINE",
+       "globalId": "3001",
+       "AVMSTripID": "T1.N.0700",
+       "RealtimeTripId": "T1.N.0700",
+       "gtfsTripId": "3001.nsw-2-T1.1.TA.1840.sj2"
+      },
+      "iconId": 1
+     },
+     "stopSequence": [
+      {
+       "isGlobalId": true,
+       "id": "CEN_P1",
+       "name": "Central Station, Platform 1, Sydney",
+       "disassembledName": "Central Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.8831,
+        151.2064
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "CEN",
+        "name": "Central Station, Platform 1, Sydney",
+        "disassembledName": "Central Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95304184:1",
+         "name": "Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "CEN"
+        },
+        "coord": [
+         -33.8831,
+         151.2064
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "CEN1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1",
+        "occupancy": "MANY_SEATS"
+       },
+       "departureTimePlanned": "2026-11-10T20:00:00Z",
+       "departureTimeEstimated": "2026-11-10T20:00:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "THL_P1",
+       "name": "Town Hall Station, Platform 1, Sydney",
+       "disassembledName": "Town Hall Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.8736,
+        151.207
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "THL",
+        "name": "Town Hall Station, Platform 1, Sydney",
+        "disassembledName": "Town Hall Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95304184:1",
+         "name": "Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "THL"
+        },
+        "coord": [
+         -33.8736,
+         151.207
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "PLATFORM1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       },
+       "arrivalTimePlanned": "2026-11-10T20:03:00Z",
+       "arrivalTimeEstimated": "2026-11-10T20:03:00Z",
+       "departureTimePlanned": "2026-11-10T20:03:00Z",
+       "departureTimeEstimated": "2026-11-10T20:03:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "WYN_P1",
+       "name": "Wynyard Station, Platform 1, Sydney",
+       "disassembledName": "Wynyard Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.8658,
+        151.206
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "WYN",
+        "name": "Wynyard Station, Platform 1, Sydney",
+        "disassembledName": "Wynyard Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95304184:1",
+         "name": "Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "WYN"
+        },
+        "coord": [
+         -33.8658,
+         151.206
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "PLATFORM1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       },
+       "arrivalTimePlanned": "2026-11-10T20:06:00Z",
+       "arrivalTimeEstimated": "2026-11-10T20:06:00Z",
+       "departureTimePlanned": "2026-11-10T20:06:00Z",
+       "departureTimeEstimated": "2026-11-10T20:06:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "NSY_P1",
+       "name": "North Sydney Station, Platform 1, North Sydney",
+       "disassembledName": "North Sydney Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.8405,
+        151.2074
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "NSY",
+        "name": "North Sydney Station, Platform 1, North Sydney",
+        "disassembledName": "North Sydney Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95306586:1",
+         "name": "North Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "NSY"
+        },
+        "coord": [
+         -33.8405,
+         151.2074
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "NSY1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       },
+       "arrivalTimePlanned": "2026-11-10T20:11:00Z",
+       "arrivalTimeEstimated": "2026-11-10T20:11:00Z"
+      }
+     ],
+     "coords": [
+      [
+       -33.8831,
+       151.2064
+      ],
+      [
+       -33.8736,
+       151.207
+      ],
+      [
+       -33.8658,
+       151.206
+      ],
+      [
+       -33.8405,
+       151.2074
+      ]
+     ],
+     "properties": {
+      "PlanLowFloorVehicle": "1",
+      "PlanWheelChairAccess": "1"
+     },
+     "infos": [],
+     "footPathInfo": [
+      {
+       "position": "AFTER",
+       "duration": 180,
+       "footPathElem": []
+      }
+     ],
+     "footPathInfoRedundant": false,
+     "interchange": {
+      "desc": "Fussweg",
+      "type": 100,
+      "coords": [
+       [
+        -33.8405,
+        151.2074
+       ],
+       [
+        -33.8402,
+        151.2079
+       ]
+      ]
+     }
+    },
+    {
+     "duration": 480,
+     "isRealtimeControlled": false,
+     "origin": {
+      "isGlobalId": true,
+      "id": "206041",
+      "name": "North Sydney Station, Stand D, North Sydney",
+      "disassembledName": "North Sydney Station, Stand D",
+      "type": "platform",
+      "coord": [
+       -33.8402,
+       151.2079
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "206010",
+       "name": "North Sydney Station, Stand D, North Sydney",
+       "disassembledName": "North Sydney Station, Stand D",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95306586:1",
+        "name": "North Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101326"
+       },
+       "coord": [
+        -33.8402,
+        151.2079
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Stand D",
+       "area": "1",
+       "platform": "STANDD",
+       "platformName": "Stand D",
+       "plannedPlatformName": "Stand D"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T20:18:00Z",
+      "departureTimePlanned": "2026-11-10T20:18:00Z",
+      "departureTimeEstimated": "2026-11-10T20:18:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "206271",
+      "name": "Miller St at Amherst St, Cammeray",
+      "disassembledName": "Miller St at Amherst St",
+      "type": "platform",
+      "coord": [
+       -33.8238,
+       151.2102
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "G206271",
+       "name": "Miller St at Amherst St, Cammeray",
+       "disassembledName": "Miller St at Amherst St",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95308070:1",
+        "name": "Cammeray",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10206271"
+       },
+       "coord": [
+        -33.8238,
+        151.2102
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Miller St at Amherst St",
+       "area": "0",
+       "platform": "X1",
+       "platformName": "Miller St at Amherst St",
+       "plannedPlatformName": "Miller St at Amherst St"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T20:26:00Z",
+      "arrivalTimePlanned": "2026-11-10T20:26:00Z",
+      "arrivalTimeEstimated": "2026-11-10T20:26:00Z"
+     },
+     "transportation": {
+      "id": "nsw:2202: :H:sj2",
+      "name": "Sydney Buses Network 202",
+      "disassembledName": "202",
+      "number": "202",
+      "description": "North Sydney to Northbridge",
+      "product": {
+       "id": 5,
+       "class": 5,
+       "name": "Sydney Buses Network",
+       "iconId": 5
+      },
+      "operator": {
+       "id": "2436",
+       "name": "Transit Systems"
+      },
+      "destination": {
+       "id": "10101100",
+       "name": "Northbridge",
+       "type": "stop"
+      },
+      "properties": {
+       "isTTB": true,
+       "tripCode": 541,
+       "timetablePeriod": "NSW JP",
+       "lineDisplay": "LINE",
+       "globalId": "3001",
+       "AVMSTripID": "2649700",
+       "RealtimeTripId": "2649700",
+       "gtfsTripId": "3001.nsw-2-202.1.TA.1840.sj2"
+      },
+      "iconId": 5
+     },
+     "stopSequence": [
+      {
+       "isGlobalId": true,
+       "id": "206041",
+       "name": "North Sydney Station, Stand D, North Sydney",
+       "disassembledName": "North Sydney Station, Stand D",
+       "type": "platform",
+       "coord": [
+        -33.8402,
+        151.2079
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "206010",
+        "name": "North Sydney Station, Stand D, North Sydney",
+        "disassembledName": "North Sydney Station, Stand D",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95306586:1",
+         "name": "North Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101326"
+        },
+        "coord": [
+         -33.8402,
+         151.2079
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Stand D",
+        "area": "1",
+        "platform": "STANDD",
+        "platformName": "Stand D",
+        "plannedPlatformName": "Stand D"
+       },
+       "departureTimePlanned": "2026-11-10T20:18:00Z",
+       "departureTimeEstimated": "2026-11-10T20:18:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "206230",
+       "name": "Miller St at Falcon St, North Sydney",
+       "disassembledName": "Miller St at Falcon St",
+       "type": "platform",
+       "coord": [
+        -33.833,
+        151.209
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "G206230",
+        "name": "Miller St at Falcon St, North Sydney",
+        "disassembledName": "Miller St at Falcon St",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95308771:1",
+         "name": "North Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10206230"
+        },
+        "coord": [
+         -33.833,
+         151.209
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Miller St at Falcon St",
+        "area": "0",
+        "platform": "X1",
+        "platformName": "Miller St at Falcon St",
+        "plannedPlatformName": "Miller St at Falcon St"
+       },
+       "arrivalTimePlanned": "2026-11-10T20:22:00Z",
+       "arrivalTimeEstimated": "2026-11-10T20:22:00Z",
+       "departureTimePlanned": "2026-11-10T20:22:00Z",
+       "departureTimeEstimated": "2026-11-10T20:22:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "206271",
+       "name": "Miller St at Amherst St, Cammeray",
+       "disassembledName": "Miller St at Amherst St",
+       "type": "platform",
+       "coord": [
+        -33.8238,
+        151.2102
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "G206271",
+        "name": "Miller St at Amherst St, Cammeray",
+        "disassembledName": "Miller St at Amherst St",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95308070:1",
+         "name": "Cammeray",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10206271"
+        },
+        "coord": [
+         -33.8238,
+         151.2102
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Miller St at Amherst St",
+        "area": "0",
+        "platform": "X1",
+        "platformName": "Miller St at Amherst St",
+        "plannedPlatformName": "Miller St at Amherst St"
+       },
+       "arrivalTimePlanned": "2026-11-10T20:26:00Z",
+       "arrivalTimeEstimated": "2026-11-10T20:26:00Z"
+      }
+     ],
+     "coords": [
+      [
+       -33.8402,
+       151.2079
+      ],
+      [
+       -33.833,
+       151.209
+      ],
+      [
+       -33.8238,
+       151.2102
+      ]
+     ],
+     "properties": {
+      "PlanLowFloorVehicle": "1",
+      "PlanWheelChairAccess": "1"
+     },
+     "infos": []
+    },
+    {
+     "duration": 180,
+     "distance": 210,
+     "origin": {
+      "isGlobalId": true,
+      "id": "206271",
+      "name": "Miller St at Amherst St, Cammeray",
+      "disassembledName": "Miller St at Amherst St",
+      "type": "platform",
+      "coord": [
+       -33.8238,
+       151.2102
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "G206271",
+       "name": "Miller St at Amherst St, Cammeray",
+       "disassembledName": "Miller St at Amherst St",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95308070:1",
+        "name": "Cammeray",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10206271"
+       },
+       "coord": [
+        -33.8238,
+        151.2102
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Miller St at Amherst St",
+       "area": "0",
+       "platform": "X1",
+       "platformName": "Miller St at Amherst St",
+       "plannedPlatformName": "Miller St at Amherst St"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T20:26:00Z",
+      "departureTimePlanned": "2026-11-10T20:26:00Z",
+      "departureTimeEstimated": "2026-11-10T20:26:00Z"
+     },
+     "destination": {
+      "id": "streetID:527238566:0:81580607:-1:Miller St:Cammeray:Miller St::Miller St:2000:ANY:DIVA_STREET",
+      "isGlobalId": false,
+      "name": "Miller St, Cammeray",
+      "disassembledName": "Miller St",
+      "type": "street",
+      "coord": [
+       -33.822,
+       151.211
+      ],
+      "niveau": 0,
+      "parent": {
+       "id": "placeID:95302070:1",
+       "name": "Cammeray",
+       "type": "locality"
+      },
+      "properties": {},
+      "arrivalTimeBaseTimetable": "2026-11-10T20:29:00Z",
+      "arrivalTimePlanned": "2026-11-10T20:29:00Z",
+      "arrivalTimeEstimated": "2026-11-10T20:29:00Z"
+     },
+     "transportation": {
+      "product": {
+       "class": 100,
+       "name": "footpath",
+       "iconId": 100
+      },
+      "properties": {
+       "tripCode": 0,
+       "lineDisplay": "LINE"
+      }
+     },
+     "stopSequence": [
+      {
+       "isGlobalId": true,
+       "id": "206271",
+       "name": "Miller St at Amherst St, Cammeray",
+       "disassembledName": "Miller St at Amherst St",
+       "type": "platform",
+       "coord": [
+        -33.8238,
+        151.2102
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "G206271",
+        "name": "Miller St at Amherst St, Cammeray",
+        "disassembledName": "Miller St at Amherst St",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95308070:1",
+         "name": "Cammeray",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10206271"
+        },
+        "coord": [
+         -33.8238,
+         151.2102
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Miller St at Amherst St",
+        "area": "0",
+        "platform": "X1",
+        "platformName": "Miller St at Amherst St",
+        "plannedPlatformName": "Miller St at Amherst St"
+       }
+      },
+      {
+       "id": "streetID:527238566:0:81580607:-1:Miller St:Cammeray:Miller St::Miller St:2000:ANY:DIVA_STREET",
+       "isGlobalId": false,
+       "name": "Miller St, Cammeray",
+       "disassembledName": "Miller St",
+       "type": "street",
+       "coord": [
+        -33.822,
+        151.211
+       ],
+       "niveau": 0,
+       "parent": {
+        "id": "placeID:95302070:1",
+        "name": "Cammeray",
+        "type": "locality"
+       },
+       "properties": {}
+      }
+     ],
+     "coords": [
+      [
+       -33.8238,
+       151.2102
+      ],
+      [
+       -33.8229,
+       151.2106
+      ],
+      [
+       -33.822,
+       151.211
+      ]
+     ],
+     "footPathInfo": [
+      {
+       "position": "IDEST",
+       "duration": 180,
+       "footPathElem": []
+      }
+     ],
+     "infos": []
+    }
+   ],
+   "daysOfService": {
+    "rvb": "1"
+   }
+  },
+  {
+   "rating": 0,
+   "isAdditional": false,
+   "interchanges": 1,
+   "legs": [
+    {
+     "duration": 240,
+     "distance": 260,
+     "origin": {
+      "id": "streetID:312550282:0:16898564:-1:Eddy Ave:Haymarket:Eddy Ave::Eddy Ave:2000:ANY:DIVA_STREET",
+      "isGlobalId": false,
+      "name": "Eddy Ave, Haymarket",
+      "disassembledName": "Eddy Ave",
+      "type": "street",
+      "coord": [
+       -33.8843,
+       151.2073
+      ],
+      "niveau": 0,
+      "parent": {
+       "id": "placeID:95302480:1",
+       "name": "Haymarket",
+       "type": "locality"
+      },
+      "properties": {},
+      "departureTimeBaseTimetable": "2026-11-10T20:26:00Z",
+      "departureTimePlanned": "2026-11-10T20:26:00Z",
+      "departureTimeEstimated": "2026-11-10T20:26:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "CEN_P1",
+      "name": "Central Station, Platform 1, Sydney",
+      "disassembledName": "Central Station, Platform 1",
+      "type": "platform",
+      "coord": [
+       -33.8831,
+       151.2064
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "CEN",
+       "name": "Central Station, Platform 1, Sydney",
+       "disassembledName": "Central Station, Platform 1",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95304184:1",
+        "name": "Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "CEN"
+       },
+       "coord": [
+        -33.8831,
+        151.2064
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 1",
+       "area": "1",
+       "platform": "CEN1",
+       "platformName": "Platform 1",
+       "plannedPlatformName": "Platform 1"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T20:30:00Z",
+      "arrivalTimePlanned": "2026-11-10T20:30:00Z",
+      "arrivalTimeEstimated": "2026-11-10T20:30:00Z"
+     },
+     "transportation": {
+      "product": {
+       "class": 100,
+       "name": "footpath",
+       "iconId": 100
+      },
+      "properties": {
+       "tripCode": 0,
+       "lineDisplay": "LINE"
+      }
+     },
+     "stopSequence": [
+      {
+       "id": "streetID:312550282:0:16898564:-1:Eddy Ave:Haymarket:Eddy Ave::Eddy Ave:2000:ANY:DIVA_STREET",
+       "isGlobalId": false,
+       "name": "Eddy Ave, Haymarket",
+       "disassembledName": "Eddy Ave",
+       "type": "street",
+       "coord": [
+        -33.8843,
+        151.2073
+       ],
+       "niveau": 0,
+       "parent": {
+        "id": "placeID:95302480:1",
+        "name": "Haymarket",
+        "type": "locality"
+       },
+       "properties": {}
+      },
+      {
+       "isGlobalId": true,
+       "id": "CEN_P1",
+       "name": "Central Station, Platform 1, Sydney",
+       "disassembledName": "Central Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.8831,
+        151.2064
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "CEN",
+        "name": "Central Station, Platform 1, Sydney",
+        "disassembledName": "Central Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95304184:1",
+         "name": "Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "CEN"
+        },
+        "coord": [
+         -33.8831,
+         151.2064
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "CEN1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       }
+      }
+     ],
+     "coords": [
+      [
+       -33.8843,
+       151.2073
+      ],
+      [
+       -33.8837,
+       151.20685
+      ],
+      [
+       -33.8831,
+       151.2064
+      ]
+     ],
+     "footPathInfo": [
+      {
+       "position": "IDEST",
+       "duration": 240,
+       "footPathElem": []
+      }
+     ],
+     "infos": []
+    },
+    {
+     "duration": 660,
+     "isRealtimeControlled": false,
+     "origin": {
+      "isGlobalId": true,
+      "id": "CEN_P1",
+      "name": "Central Station, Platform 1, Sydney",
+      "disassembledName": "Central Station, Platform 1",
+      "type": "platform",
+      "coord": [
+       -33.8831,
+       151.2064
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "CEN",
+       "name": "Central Station, Platform 1, Sydney",
+       "disassembledName": "Central Station, Platform 1",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95304184:1",
+        "name": "Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "CEN"
+       },
+       "coord": [
+        -33.8831,
+        151.2064
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 1",
+       "area": "1",
+       "platform": "CEN1",
+       "platformName": "Platform 1",
+       "plannedPlatformName": "Platform 1",
+       "occupancy": "MANY_SEATS"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T20:30:00Z",
+      "departureTimePlanned": "2026-11-10T20:30:00Z",
+      "departureTimeEstimated": "2026-11-10T20:30:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "NSY_P1",
+      "name": "North Sydney Station, Platform 1, North Sydney",
+      "disassembledName": "North Sydney Station, Platform 1",
+      "type": "platform",
+      "coord": [
+       -33.8405,
+       151.2074
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "NSY",
+       "name": "North Sydney Station, Platform 1, North Sydney",
+       "disassembledName": "North Sydney Station, Platform 1",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95306586:1",
+        "name": "North Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "NSY"
+       },
+       "coord": [
+        -33.8405,
+        151.2074
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Platform 1",
+       "area": "1",
+       "platform": "NSY1",
+       "platformName": "Platform 1",
+       "plannedPlatformName": "Platform 1"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T20:41:00Z",
+      "arrivalTimePlanned": "2026-11-10T20:41:00Z",
+      "arrivalTimeEstimated": "2026-11-10T20:41:00Z"
+     },
+     "transportation": {
+      "id": "nsw:020T1: :H:sj2",
+      "name": "Sydney Trains Network T1 North Shore & Western Line",
+      "disassembledName": "T1",
+      "number": "T1 North Shore & Western Line",
+      "description": "City to Berowra via Gordon",
+      "product": {
+       "id": 1,
+       "class": 1,
+       "name": "Sydney Trains Network",
+       "iconId": 1
+      },
+      "operator": {
+       "id": "x0001",
+       "name": "Sydney Trains"
+      },
+      "destination": {
+       "id": "10101100",
+       "name": "Chatswood",
+       "type": "stop"
+      },
+      "properties": {
+       "isTTB": true,
+       "tripCode": 541,
+       "timetablePeriod": "NSW JP",
+       "lineDisplay": "LINE",
+       "globalId": "3001",
+       "AVMSTripID": "145F.1361.120.48.A.8.79999925",
+       "RealtimeTripId": "145F.1361.120.48.A.8.79999925",
+       "gtfsTripId": "3001.nsw-2-T1.1.TA.1840.sj2"
+      },
+      "iconId": 1
+     },
+     "stopSequence": [
+      {
+       "isGlobalId": true,
+       "id": "CEN_P1",
+       "name": "Central Station, Platform 1, Sydney",
+       "disassembledName": "Central Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.8831,
+        151.2064
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "CEN",
+        "name": "Central Station, Platform 1, Sydney",
+        "disassembledName": "Central Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95304184:1",
+         "name": "Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "CEN"
+        },
+        "coord": [
+         -33.8831,
+         151.2064
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "CEN1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1",
+        "occupancy": "MANY_SEATS"
+       },
+       "departureTimePlanned": "2026-11-10T20:30:00Z",
+       "departureTimeEstimated": "2026-11-10T20:30:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "THL_P1",
+       "name": "Town Hall Station, Platform 1, Sydney",
+       "disassembledName": "Town Hall Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.8736,
+        151.207
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "THL",
+        "name": "Town Hall Station, Platform 1, Sydney",
+        "disassembledName": "Town Hall Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95304184:1",
+         "name": "Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "THL"
+        },
+        "coord": [
+         -33.8736,
+         151.207
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "PLATFORM1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       },
+       "arrivalTimePlanned": "2026-11-10T20:33:00Z",
+       "arrivalTimeEstimated": "2026-11-10T20:33:00Z",
+       "departureTimePlanned": "2026-11-10T20:33:00Z",
+       "departureTimeEstimated": "2026-11-10T20:33:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "WYN_P1",
+       "name": "Wynyard Station, Platform 1, Sydney",
+       "disassembledName": "Wynyard Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.8658,
+        151.206
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "WYN",
+        "name": "Wynyard Station, Platform 1, Sydney",
+        "disassembledName": "Wynyard Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95304184:1",
+         "name": "Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "WYN"
+        },
+        "coord": [
+         -33.8658,
+         151.206
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "PLATFORM1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       },
+       "arrivalTimePlanned": "2026-11-10T20:36:00Z",
+       "arrivalTimeEstimated": "2026-11-10T20:36:00Z",
+       "departureTimePlanned": "2026-11-10T20:36:00Z",
+       "departureTimeEstimated": "2026-11-10T20:36:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "NSY_P1",
+       "name": "North Sydney Station, Platform 1, North Sydney",
+       "disassembledName": "North Sydney Station, Platform 1",
+       "type": "platform",
+       "coord": [
+        -33.8405,
+        151.2074
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "NSY",
+        "name": "North Sydney Station, Platform 1, North Sydney",
+        "disassembledName": "North Sydney Station, Platform 1",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95306586:1",
+         "name": "North Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "NSY"
+        },
+        "coord": [
+         -33.8405,
+         151.2074
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Platform 1",
+        "area": "1",
+        "platform": "NSY1",
+        "platformName": "Platform 1",
+        "plannedPlatformName": "Platform 1"
+       },
+       "arrivalTimePlanned": "2026-11-10T20:41:00Z",
+       "arrivalTimeEstimated": "2026-11-10T20:41:00Z"
+      }
+     ],
+     "coords": [
+      [
+       -33.8831,
+       151.2064
+      ],
+      [
+       -33.8736,
+       151.207
+      ],
+      [
+       -33.8658,
+       151.206
+      ],
+      [
+       -33.8405,
+       151.2074
+      ]
+     ],
+     "properties": {
+      "PlanLowFloorVehicle": "1",
+      "PlanWheelChairAccess": "1"
+     },
+     "infos": [],
+     "footPathInfo": [
+      {
+       "position": "AFTER",
+       "duration": 180,
+       "footPathElem": []
+      }
+     ],
+     "footPathInfoRedundant": false,
+     "interchange": {
+      "desc": "Fussweg",
+      "type": 100,
+      "coords": [
+       [
+        -33.8405,
+        151.2074
+       ],
+       [
+        -33.8402,
+        151.2079
+       ]
+      ]
+     }
+    },
+    {
+     "duration": 480,
+     "isRealtimeControlled": false,
+     "origin": {
+      "isGlobalId": true,
+      "id": "206041",
+      "name": "North Sydney Station, Stand D, North Sydney",
+      "disassembledName": "North Sydney Station, Stand D",
+      "type": "platform",
+      "coord": [
+       -33.8402,
+       151.2079
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "206010",
+       "name": "North Sydney Station, Stand D, North Sydney",
+       "disassembledName": "North Sydney Station, Stand D",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95306586:1",
+        "name": "North Sydney",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10101326"
+       },
+       "coord": [
+        -33.8402,
+        151.2079
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Stand D",
+       "area": "1",
+       "platform": "STANDD",
+       "platformName": "Stand D",
+       "plannedPlatformName": "Stand D"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T20:48:00Z",
+      "departureTimePlanned": "2026-11-10T20:48:00Z",
+      "departureTimeEstimated": "2026-11-10T20:48:00Z"
+     },
+     "destination": {
+      "isGlobalId": true,
+      "id": "206271",
+      "name": "Miller St at Amherst St, Cammeray",
+      "disassembledName": "Miller St at Amherst St",
+      "type": "platform",
+      "coord": [
+       -33.8238,
+       151.2102
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "G206271",
+       "name": "Miller St at Amherst St, Cammeray",
+       "disassembledName": "Miller St at Amherst St",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95308070:1",
+        "name": "Cammeray",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10206271"
+       },
+       "coord": [
+        -33.8238,
+        151.2102
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Miller St at Amherst St",
+       "area": "0",
+       "platform": "X1",
+       "platformName": "Miller St at Amherst St",
+       "plannedPlatformName": "Miller St at Amherst St"
+      },
+      "arrivalTimeBaseTimetable": "2026-11-10T20:56:00Z",
+      "arrivalTimePlanned": "2026-11-10T20:56:00Z",
+      "arrivalTimeEstimated": "2026-11-10T20:56:00Z"
+     },
+     "transportation": {
+      "id": "nsw:2202: :H:sj2",
+      "name": "Sydney Buses Network 202",
+      "disassembledName": "202",
+      "number": "202",
+      "description": "North Sydney to Northbridge",
+      "product": {
+       "id": 5,
+       "class": 5,
+       "name": "Sydney Buses Network",
+       "iconId": 5
+      },
+      "operator": {
+       "id": "2436",
+       "name": "Transit Systems"
+      },
+      "destination": {
+       "id": "10101100",
+       "name": "Northbridge",
+       "type": "stop"
+      },
+      "properties": {
+       "isTTB": true,
+       "tripCode": 541,
+       "timetablePeriod": "NSW JP",
+       "lineDisplay": "LINE",
+       "globalId": "3001",
+       "AVMSTripID": "2649925",
+       "RealtimeTripId": "2649925",
+       "gtfsTripId": "3001.nsw-2-202.1.TA.1840.sj2"
+      },
+      "iconId": 5
+     },
+     "stopSequence": [
+      {
+       "isGlobalId": true,
+       "id": "206041",
+       "name": "North Sydney Station, Stand D, North Sydney",
+       "disassembledName": "North Sydney Station, Stand D",
+       "type": "platform",
+       "coord": [
+        -33.8402,
+        151.2079
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "206010",
+        "name": "North Sydney Station, Stand D, North Sydney",
+        "disassembledName": "North Sydney Station, Stand D",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95306586:1",
+         "name": "North Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10101326"
+        },
+        "coord": [
+         -33.8402,
+         151.2079
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Stand D",
+        "area": "1",
+        "platform": "STANDD",
+        "platformName": "Stand D",
+        "plannedPlatformName": "Stand D"
+       },
+       "departureTimePlanned": "2026-11-10T20:48:00Z",
+       "departureTimeEstimated": "2026-11-10T20:48:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "206230",
+       "name": "Miller St at Falcon St, North Sydney",
+       "disassembledName": "Miller St at Falcon St",
+       "type": "platform",
+       "coord": [
+        -33.833,
+        151.209
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "G206230",
+        "name": "Miller St at Falcon St, North Sydney",
+        "disassembledName": "Miller St at Falcon St",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95308771:1",
+         "name": "North Sydney",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10206230"
+        },
+        "coord": [
+         -33.833,
+         151.209
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Miller St at Falcon St",
+        "area": "0",
+        "platform": "X1",
+        "platformName": "Miller St at Falcon St",
+        "plannedPlatformName": "Miller St at Falcon St"
+       },
+       "arrivalTimePlanned": "2026-11-10T20:52:00Z",
+       "arrivalTimeEstimated": "2026-11-10T20:52:00Z",
+       "departureTimePlanned": "2026-11-10T20:52:00Z",
+       "departureTimeEstimated": "2026-11-10T20:52:00Z"
+      },
+      {
+       "isGlobalId": true,
+       "id": "206271",
+       "name": "Miller St at Amherst St, Cammeray",
+       "disassembledName": "Miller St at Amherst St",
+       "type": "platform",
+       "coord": [
+        -33.8238,
+        151.2102
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "G206271",
+        "name": "Miller St at Amherst St, Cammeray",
+        "disassembledName": "Miller St at Amherst St",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95308070:1",
+         "name": "Cammeray",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10206271"
+        },
+        "coord": [
+         -33.8238,
+         151.2102
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Miller St at Amherst St",
+        "area": "0",
+        "platform": "X1",
+        "platformName": "Miller St at Amherst St",
+        "plannedPlatformName": "Miller St at Amherst St"
+       },
+       "arrivalTimePlanned": "2026-11-10T20:56:00Z",
+       "arrivalTimeEstimated": "2026-11-10T20:56:00Z"
+      }
+     ],
+     "coords": [
+      [
+       -33.8402,
+       151.2079
+      ],
+      [
+       -33.833,
+       151.209
+      ],
+      [
+       -33.8238,
+       151.2102
+      ]
+     ],
+     "properties": {
+      "PlanLowFloorVehicle": "1",
+      "PlanWheelChairAccess": "1"
+     },
+     "infos": []
+    },
+    {
+     "duration": 180,
+     "distance": 210,
+     "origin": {
+      "isGlobalId": true,
+      "id": "206271",
+      "name": "Miller St at Amherst St, Cammeray",
+      "disassembledName": "Miller St at Amherst St",
+      "type": "platform",
+      "coord": [
+       -33.8238,
+       151.2102
+      ],
+      "niveau": 0,
+      "parent": {
+       "isGlobalId": true,
+       "id": "G206271",
+       "name": "Miller St at Amherst St, Cammeray",
+       "disassembledName": "Miller St at Amherst St",
+       "type": "stop",
+       "parent": {
+        "id": "placeID:95308070:1",
+        "name": "Cammeray",
+        "type": "locality"
+       },
+       "properties": {
+        "stopId": "10206271"
+       },
+       "coord": [
+        -33.8238,
+        151.2102
+       ],
+       "niveau": 0
+      },
+      "properties": {
+       "WheelchairAccess": "true",
+       "AREA_NIVEAU_DIVA": "0",
+       "stoppingPointPlanned": "Miller St at Amherst St",
+       "area": "0",
+       "platform": "X1",
+       "platformName": "Miller St at Amherst St",
+       "plannedPlatformName": "Miller St at Amherst St"
+      },
+      "departureTimeBaseTimetable": "2026-11-10T20:56:00Z",
+      "departureTimePlanned": "2026-11-10T20:56:00Z",
+      "departureTimeEstimated": "2026-11-10T20:56:00Z"
+     },
+     "destination": {
+      "id": "streetID:527238566:0:81580607:-1:Miller St:Cammeray:Miller St::Miller St:2000:ANY:DIVA_STREET",
+      "isGlobalId": false,
+      "name": "Miller St, Cammeray",
+      "disassembledName": "Miller St",
+      "type": "street",
+      "coord": [
+       -33.822,
+       151.211
+      ],
+      "niveau": 0,
+      "parent": {
+       "id": "placeID:95302070:1",
+       "name": "Cammeray",
+       "type": "locality"
+      },
+      "properties": {},
+      "arrivalTimeBaseTimetable": "2026-11-10T20:59:00Z",
+      "arrivalTimePlanned": "2026-11-10T20:59:00Z",
+      "arrivalTimeEstimated": "2026-11-10T20:59:00Z"
+     },
+     "transportation": {
+      "product": {
+       "class": 100,
+       "name": "footpath",
+       "iconId": 100
+      },
+      "properties": {
+       "tripCode": 0,
+       "lineDisplay": "LINE"
+      }
+     },
+     "stopSequence": [
+      {
+       "isGlobalId": true,
+       "id": "206271",
+       "name": "Miller St at Amherst St, Cammeray",
+       "disassembledName": "Miller St at Amherst St",
+       "type": "platform",
+       "coord": [
+        -33.8238,
+        151.2102
+       ],
+       "niveau": 0,
+       "parent": {
+        "isGlobalId": true,
+        "id": "G206271",
+        "name": "Miller St at Amherst St, Cammeray",
+        "disassembledName": "Miller St at Amherst St",
+        "type": "stop",
+        "parent": {
+         "id": "placeID:95308070:1",
+         "name": "Cammeray",
+         "type": "locality"
+        },
+        "properties": {
+         "stopId": "10206271"
+        },
+        "coord": [
+         -33.8238,
+         151.2102
+        ],
+        "niveau": 0
+       },
+       "properties": {
+        "WheelchairAccess": "true",
+        "AREA_NIVEAU_DIVA": "0",
+        "stoppingPointPlanned": "Miller St at Amherst St",
+        "area": "0",
+        "platform": "X1",
+        "platformName": "Miller St at Amherst St",
+        "plannedPlatformName": "Miller St at Amherst St"
+       }
+      },
+      {
+       "id": "streetID:527238566:0:81580607:-1:Miller St:Cammeray:Miller St::Miller St:2000:ANY:DIVA_STREET",
+       "isGlobalId": false,
+       "name": "Miller St, Cammeray",
+       "disassembledName": "Miller St",
+       "type": "street",
+       "coord": [
+        -33.822,
+        151.211
+       ],
+       "niveau": 0,
+       "parent": {
+        "id": "placeID:95302070:1",
+        "name": "Cammeray",
+        "type": "locality"
+       },
+       "properties": {}
+      }
+     ],
+     "coords": [
+      [
+       -33.8238,
+       151.2102
+      ],
+      [
+       -33.8229,
+       151.2106
+      ],
+      [
+       -33.822,
+       151.211
+      ]
+     ],
+     "footPathInfo": [
+      {
+       "position": "IDEST",
+       "duration": 180,
+       "footPathElem": []
+      }
+     ],
+     "infos": []
+    }
+   ],
+   "daysOfService": {
+    "rvb": "1"
+   }
+  }
+ ]
+}

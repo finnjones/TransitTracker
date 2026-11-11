@@ -247,6 +247,7 @@ class PipelineTimetableRepository(
                 sourceLabels = refs.map { "${it.source}@${it.sha256.take(12)}" },
             )
             val built = PackBuilder.buildContent(feed, request, idMapStore.load(name))
+            warnAboutEmptyInputs(name, refs, feeds, built)
             val staging = store.newStagingDir()
             try {
                 val artifacts = PackBuilder.writeArtifacts(built, request, staging, options.zstdLevel)
@@ -274,6 +275,20 @@ class PipelineTimetableRepository(
                 staging.toFile().deleteRecursively()
             }
         }
+
+    /**
+     * An input none of whose trips made it into the pack (e.g. a frozen feed whose services all
+     * ended) is almost always a wrong or stale source; the pack is still published from the others.
+     */
+    private fun warnAboutEmptyInputs(name: String, refs: List<SourceRef>, feeds: List<GtfsFeed>, built: BuiltContent) {
+        if (feeds.size < 2) return
+        val inPack = built.content.trips.mapTo(HashSet()) { it.gtfsId }
+        refs.zip(feeds).forEach { (ref, input) ->
+            if (input.trips.isNotEmpty() && input.trips.none { it.id in inPack }) {
+                log.warn("GTFS input {} for {} has no trips in the pack window ({} trips, none running): stale or wrong source?", ref.source, name, input.trips.size)
+            }
+        }
+    }
 
     /** `yyyyMMdd'T'HHmm` in Sydney time, with `-2`, `-3`, ... appended if that version exists. */
     private fun nextVersion(name: String, nowMillis: Long): String {

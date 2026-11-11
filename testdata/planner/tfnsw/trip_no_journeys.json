@@ -1,0 +1,12 @@
+{
+ "version": "10.6.21.17",
+ "systemMessages": [
+  {
+   "type": "error",
+   "module": "BROKER",
+   "code": -4000,
+   "error": "no trips found"
+  }
+ ],
+ "journeys": []
+}

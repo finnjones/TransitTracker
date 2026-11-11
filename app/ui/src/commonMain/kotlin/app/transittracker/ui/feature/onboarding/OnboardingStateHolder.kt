@@ -117,10 +117,11 @@ class OnboardingStateHolder(
         }
     }
 
-    /** RETRY on the download step: listen to the core again and give it another minute. */
+    /** RETRY on the download step: ask the core to fetch the timetable again and give it another minute. */
     fun retryDownload() {
         stalled.value = false
         attempt.value++
+        scope.launch { runCatching { core.checkForUpdates() } }
     }
 
     /** CONTINUE on the download step (also used to carry on without the timetable). */

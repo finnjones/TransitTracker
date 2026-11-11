@@ -1,6 +1,6 @@
 # TransitTracker Backend Plan
 
-Status: **Draft v3** · Audience: **me and a few friends, not for profit** ·
+Status: **Draft v4** · Audience: **me and a few friends, not for profit** ·
 Budget: **free** · Data: **TfNSW Open Data Hub, free public tier only** ·
 Platform: **Android first, iOS later** · Scope: **everything below the UI**
 (front end planned separately)
@@ -22,7 +22,9 @@ calls TripView's servers or reuses its formats.
 | D1 | Where the server runs | **Your home server** |
 | D2 | Push notifications | **In the first version** |
 | D3 | How friends get the app | **Firebase App Distribution** (free) |
-| D4 | Budget | **Free**: no paid hosting, domains or store fees |
+| D4 | Budget | **Free** apart from a domain for Cloudflare (≈ A$15/year): no paid hosting or store fees |
+| D5 | Exposure to the internet | **Cloudflare Tunnel** (Cloudflare Zero Trust, free plan) instead of Tailscale Funnel |
+| D6 | Proxmox guest | **LXC container** (unprivileged, nesting + keyctl), VM as fallback |
 
 ---
 
@@ -32,8 +34,9 @@ calls TripView's servers or reuses its formats.
   TfNSW key, builds the timetable file for phones each night, passes on live
   data and sends push notifications. Friends need no TfNSW account, and the
   key never sits on a phone.
-- **Reachable from anywhere for free** through **Tailscale Funnel**: a fixed
-  public HTTPS address with no router port forwarding and no domain to buy.
+- **Reachable from anywhere** through a **Cloudflare Tunnel** (Zero Trust free
+  plan) on your own domain: no router port forwarding, no open ports, and
+  Cloudflare Access guarding the admin page.
 - **Fetch only when needed.** The server calls TfNSW only when a phone is
   looking at something or a friend's "tell me if my train is late" window is
   active, at most once per feed every 15–30 seconds, shared by everyone. A
@@ -69,7 +72,7 @@ flowchart LR
   FCM["Firebase Cloud Messaging"]
   UI --> Facade
   IOSUI -.later.-> Facade
-  Facade <-->|"HTTPS via Tailscale Funnel"| API
+  Facade <-->|"HTTPS via Cloudflare Tunnel"| API
   API <-->|"one free key"| TfNSW
   API --> FCM --> UI
 ```
@@ -166,7 +169,7 @@ One program, one machine, one database file.
 flowchart LR
   TfNSW[("TfNSW Open Data Hub")]
   subgraph Box["Home server (Docker Compose)"]
-    TS["Tailscale Funnel (public HTTPS, no open ports)"]
+    TS["cloudflared (Cloudflare Tunnel, no open ports)"]
     subgraph App["tt-server (one Kotlin process)"]
       Api["HTTP API"]
       Live["Live data cache (fetch on demand)"]
@@ -318,7 +321,7 @@ Kept proportionate to "me and a few friends".
 | Secrets | The TfNSW key and the Firebase service-account key live only on the server, in an env file excluded by `.gitignore`. Never in the app or the repo. Turn on GitHub secret scanning |
 | Who can use the server | **Invite codes.** `tt-admin invite` creates a one-time code; the app exchanges it for a device token. `tt-admin revoke` cuts a device off |
 | Abuse | Per-device rate limit (for example 20 live requests a minute); route list capped at 30; watches capped at 10 per device; unknown tokens rejected |
-| Exposure to the internet | **Tailscale Funnel**: only the one tt-server port is published, over HTTPS with an automatic certificate; nothing else on your home network is reachable; no router changes (section 9.2) |
+| Exposure to the internet | **Cloudflare Tunnel**: only tt-server is reachable, over HTTPS on your domain; nothing else on your home network is reachable; no router changes. Cloudflare Access (your email) protects `/status`; the API keeps its own invite/token auth because the phone can't do an Access login (section 9.2) |
 | Timetable integrity | SHA-256 for every timetable file, checked on the phone |
 | Personal data | Only a random device ID, app version, Firebase token and watch settings (stations and times). No names, emails or locations. Location alarms run on the phone. `tt-admin revoke` deletes everything for a device |
 | Repo | Keep private while `tripview-low-level-notes.md` is in its history (that file already says so) |
@@ -463,9 +466,9 @@ they can be added later if needed.
 
 | Option | Cost | Notes |
 |---|---|---|
-| **Tailscale Funnel** (recommended) | Free on Tailscale's Personal plan (confirm in Tailscale's Funnel docs) | Gives a fixed address like `https://tt.<your-tailnet>.ts.net` with an automatic certificate. No port forwarding, no domain, home IP not exposed. Friends **don't** need Tailscale; it's a normal public HTTPS URL |
-| DuckDNS + Caddy + router port forward | Free | Fallback if Funnel isn't suitable. Exposes port 443 on your home IP; Caddy handles certificates |
-| Cloudflare Tunnel | Needs a domain on Cloudflare (≈ A$15/year) | Not free, so not chosen |
+| **Cloudflare Tunnel** (chosen) | Zero Trust free plan; needs a domain on Cloudflare (≈ A$15/year) | `https://tt.<your-domain>`; outbound-only `cloudflared` container, no port forwarding, home IP not exposed; Access can protect admin paths; server trusts `CF-Connecting-IP` for per-IP limits |
+| Tailscale Funnel | Free on Tailscale's Personal plan | Alternative with no domain needed (`*.ts.net` address); previously the default |
+| DuckDNS + Caddy + router port forward | Free | Fallback; exposes port 443 on your home IP |
 
 The app reads the server address from its build configuration, so moving
 to another option later only needs a new build (or a config redirect).
@@ -627,7 +630,7 @@ free Apple ID can only install on your own phone, and the app expires after
 /shared          Kotlin Multiplatform core (also used by the server)
 /server          tt-server: API, live cache, timetable builder, watch engine, tt-admin
 /androidApp      front end (separate plan)
-/deploy          docker-compose.yml (tt-server + Tailscale), .env.example (no secrets)
+/deploy          docker-compose.yml (tt-server + cloudflared), .env.example (no secrets)
 /tools           feed recorder and replayer, timetable file inspector
 /docs            plans, TripView reference docs
 ```
@@ -654,7 +657,7 @@ Rough engineer-weeks for one experienced Kotlin developer.
 
 | Phase | Goal | Done when | Est. |
 |---|---|---|---|
-| **P0. Setup** | Key, repo, home server, Firebase | TfNSW key works from your laptop; Firebase project created; Docker and Tailscale Funnel running on the home server with a "hello" endpoint reachable from a phone on mobile data; CI builds an empty server and shared module | 1 |
+| **P0. Setup** | Key, repo, home server, Firebase | TfNSW key works from your laptop; Firebase project created; Docker and the Cloudflare Tunnel running on the home server with a "hello" endpoint reachable from a phone on mobile data; CI builds an empty server and shared module | 1 |
 | **P1. Contracts and fake** | Front end can start | `TransitCore` interface, fake data, `/v1/join` and `/v1/config` | 1 |
 | **P2. Timetable** | Offline departures | Nightly builder makes `syd-rail`; phone downloads it and lists next trains between two stations with no network | 3 |
 | **P3. Live data** | Live delays | Fetch-on-demand cache, matching, `/v1/rt`, tracking endpoint, `/status`; phone shows a real delay within one poll interval | 2.5 |
@@ -675,7 +678,7 @@ Rough engineer-weeks for one experienced Kotlin developer.
 | Key suspended for overuse | Fetch on demand, daily budget guard at 50,000, back off on errors |
 | Key leaked | Server only, `.gitignore`d env file, GitHub secret scanning; regenerate on the Hub if exposed |
 | Home internet or power outage | App still works from its timetable; notifications pause; `/status` and uptime alerts tell you |
-| Tailscale Funnel terms change | DuckDNS + Caddy fallback (section 9.2); the app's server address is configurable |
+| Cloudflare blocks or challenges app traffic | WAF skip rule / Bot Fight Mode off for `/v1/*`; no Access on the API (deploy/README.md step 6) |
 | Android developer verification blocks installs | Register the free limited-distribution account when it reaches Australia (section 9.4) |
 | Release signing key lost | Back it up off the server; without it, friends must reinstall |
 | Daylight-saving and after-midnight bugs | One shared time function with dedicated tests |

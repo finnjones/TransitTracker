@@ -1,29 +1,30 @@
-# TransitTracker home server: tt-server behind a Tailscale Funnel sidecar.
+# TransitTracker home server: tt-server behind a Cloudflare Tunnel (cloudflared).
 # See deploy/README.md. Run from this directory:  docker compose up -d
 #
-# Nothing is published on the host or your router: the only way in from the internet is
-# Tailscale Funnel (HTTPS on 443 -> tt-server:8080), as configured in tailscale/serve.json.
+# Nothing is published on the host or your router. cloudflared makes an outbound connection to
+# Cloudflare; the public hostname you configure in Cloudflare Zero Trust (e.g. tt.example.com)
+# is forwarded through it to http://tt-server:8080 on the private `tt` network below.
 
 name: transittracker
 
 services:
-  tailscale:
-    image: tailscale/tailscale:stable
-    hostname: ${TS_HOSTNAME:-tt}            # public URL becomes https://<hostname>.<tailnet>.ts.net
+  cloudflared:
+    # Pin CLOUDFLARED_VERSION in .env to a release tag (e.g. 2026.10.0) for repeatable deploys.
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-latest}
+    command: tunnel --no-autoupdate run
     environment:
-      TS_AUTHKEY: ${TS_AUTHKEY:-}            # only needed for the first start; state is kept in the volume
-      TS_STATE_DIR: /var/lib/tailscale
-      TS_SERVE_CONFIG: /config/serve.json    # HTTPS 443 -> 127.0.0.1:8080, Funnel on
-      TS_USERSPACE: "false"
-    volumes:
-      - tailscale-state:/var/lib/tailscale
-      - ./tailscale:/config:ro
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - net_admin
-      # Tailscale's examples also add sys_module; only needed if the host has not loaded the tun module.
+      # Token from Zero Trust -> Networks -> Tunnels -> your tunnel. Keep it secret.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in deploy/.env}
+    networks:
+      - tt
+    depends_on:
+      - tt-server
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   tt-server:
     # Builds from this repository by default. To use the image CI publishes instead, set TT_IMAGE
@@ -34,16 +35,17 @@ services:
       dockerfile: deploy/Dockerfile
     env_file: .env
     environment:
-      # Fixed inside the container (the volume and serve.json depend on them); overrides .env.
+      # Fixed inside the container; these override .env.
       TT_DATA_DIR: /data
       TT_PORT: "8080"
+      # Requests only arrive through cloudflared, so CF-Connecting-IP is the real client address.
+      TT_TRUSTED_PROXY: cloudflare
     volumes:
       - tt-data:/data
       - ./secrets:/secrets:ro               # put firebase-service-account.json here
-    # Share the Tailscale container's network so Funnel reaches tt-server on 127.0.0.1:8080.
-    network_mode: service:tailscale
-    depends_on:
-      - tailscale
+    networks:
+      - tt
+    # No `ports:` on purpose: tt-server is reachable only through the tunnel.
     restart: unless-stopped
     stop_grace_period: 20s
     logging:
@@ -52,6 +54,8 @@ services:
         max-size: "10m"
         max-file: "5"
 
+networks:
+  tt: {}
+
 volumes:
-  tailscale-state:
   tt-data:

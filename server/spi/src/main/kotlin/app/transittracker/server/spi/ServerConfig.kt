@@ -48,11 +48,6 @@ data class ServerConfig(
      * so `CF-Connecting-IP` holds the real client address.
      */
     val trustedProxy: TrustedProxy = TrustedProxy.NONE,
-    /** Journey planning through TfNSW's Trip Planner (needs the Trip Planner product on the API key). */
-    val plannerEnabled: Boolean = true,
-    /** TfNSW Trip Planner API paths, relative to [tfnswBaseUrl]. Verify against the current Swagger. */
-    val tripPlannerTripPath: String = "/v1/tp/trip",
-    val tripPlannerStopFinderPath: String = "/v1/tp/stop_finder",
 ) {
     val dbPath: Path get() = dataDir.resolve("tt-server.db")
     val packsDir: Path get() = dataDir.resolve("packs")
@@ -85,9 +80,6 @@ data class ServerConfig(
                 recordRetentionDays = env["TT_RECORD_RETENTION_DAYS"]?.toInt() ?: d.recordRetentionDays,
                 replayDir = env["TT_REPLAY_DIR"]?.let { Paths.get(it) },
                 trustedProxy = env["TT_TRUSTED_PROXY"]?.let { TrustedProxy.parse(it) } ?: d.trustedProxy,
-                plannerEnabled = env["TT_PLANNER_ENABLED"]?.toBooleanStrictOrNull() ?: d.plannerEnabled,
-                tripPlannerTripPath = env["TT_TRIP_PLANNER_TRIP_PATH"] ?: d.tripPlannerTripPath,
-                tripPlannerStopFinderPath = env["TT_TRIP_PLANNER_STOP_FINDER_PATH"] ?: d.tripPlannerStopFinderPath,
             )
         }
     }

@@ -59,15 +59,6 @@ interface TransitCore {
     /** Maps an FCM data payload (see [PushKeys]) to the service to open, if any. */
     fun openFromNotification(data: Map<String, String>): ServiceRef?
 
-    // ---- Journey planning (served by tt-server) ----
-    /** Addresses, stations and stops matching [query], best first. Empty when offline. */
-    suspend fun searchPlaces(query: String, near: LatLng? = null): List<Place>
-    suspend fun plan(request: PlanRequest): PlanResult
-    /** Re-applies live data to each ride of [journey] and recomputes the spare time at each change. */
-    fun follow(journey: PlannedJourney): Flow<JourneyState>
-    /** Turns a planned journey's rides into a [SavedTrip]; walks become each leg's minimum connection time. */
-    fun savedTripFrom(journey: PlannedJourney, originName: String, destinationName: String): SavedTrip
-
     // ---- Device alarms (scheduled by the Android layer) ----
     suspend fun nextAlarmTimes(alarm: AlarmSpec, count: Int = 5): List<Long>
 }
@@ -209,40 +200,3 @@ sealed interface JoinResult {
     data object InvalidCode : JoinResult
     data class Failed(val message: String) : JoinResult
 }
-
-sealed interface PlanResult {
-    data class Journeys(val journeys: List<PlannedJourney>, val source: String) : PlanResult
-    /** The planner can't be used right now (no connection, server or TfNSW down, quota). */
-    data class Unavailable(val message: String) : PlanResult
-    /** The request was rejected (e.g. unknown place, start equals end). */
-    data class Failed(val code: String, val message: String) : PlanResult
-}
-
-/** A ride of a followed journey with live data applied. */
-data class FollowedLeg(
-    val leg: PlannedLeg,
-    val expectedDepartureMs: Long,
-    val expectedArrivalMs: Long,
-    /** TIMETABLED for walks and for rides that aren't matched or have no live data. */
-    val status: DepartureStatus,
-    val platform: String?,
-    val platformChanged: Boolean,
-    val stale: Boolean,
-)
-
-/** Spare time at a change between ride [fromLegIndex] and the next ride. */
-data class ConnectionMargin(
-    val fromLegIndex: Int,
-    val toLegIndex: Int,
-    /** Expected arrival + walk to expected departure of the next ride; negative = missed. */
-    val spareSeconds: Int,
-    val atRisk: Boolean,
-)
-
-data class JourneyState(
-    val journey: PlannedJourney,
-    val legs: List<FollowedLeg>,
-    val connections: List<ConnectionMargin>,
-    val expectedArrivalMs: Long,
-    val updatedMs: Long,
-)

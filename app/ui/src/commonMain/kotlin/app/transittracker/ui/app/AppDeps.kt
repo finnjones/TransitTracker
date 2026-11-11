@@ -31,6 +31,8 @@ import app.transittracker.ui.settings.UiSettings
  * - [places]: saved places and which places each saved trip runs between (phone only).
  * - [platform]: what only the platform shell can do (location, permissions, links, versions).
  * - [clock]: the time every screen uses ("now"); the core's clock, fixed in previews and tests.
+ * - [kv]: the phone's small store, for screen-level things that should survive a restart (the
+ *   planner's recent searches). Optional: without it they are kept in memory only.
  */
 class AppDeps(
     val core: TransitCore,
@@ -39,6 +41,7 @@ class AppDeps(
     val places: PlacesStore,
     val platform: PlatformServices,
     val clock: WallClock,
+    val kv: KeyValueStore? = null,
 ) {
     companion object {
         /**

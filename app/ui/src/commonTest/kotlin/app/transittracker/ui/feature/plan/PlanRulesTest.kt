@@ -1,5 +1,6 @@
 package app.transittracker.ui.feature.plan
 
+import app.transittracker.core.InMemoryKeyValueStore
 import app.transittracker.model.DepartureStatus
 import app.transittracker.model.Itinerary
 import app.transittracker.model.ItineraryLeg
@@ -15,6 +16,7 @@ import app.transittracker.ui.gallery.SampleData
 import app.transittracker.ui.nav.JourneyEnd
 import app.transittracker.ui.planning.FakeJourneyPlanner
 import app.transittracker.ui.settings.ClockFormat
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -270,5 +272,26 @@ class PlanRulesTest {
         assertEquals(listOf(a, b), list)
         repeat(10) { n -> list = addRecent(list, RecentSearch(JourneyEnd("P$n", LatLng(n.toDouble(), 0.0)), a.to)) }
         assertEquals(MAX_RECENT, list.size)
+    }
+
+    @Test
+    fun recentSearchesSurviveARestartWhenTheShellGivesAStore() = runTest {
+        val a = RecentSearch(JourneyEnd("Home", LatLng(1.0, 1.0)), JourneyEnd("Work", LatLng(2.0, 2.0)))
+        val b = RecentSearch(JourneyEnd("Gym", LatLng(3.0, 3.0)), JourneyEnd("Work", LatLng(2.0, 2.0)))
+        val kv = InMemoryKeyValueStore()
+        val first = KeyValueRecentSearches(kv, this)
+        first.add(a)
+        first.add(b)
+        testScheduler.advanceUntilIdle()
+        // "Restart": a new store over the same key-value store.
+        val second = KeyValueRecentSearches(kv, this)
+        second.add(a) // added before the stored list has loaded: stays first, no copy
+        testScheduler.advanceUntilIdle()
+        assertEquals(listOf(a, b), second.recent.value)
+        // Anything unreadable in the store is ignored.
+        kv.put("plan.recent", "not json")
+        val third = KeyValueRecentSearches(kv, this)
+        testScheduler.advanceUntilIdle()
+        assertEquals(emptyList(), third.recent.value)
     }
 }

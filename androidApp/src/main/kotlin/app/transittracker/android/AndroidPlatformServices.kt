@@ -63,6 +63,9 @@ class AndroidPlatformServices(
     override val systemReduceMotion: StateFlow<Boolean> = reduceMotionState.asStateFlow()
     override val batterySaver: StateFlow<Boolean> = batterySaverState.asStateFlow()
 
+    /** Debug APKs show the Settings "Debug gallery" row; release builds do not. */
+    override val isDebugBuild: Boolean get() = BuildConfig.DEBUG
+
     private var activity: Activity? = null
     private var launcher: ActivityResultLauncher<Array<String>>? = null
     private var pending: CompletableDeferred<Unit>? = null

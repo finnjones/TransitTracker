@@ -112,6 +112,8 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
                 places = KeyValuePlacesStore(kv),
                 platform = platform,
                 clock = clock,
+                // The planner's recent searches, kept on the phone (not backed up).
+                kv = kv,
             ),
         )
         // Settings > About shows the device id once the phone has joined.
@@ -122,7 +124,7 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
             pendingPushToken = null
             scope.launch { created.updatePushToken(token) }
         }
-        Push.requestToken(app, ::onPushToken)
+        Push.register(app)
     }
 
     private companion object {

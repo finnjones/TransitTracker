@@ -12,13 +12,14 @@ import com.google.firebase.messaging.RemoteMessage
  * `androidApp/google-services.json` (the Google services plugin then initialises Firebase);
  * otherwise [Push.isAvailable] is false and nothing here runs.
  *
- * - Tokens go to the core (`TransitCore.updatePushToken`) now and whenever Firebase issues a new one.
+ * - Tokens go to the core (`TransitCore.updatePushToken`) when FCM registers the app and on every refresh.
  * - A message that arrives while the app is open is shown as a notification on its channel;
  *   background messages are shown by FCM itself. Either way a tap opens the app with the
  *   message's data, which `MainActivity` hands to `AppController.openFromNotification`.
  */
 class PushMessagingService : FirebaseMessagingService() {
-    override fun onNewToken(token: String) {
+    /** The registration token, after [Push.register] and whenever FCM issues a new one. */
+    override fun onRegistered(token: String) {
         (application as TransitTrackerApplication).graph.onPushToken(token)
     }
 
@@ -37,9 +38,12 @@ internal object Push {
     fun isAvailable(context: Context): Boolean =
         BuildConfig.PUSH_CONFIGURED && FirebaseApp.getApps(context).isNotEmpty()
 
-    /** Fetches the current token once and passes it to [onToken]; no-op without Firebase. */
-    fun requestToken(context: Context, onToken: (String) -> Unit) {
+    /**
+     * Registers with FCM (firebase-messaging 26: the token arrives in
+     * [PushMessagingService.onRegistered], now and on every refresh); no-op without Firebase.
+     */
+    fun register(context: Context) {
         if (!isAvailable(context)) return
-        FirebaseMessaging.getInstance().token.addOnSuccessListener { token -> if (token != null) onToken(token) }
+        FirebaseMessaging.getInstance().register()
     }
 }

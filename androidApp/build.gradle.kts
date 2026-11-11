@@ -94,6 +94,9 @@ dependencies {
     implementation(project(":app:ui"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core)
+    // Play services (via Firebase) bring an old androidx.fragment; the ActivityResult API used
+    // for permission prompts needs 1.3+ (lint InvalidFragmentVersionForActivityResult).
+    implementation(libs.androidx.fragment)
     implementation(libs.ktor.client.okhttp)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

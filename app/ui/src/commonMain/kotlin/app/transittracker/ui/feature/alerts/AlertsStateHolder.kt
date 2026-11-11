@@ -8,6 +8,7 @@ import app.transittracker.model.SavedTrip
 import app.transittracker.model.StopId
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
+import app.transittracker.ui.alerts.tripLines
 import app.transittracker.ui.state.StateHolder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -47,6 +49,11 @@ class AlertsStateHolder(
         else combine(trips.map { t -> core.upcoming(t.id, 6).map { t.id to it } }) { it.toMap() }
     }
 
+    /** Trip id -> the lines it can use, looked up once per change of the saved trips. */
+    private val linesByTrip: Flow<Map<String, Set<RouteId>>> = core.trips.mapLatest { trips ->
+        trips.associate { it.id to tripLines(core, it) }
+    }
+
     private val ticker: Flow<Long> = flow {
         while (true) {
             emit(clock.nowMillis())
@@ -67,7 +74,7 @@ class AlertsStateHolder(
         }
         alerts?.let(::lookUpLines)
         AlertsInputs(alerts, trips, up, status, fromServices + known)
-    }
+    }.combine(linesByTrip.onStart { emit(emptyMap()) }) { i, lines -> i.copy(tripLines = lines) }
 
     override val state: StateFlow<AlertsUiState> = combine(inputs, ticker) { i, now -> buildAlertsState(i, now) }
         .distinctUntilChanged()

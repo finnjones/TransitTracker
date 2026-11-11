@@ -1,5 +1,9 @@
 package app.transittracker.ui
 
+import app.transittracker.model.Alert
+import app.transittracker.ui.alerts.tripLines
+import app.transittracker.ui.app.alertBadgeCount
+import app.transittracker.ui.app.alertsOnTrips
 import app.transittracker.ui.app.AppDeps
 import app.transittracker.ui.fake.CoreScenario
 import app.transittracker.ui.fake.FakeSetup
@@ -25,7 +29,8 @@ class AlertsStateHolderTest {
     fun theFakeAlertsTouchTheTripsTheyNameAndTheRestIsAllClear() = runTest {
         val trips = FakeSetup.trips.filter { it.id != FakeSetup.TRIP_CENTRAL_STRATHFIELD }
         val h = holder(AppDeps.fake(trips = trips), backgroundScope)
-        val s = h.state.first { !it.loading && it.all.size == 2 && it.mine.size == 2 }
+        // The trips' lines are known before the data status arrives, so wait for that too.
+        val s = h.state.first { !it.loading && it.all.size == 2 && it.mine.size == 2 && it.updatedMs != null }
         // The lift alert names Town Hall, the origin of a saved trip; trackwork names T9 and so
         // touches the trip whose services run on T9.
         val lift = s.all.first { it.id == "fake-alert-lift" }
@@ -38,6 +43,22 @@ class AlertsStateHolderTest {
         assertTrue(FakeSetup.TRIP_CHATSWOOD_TALLAWONG in s.clearTrips.map { it.id })
         assertFalse(s.offline)
         assertEquals(SampleData.NOW_MS - 12_000, s.updatedMs)
+    }
+
+    @Test
+    fun aLineAlertReachesATripThatHasNoLineFilter() = runTest {
+        val deps = AppDeps.fake()
+        val trip = FakeSetup.trips.first { it.id == FakeSetup.TRIP_HOME_WORK }
+        assertTrue(trip.legs.all { it.routeIds == null })
+        // The lines that call at both ends of the trip, without asking for departures.
+        val lines = tripLines(deps.core, trip)
+        assertTrue(lines.isNotEmpty())
+        val alert = Alert("line", "Delays", routeIds = listOf(lines.first()))
+        val now = SampleData.NOW_MS
+        assertEquals(emptyList(), alertsOnTrips(listOf(alert), listOf(trip), now).map { it.id })
+        assertEquals(listOf("line"), alertsOnTrips(listOf(alert), listOf(trip), now, mapOf(trip.id to lines)).map { it.id })
+        // The badge uses those lines.
+        assertEquals(1, alertBadgeCount(deps.core, deps.clock).first { it > 0 })
     }
 
     @Test

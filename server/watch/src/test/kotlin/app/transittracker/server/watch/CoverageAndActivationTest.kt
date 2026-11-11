@@ -137,7 +137,7 @@ class CoverageAndActivationTest {
 
     // ---- activation ----
 
-    private fun Harness.warmCalls() = live.keepWarmCalls.filter { it.key == "watch:w1" }
+    private fun Harness.warmCalls() = live.keepWarmCalls.filter { it.key == "watch:$DEVICE:w1" }
 
     @Test
     fun `active watches keep their routes warm until the last trip departs`() = runTest {
@@ -151,7 +151,7 @@ class CoverageAndActivationTest {
         h.at(WED, "06:40")
         h.engine.tick()
         assertEquals(
-            listOf(KeepWarmCall("watch:w1", setOf("T1", "T9"), DemandKind.WATCH, sydney(WED, "07:53"))),
+            listOf(KeepWarmCall("watch:$DEVICE:w1", setOf("T1", "T9"), DemandKind.WATCH, sydney(WED, "07:53"))),
             h.warmCalls(),
         )
         assertEquals(1, h.engine.status().activeWatches)
@@ -175,7 +175,7 @@ class CoverageAndActivationTest {
         val h = Harness(now = sydney(WED, "07:00"))
         h.engine.upsert(DEVICE, commute(routes = listOf("T1")))
         assertEquals(
-            listOf(KeepWarmCall("watch:w1", setOf("T1"), DemandKind.WATCH, sydney(WED, "07:44"))),
+            listOf(KeepWarmCall("watch:$DEVICE:w1", setOf("T1"), DemandKind.WATCH, sydney(WED, "07:44"))),
             h.warmCalls(),
         )
     }
@@ -185,8 +185,20 @@ class CoverageAndActivationTest {
         val h = Harness(now = sydney(WED, "07:00"))
         h.engine.upsert(DEVICE, commute())
         assertTrue(h.engine.delete(DEVICE, "w1"))
-        assertEquals(KeepWarmCall("watch:w1", emptySet(), DemandKind.WATCH, h.clock.now), h.warmCalls().last())
+        assertEquals(KeepWarmCall("watch:$DEVICE:w1", emptySet(), DemandKind.WATCH, h.clock.now), h.warmCalls().last())
         assertTrue(h.covered().isEmpty())
         assertEquals(emptyList(), h.engine.list(DEVICE))
+    }
+
+    @Test
+    fun `two devices with the same watch id keep separate keep-warm registrations`() {
+        val h = Harness(now = sydney(WED, "07:00"))
+        h.devices.add("dev2")
+        h.engine.upsert(DEVICE, commute(routes = listOf("T1")))
+        h.engine.upsert("dev2", commute(routes = listOf("T9")))
+        assertTrue(h.engine.delete("dev2", "w1"))
+        val latest = h.live.keepWarmCalls.groupBy { it.key }.mapValues { it.value.last() }
+        assertEquals(setOf("T1"), latest.getValue("watch:$DEVICE:w1").routeIds, "dev1's demand survives dev2's delete")
+        assertEquals(emptySet(), latest.getValue("watch:dev2:w1").routeIds)
     }
 }

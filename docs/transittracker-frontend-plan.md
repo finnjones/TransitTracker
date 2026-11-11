@@ -477,7 +477,7 @@ Four steps, each one screen, each skippable where the app can still work.
 
 ```
 ┌──────────────────────────────────────┐
-│ 07:38              ● LIVE 12S   [+]  │  clock, data freshness, new trip
+│ 07:38              ● LIVE 12S   [+]  │  clock, data freshness, plan a journey
 │ WED 11 NOV                           │
 ├──────────────────────────────────────┤
 │ TO WORK                              │  folder

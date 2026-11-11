@@ -1,0 +1,4 @@
+# Local server state and secrets - never commit
+.env
+secrets/
+backups/

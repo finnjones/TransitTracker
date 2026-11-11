@@ -125,7 +125,7 @@ class WatchEngine(
             tripStates.keys.removeAll { it.watch == key }
             had
         }
-        if (wasIndexed) live.keepWarm(warmKey(watchId), emptySet(), DemandKind.WATCH, clock.nowMillis())
+        if (wasIndexed) live.keepWarm(warmKey(deviceId, watchId), emptySet(), DemandKind.WATCH, clock.nowMillis())
         return removed
     }
 
@@ -192,13 +192,13 @@ class WatchEngine(
     // Coverage
 
     /** Recomputes coverage of every stored watch against the current timetable. */
-    internal fun recomputeAll() {
+    fun recomputeAll() {
         val now = clock.nowMillis()
         synchronized(lock) { recomputeLocked(now) }
     }
 
     /** Covered trips of one watch, sorted by departure (for tests and diagnostics). */
-    internal fun coveredTrips(deviceId: String, watchId: String): List<CoveredTrip> =
+    fun coveredTrips(deviceId: String, watchId: String): List<CoveredTrip> =
         synchronized(lock) { entries[WatchKey(deviceId, watchId)]?.trips.orEmpty() }
 
     private fun recomputeLocked(now: Long) {
@@ -270,8 +270,9 @@ class WatchEngine(
     /**
      * One run of the activation loop: daily coverage refresh at 03:30, single-service expiry,
      * keep-warm demand for active watches, and alert evaluation for newly active watches.
+     * [start] runs it every minute; public so tests and tools can drive the engine directly.
      */
-    internal suspend fun tick() {
+    suspend fun tick() {
         val now = clock.nowMillis()
         val expired = ArrayList<WatchKey>()
         val warm = synchronized(lock) {
@@ -292,7 +293,7 @@ class WatchEngine(
 
     private fun warmRequestLocked(entry: WatchEntry, now: Long): WarmRequest? {
         val occurrence = activeOccurrenceLocked(entry, now) ?: return null
-        return WarmRequest(warmKey(entry.watch.id), occurrence.trips.map { it.routeId }.toSet(), occurrence.untilMillis)
+        return WarmRequest(warmKey(entry.key.deviceId, entry.watch.id), occurrence.trips.map { it.routeId }.toSet(), occurrence.untilMillis)
     }
 
     private fun occurrencesLocked(entry: WatchEntry): List<Occurrence> =
@@ -335,8 +336,8 @@ class WatchEngine(
     // ------------------------------------------------------------------------------------------
     // Evaluation: trips
 
-    /** Evaluates one trip-updates refresh and sends any notifications it causes. */
-    internal suspend fun onTripChanges(batch: TripChangeBatch) {
+    /** Evaluates one trip-updates refresh and sends any notifications it causes (called by [start]'s collector). */
+    suspend fun onTripChanges(batch: TripChangeBatch) {
         val now = clock.nowMillis()
         if (batch.stale || isOld(batch.dataTimeMs, now)) {
             logger.debug("Ignoring stale trip batch from {}", batch.feedId)
@@ -480,7 +481,7 @@ class WatchEngine(
     // Evaluation: alerts
 
     /** Records the current alert set and notifies active watches of alerts that touch them. */
-    internal suspend fun onAlerts(alerts: List<Alert>) {
+    suspend fun onAlerts(alerts: List<Alert>) {
         synchronized(lock) { latestAlerts = alerts }
         evaluateAlerts(clock.nowMillis())
     }
@@ -675,7 +676,8 @@ class WatchEngine(
     private companion object {
         const val TEST_TTL_SECONDS = 300L
 
-        fun warmKey(watchId: String) = "watch:$watchId"
+        /** Keep-warm registration key; watch ids are only unique per device. */
+        fun warmKey(deviceId: String, watchId: String) = "watch:$deviceId:$watchId"
 
         fun previousDate(date: ServiceDate): ServiceDate =
             ServiceTime.formatDate(ServiceTime.parseDate(date).minus(1, DateTimeUnit.DAY))

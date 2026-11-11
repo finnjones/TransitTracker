@@ -14,6 +14,7 @@ import app.transittracker.ui.places.PlacesStore
 import app.transittracker.ui.platform.PermissionState
 import app.transittracker.ui.platform.PlatformServices
 import app.transittracker.ui.state.StateHolder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -176,7 +177,13 @@ class MapStateHolder(
                 return@launch
             }
             nearMe.value = NearMe.Locating
-            val here = platform.currentLocation()
+            val here = try {
+                platform.currentLocation()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
             if (here == null) {
                 nearMe.value = NearMe.NoFix
                 return@launch

@@ -112,7 +112,7 @@ Countdown(text: CountdownText, modifier, size = CountdownSize.XL76, color)
 CountBadge(count)
 PixelIcon(icon: PixelIconData, modifier, tint, size: Dp? = null /* null: 1 dot per cell */, contentDescription = null)
 PixelIcons.{LampCircle, LampTriangle, LampCross, LampPlus, LampRing, Plus, Minus, Swap, Locate,
-            ChevronLeft, ChevronRight, Train, MapPin, Warning, Bell, Sliders, Info, House, Briefcase, Pin}
+            ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Train, MapPin, Warning, Bell, Sliders, Info, House, Briefcase, Pin}
 ```
 
 Every row that shows a service should be one accessibility item read as a sentence (plan 7);

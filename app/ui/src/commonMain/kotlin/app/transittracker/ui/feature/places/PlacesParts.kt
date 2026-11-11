@@ -41,14 +41,8 @@ import app.transittracker.ui.theme.TtTheme
 
 /*
  * Pieces shared by the four screens of the places feature: the header, the problem dialog, the
- * place icon, the line badges and the two chevrons the design system does not have yet.
+ * place icon and the line badges.
  */
-
-/** Up and down arrow heads for the move buttons (7 x 4 cells, drawn like the design system's chevrons). */
-internal object MoveIcons {
-    val Up = PixelIconData(7, 4, "M3 0h1v1h-1z M2 1h3v1h-3z M1 2h5v1h-5z M0 3h7v1h-7z")
-    val Down = PixelIconData(7, 4, "M0 0h7v1h-7z M1 1h5v1h-5z M2 2h3v1h-3z M3 3h1v1h-1z")
-}
 
 /** The icon of a saved place (plan 2.6). */
 internal fun PlaceIcon.pixelIcon(): PixelIconData = when (this) {

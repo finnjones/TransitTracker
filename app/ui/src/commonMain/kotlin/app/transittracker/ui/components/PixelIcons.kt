@@ -51,6 +51,8 @@ object PixelIcons {
     val Locate = PixelIconData(7, 7, "M2 0h3v1h-3z M1 1h1v1h-1z M5 1h1v1h-1z M0 2h1v3h-1z M6 2h1v3h-1z M1 5h1v1h-1z M5 5h1v1h-1z M2 6h3v1h-3z M3 3h1v1h-1z")
     val ChevronRight = PixelIconData(4, 7, "M0 0h1v7h-1z M1 1h1v5h-1z M2 2h1v3h-1z M3 3h1v1h-1z")
     val ChevronLeft = PixelIconData(4, 7, "M3 0h1v7h-1z M2 1h1v5h-1z M1 2h1v3h-1z M0 3h1v1h-1z")
+    val ChevronUp = PixelIconData(7, 4, "M3 0h1v1h-1z M2 1h3v1h-3z M1 2h5v1h-5z M0 3h7v1h-7z")
+    val ChevronDown = PixelIconData(7, 4, "M0 0h7v1h-7z M1 1h5v1h-5z M2 2h3v1h-3z M3 3h1v1h-1z")
 
     // Navigation (12 x 12)
     val Train = PixelIconData(12, 12, "M2 0h8v1h-8z M1 1h10v1h-10z M1 2h1v3h-1z M10 2h1v3h-1z M1 5h10v2h-10z M1 7h2v1h-2z M4 7h4v1h-4z M9 7h2v1h-2z M1 8h10v1h-10z M2 9h8v1h-8z M2 10h2v1h-2z M8 10h2v1h-2z M1 11h2v1h-2z M9 11h2v1h-2z")

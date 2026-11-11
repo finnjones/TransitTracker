@@ -18,6 +18,7 @@ import app.transittracker.ui.gallery.SampleData
 import app.transittracker.ui.nav.Route
 import app.transittracker.ui.platform.FakePlatformServices
 import app.transittracker.ui.platform.PermissionState
+import app.transittracker.ui.platform.PlatformServices
 import app.transittracker.ui.sprites.SpriteLook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -232,6 +233,20 @@ class MapStateHoldersTest {
         h.nearMe()
         val s = h.state.first { it.nearMe == NearMe.Refused }
         assertTrue(s.banner!!.startsWith("Location is off"))
+        assertNull(s.scene.you)
+    }
+
+    @Test
+    fun aFailedLocationLookupSaysNoFixInsteadOfStayingOnLocating() = runTest {
+        val fake = FakePlatformServices()
+        val failing = object : PlatformServices by fake {
+            override suspend fun currentLocation(): LatLng? = throw IllegalStateException("provider gone")
+        }
+        val deps = AppDeps.fake(platform = fake)
+        val h = MapStateHolder(deps.core, CoreMapGeometry(deps.core), failing, deps.places, deps.clock, backgroundScope)
+        h.state.first { !it.loading }
+        h.nearMe()
+        val s = h.state.first { it.nearMe == NearMe.NoFix }
         assertNull(s.scene.you)
     }
 

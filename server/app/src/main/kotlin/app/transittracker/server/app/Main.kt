@@ -41,13 +41,14 @@ fun main() {
     )
 
     log.info(
-        "tt-server listening on port {} (public URL {}, data dir {}, live {}, push {}, admin token {}, timetable {})",
+        "tt-server listening on port {} (public URL {}, data dir {}, live {}, journey planner {}, push {}, admin token {}, timetable {})",
         config.port, config.publicBaseUrl, config.dataDir.toAbsolutePath(),
         when {
             config.replayDir != null -> "replay from ${config.replayDir}"
             config.tfnswApiKey != null -> "TfNSW"
             else -> "off (TFNSW_API_KEY missing)"
         },
+        tt.services.planner.status().source,
         if (config.firebaseServiceAccountPath != null) "configured" else "logged only",
         if (config.adminToken != null) "set" else "off",
         tt.services.timetables.current.value?.version ?: "none yet",

@@ -10,6 +10,7 @@ kotlin {
     sourceSets {
         all {
             languageSettings.optIn("kotlinx.serialization.ExperimentalSerializationApi")
+            languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
         }
         commonMain.dependencies {
             api(project(":shared:model"))

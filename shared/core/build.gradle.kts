@@ -60,6 +60,9 @@ kotlin {
                 implementation(libs.androidx.test.core)
                 implementation(libs.sqldelight.sqlite.driver)
                 implementation(libs.sqlite.jdbc)
+                // zstd-jni's desktop jar: host tests run on the build machine's JVM, where the
+                // Android .so files from the aar cannot load.
+                implementation(libs.zstd)
             }
         }
     }

@@ -54,9 +54,11 @@ internal class ReadOnlySqliteDriver(
         try {
             val factory = SQLiteDatabase.CursorFactory { _, masterQuery, editTable, query ->
                 if (binders != null) TypedBinder(query).binders()
-                SQLiteCursor(masterQuery, editTable, query)
+                @Suppress("USELESS_ELVIS")
+                SQLiteCursor(masterQuery, editTable ?: "", query)
             }
-            val cursor = db.rawQueryWithFactory(factory, sql, null, null)
+            // No edit table: the cursor is never used to write ("" as the framework treats null).
+            val cursor = db.rawQueryWithFactory(factory, sql, null, "")
             return try {
                 mapper(FrameworkCursor(cursor))
             } finally {

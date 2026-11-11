@@ -68,6 +68,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    testOptions {
+        // Robolectric (src/test) needs the merged manifest and resources.
+        unitTests.isIncludeAndroidResources = true
+    }
+
     packaging {
         resources {
             // Duplicate licence/notice files from the Kotlin and Ktor jars.
@@ -92,4 +97,9 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+
+    testImplementation(kotlin("test-junit", libs.versions.kotlin.get()))
+    testImplementation(libs.junit4)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }

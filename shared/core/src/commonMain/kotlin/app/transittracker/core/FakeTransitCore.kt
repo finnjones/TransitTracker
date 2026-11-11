@@ -74,6 +74,12 @@ class FakeTransitCore(
     )
     private val foreground = MutableStateFlow(false)
 
+    /**
+     * Journey planning over canned data (see [FakeJourneyPlanner]); its train rides are services
+     * of this fake, so they open in [service] and [track].
+     */
+    val planner: FakeJourneyPlanner = FakeJourneyPlanner(clock)
+
     /** Server feature flags reported in [dataStatus] (for previews of hidden features). */
     val features = MutableStateFlow(mapOf("planner" to true, "push" to true, "realtime" to true, "vehicles" to true, "alerts" to true))
 

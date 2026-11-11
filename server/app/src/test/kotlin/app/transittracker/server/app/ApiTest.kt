@@ -470,6 +470,9 @@ class ApiTest {
         val proxied = client.get("/status") { header(HttpHeaders.XForwardedFor, "198.51.100.7") }
         assertEquals(HttpStatusCode.Forbidden, proxied.status)
         assertEquals("forbidden", proxied.problemCode())
+        // Even without forwarding headers, a public Host means it came through Funnel.
+        assertEquals(HttpStatusCode.Forbidden, client.get("/status") { header(HttpHeaders.Host, "tt.example.ts.net") }.status)
+        assertEquals(HttpStatusCode.OK, client.get("/status") { header(HttpHeaders.Host, "localhost:8080") }.status)
         val wrong = client.get("/status") { header(HttpHeaders.XForwardedFor, "198.51.100.7"); bearerAuth("wrong") }
         assertEquals(HttpStatusCode.Unauthorized, wrong.status)
         // A device token is not an admin token.

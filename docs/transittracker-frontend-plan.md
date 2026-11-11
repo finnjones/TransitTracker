@@ -195,9 +195,10 @@ phone's pixel density:
   ("15:58" looked like "18:88"). Digits are set in Jersey 15 automatically,
   whatever the surrounding face.
 - **Letters.** Pixelify's capital B read as G ("Gerowra"), its capital Z as 2
-  ("2etland"), and its joined fi, fl and ff as other letters ("StrathAeld").
-  The bundled copy of the font has B and Z redrawn and those joins switched
-  off (`tools/fonts/patch_pixelify.py`). The licence allows a modified
+  ("2etland"), its round brackets as curly braces, and its joined fi, fl and
+  ff as other letters ("StrathAeld"). The bundled copy of the font has B, Z
+  and the brackets redrawn and those joins switched off
+  (`tools/fonts/patch_pixelify.py`). The licence allows a modified
   version; the file is renamed inside and the licence text says so.
 
 Times use 24-hour format by default with a 12-hour setting. Countdowns show

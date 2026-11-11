@@ -28,7 +28,7 @@ app/ui                      :app:ui, package app.transittracker.ui (KMP; JVM tar
     feature/<area>/  one package per feature area: its screens, state holders and <Area>Shots.kt
   src/commonMain/composeResources/
     font/        Doto Black, Pixelify Sans 400/600/700, Silkscreen 400/700, Jersey 15 (static TTFs)
-                 # Pixelify is patched for legibility (B and Z redrawn, fi/fl/ff ligatures off) by
+                 # Pixelify is patched for legibility (B, Z and ( ) redrawn, fi/fl/ff ligatures off) by
                  # tools/fonts/patch_pixelify.py; re-run it if the files are ever replaced
     files/licenses/  the OFL licences of the four faces (ship them with the app)
     drawable/    sprite_<name>.png, _livery.png, _outline.png (generated, do not edit)

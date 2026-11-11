@@ -59,10 +59,10 @@ class Harness(private val scope: TestScope, startMs: Long = at(6, 50)) {
         )
 
     /** Serves `/v1/config` offering [packs] and the pack files themselves. */
-    fun serveConfig(vararg packs: PackInfo) {
+    fun serveConfig(vararg packs: PackInfo, problems: Map<String, String> = emptyMap()) {
         server.on("GET", "/v1/config") {
             with(server) {
-                json(ConfigResponse.serializer(), ConfigResponse(pollIntervalS = pollIntervalS, attribution = "Test attribution", statusMessage = "All good", packs = packs.toList()))
+                json(ConfigResponse.serializer(), ConfigResponse(pollIntervalS = pollIntervalS, attribution = "Test attribution", statusMessage = "All good", packs = packs.toList(), timetableProblems = problems))
             }
         }
         server.on("GET", "/v1/packs/syd-rail/*") { req ->

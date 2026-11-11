@@ -158,7 +158,7 @@ class DefaultTransitCore internal constructor(
         val cfg = result.value
         applyConfig(cfg)
         kv.put(KvKeys.CONFIG, ApiJson.encodeToString(ConfigResponse.serializer(), cfg))
-        updater.update(cfg.packs)
+        updater.update(cfg.packs, cfg.timetableProblems)
     }
 
     /**

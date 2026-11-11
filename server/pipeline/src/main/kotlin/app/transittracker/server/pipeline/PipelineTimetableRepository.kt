@@ -77,6 +77,12 @@ class PipelineTimetableRepository(
     /** Inputs of the last failed build per pack, so identical bad input is not rebuilt nightly. */
     private val failedInputs = ConcurrentHashMap<String, List<SourceRef>>()
 
+    /** Plain sentence for the last failed refresh of each pack, for [problems]. */
+    private val lastFailure = ConcurrentHashMap<String, String>()
+
+    @Volatile
+    private var refreshing = false
+
     @Volatile
     private var scope: CoroutineScope? = null
 
@@ -141,6 +147,18 @@ class PipelineTimetableRepository(
         }
     }
 
+    override fun problems(): Map<String, String> {
+        val missing = missingPacks()
+        if (missing.isEmpty()) return emptyMap()
+        return missing.associateWith { name ->
+            when {
+                source == null -> NO_API_KEY
+                refreshing && !lastFailure.containsKey(name) -> "The server is building its first timetable from TfNSW's data now. This takes a minute or two."
+                else -> lastFailure[name] ?: "The server has not built this timetable yet. It tries after it starts and then nightly."
+            }
+        }
+    }
+
     /** Configured packs with no published version loaded. */
     private fun missingPacks(): List<String> = config.packs.map { it.name }.filter { it !in loaded }
 
@@ -172,32 +190,40 @@ class PipelineTimetableRepository(
         val rebuilt = ArrayList<String>()
         val unchanged = ArrayList<String>()
         val failed = LinkedHashMap<String, String>()
-        for (def in config.packs) {
-            var refs: List<SourceRef>? = null
-            try {
-                val inputs = def.gtfsPaths.map { archive.fetch(src, it) }
-                refs = inputs.map { SourceRef(it.path, it.sha256) }
-                val published = loaded[def.name]?.manifest
-                when {
-                    !force && published != null && published.sources == refs -> {
-                        log.info("Timetable {} unchanged ({})", def.name, published.info.version)
-                        unchanged += def.name
+        refreshing = true
+        try {
+            for (def in config.packs) {
+                var refs: List<SourceRef>? = null
+                try {
+                    val inputs = def.gtfsPaths.map { archive.fetch(src, it) }
+                    refs = inputs.map { SourceRef(it.path, it.sha256) }
+                    val published = loaded[def.name]?.manifest
+                    when {
+                        !force && published != null && published.sources == refs -> {
+                            log.info("Timetable {} unchanged ({})", def.name, published.info.version)
+                            lastFailure.remove(def.name)
+                            unchanged += def.name
+                        }
+                        !force && failedInputs[def.name] == refs ->
+                            failed[def.name] = "GTFS unchanged since the last failed build"
+                        else -> {
+                            withContext(Dispatchers.IO) { buildAndPublish(def.name, inputs.map { it.file }, refs, def.modes) }
+                            failedInputs.remove(def.name)
+                            lastFailure.remove(def.name)
+                            rebuilt += def.name
+                        }
                     }
-                    !force && failedInputs[def.name] == refs ->
-                        failed[def.name] = "GTFS unchanged since the last failed build"
-                    else -> {
-                        withContext(Dispatchers.IO) { buildAndPublish(def.name, inputs.map { it.file }, refs, def.modes) }
-                        failedInputs.remove(def.name)
-                        rebuilt += def.name
-                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (refs != null && e is PackBuildException) failedInputs[def.name] = refs
+                    failed[def.name] = e.message ?: e.javaClass.simpleName
+                    lastFailure[def.name] = describeFailure(e)
+                    log.error("Timetable refresh of {} failed; keeping the previous pack", def.name, e)
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (refs != null && e is PackBuildException) failedInputs[def.name] = refs
-                failed[def.name] = e.message ?: e.javaClass.simpleName
-                log.error("Timetable refresh of {} failed; keeping the previous pack", def.name, e)
             }
+        } finally {
+            refreshing = false
         }
         try {
             archive.prune()
@@ -356,6 +382,27 @@ class PipelineTimetableRepository(
     }
 
     companion object {
+        private const val NO_API_KEY =
+            "TFNSW_API_KEY is not set on the server, so it cannot download TfNSW's timetable. Add it to .env and restart tt-server."
+
+        /** What a person running the server should do about a failed refresh, in one or two sentences. */
+        internal fun describeFailure(e: Exception): String {
+            val detail = e.message?.take(300) ?: e.javaClass.simpleName
+            return when {
+                e is HttpStatusException && (e.status == 401 || e.status == 403) ->
+                    "TfNSW refused the server's API key (HTTP ${e.status}). Check TFNSW_API_KEY and that your TfNSW application has the GTFS timetable products added."
+                e is HttpStatusException && e.status == 404 ->
+                    "TfNSW has no timetable at the address the server asked for (HTTP 404). Update tt-server to the latest version."
+                e is HttpStatusException && e.temporary ->
+                    "TfNSW's servers answered HTTP ${e.status}. The server tries again in a few minutes, then hourly, until it works."
+                e is PackBuildException ->
+                    "TfNSW's timetable data could not be turned into a timetable: $detail. Update tt-server to the latest version."
+                e is java.io.IOException ->
+                    "The server could not download TfNSW's timetable ($detail). Check its internet connection. It tries again in a few minutes."
+                else -> "Building the timetable failed: $detail. See the server log."
+            }
+        }
+
         private val SYDNEY: ZoneId = ZoneId.of("Australia/Sydney")
         private val VERSION_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmm")
 

@@ -42,8 +42,8 @@ sealed interface PackUpdateResult {
     /** Download or verification failed; the previous version (if any) stays in use. */
     data class Failed(override val name: String, val version: String, val reason: String) : PackUpdateResult
 
-    /** The server does not offer this pack. */
-    data class NotOffered(override val name: String) : PackUpdateResult
+    /** The server does not offer this pack; [serverReason] is the server's own explanation, if it sent one. */
+    data class NotOffered(override val name: String, val serverReason: String? = null) : PackUpdateResult
 }
 
 /**
@@ -93,15 +93,18 @@ class PackUpdater(
         opened.forEach { p -> setStatus(p.name) { it.copy(version = p.version, validTo = p.validTo) } }
     }
 
-    /** Checks [offered] packs against what is installed and installs newer versions. */
-    suspend fun update(offered: List<PackInfo>): List<PackUpdateResult> = mutex.withLock {
+    /**
+     * Checks [offered] packs against what is installed and installs newer versions.
+     * [serverProblems] says why the server has no version of a pack (`ConfigResponse.timetableProblems`).
+     */
+    suspend fun update(offered: List<PackInfo>, serverProblems: Map<String, String> = emptyMap()): List<PackUpdateResult> = mutex.withLock {
         val installed = installedState.value
         val wanted = (installed.map { it.name } + config.defaultPacks).distinct()
         val results = wanted.map { name ->
             val info = offered.firstOrNull { it.name == name }
             val current = installed.firstOrNull { it.name == name }
             when {
-                info == null -> PackUpdateResult.NotOffered(name)
+                info == null -> PackUpdateResult.NotOffered(name, serverProblems[name]?.takeIf { it.isNotBlank() })
                 current?.version == info.version -> {
                     setStatus(name) { it.copy(updateAvailable = false) }
                     PackUpdateResult.UpToDate(name, info.version)
@@ -211,6 +214,8 @@ object TimetableProblems {
         report.filterIsInstance<PackUpdateResult.Failed>().firstOrNull()?.let {
             return "The timetable download failed (${it.reason}). Try again."
         }
-        return if (report.any { it is PackUpdateResult.NotOffered }) NOT_OFFERED else null
+        val notOffered = report.filterIsInstance<PackUpdateResult.NotOffered>()
+        if (notOffered.isEmpty()) return null
+        return notOffered.firstNotNullOfOrNull { it.serverReason } ?: NOT_OFFERED
     }
 }

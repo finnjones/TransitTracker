@@ -255,6 +255,26 @@ class PipelineTimetableRepositoryTest {
     }
 
     @Test
+    fun problemsSayWhyAPackIsMissingUntilItIsBuilt() = runTest {
+        assertEquals(mapOf("mini-rail" to "TFNSW_API_KEY is not set on the server, so it cannot download TfNSW's timetable. Add it to .env and restart tt-server."), repo(src = null).problems())
+
+        val r = repo()
+        assertTrue(r.problems().getValue("mini-rail").startsWith("The server has not built"))
+
+        source.failNext = HttpStatusException(401, "HTTP 401 fetching GTFS $path")
+        r.refresh()
+        assertTrue(r.problems().getValue("mini-rail").startsWith("TfNSW refused the server's API key (HTTP 401)"), r.problems().toString())
+
+        source.failNext = HttpStatusException(502, "HTTP 502 fetching GTFS $path")
+        r.refresh()
+        assertTrue(r.problems().getValue("mini-rail").startsWith("TfNSW's servers answered HTTP 502"), r.problems().toString())
+
+        source.put(path, fixtureZip, "\"v1\"")
+        assertEquals(listOf("mini-rail"), r.refresh().rebuilt)
+        assertEquals(emptyMap(), r.problems())
+    }
+
+    @Test
     fun importLocalBuildsFromFilesAndRejectsBadInput() {
         val r = repo(src = null)
         val info = r.importLocal("mini-rail", listOf(Fixtures.miniRail))

@@ -120,6 +120,11 @@ data class ConfigResponse(
     @ProtoNumber(7) val packs: List<PackInfo> = emptyList(),
     /** Most push watches one device may have. */
     @ProtoNumber(8) val maxWatches: Int = 10,
+    /**
+     * Why a pack the server should offer is missing from [packs] (pack name to a plain sentence,
+     * e.g. TfNSW refused the API key). Empty when every pack is published.
+     */
+    @ProtoNumber(9) val timetableProblems: Map<String, String> = emptyMap(),
 )
 
 @Serializable

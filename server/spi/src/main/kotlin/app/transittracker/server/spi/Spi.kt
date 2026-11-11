@@ -53,6 +53,12 @@ interface TimetableRepository {
 
     /** Runs the nightly schedule in [scope]; also loads existing packs from disk at start. */
     fun start(scope: CoroutineScope)
+
+    /**
+     * Why configured packs have no published version yet: pack name to a plain sentence for the
+     * person running the server (sent to phones in `/v1/config`). Empty once every pack is built.
+     */
+    fun problems(): Map<String, String> = emptyMap()
 }
 
 data class RefreshResult(val rebuilt: List<String>, val unchanged: List<String>, val failed: Map<String, String>)

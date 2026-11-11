@@ -355,6 +355,7 @@ private fun configResponse(deps: ApiDependencies): ConfigResponse {
         ),
         packs = deps.timetables.packs(),
         maxWatches = MAX_WATCHES_PER_DEVICE,
+        timetableProblems = deps.timetables.problems(),
     )
 }
 

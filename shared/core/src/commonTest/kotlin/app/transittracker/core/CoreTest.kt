@@ -307,6 +307,11 @@ class CoreTest {
         h.core.checkForUpdates()
         assertEquals(TimetableProblems.NOT_OFFERED, h.core.dataStatus.first().timetableProblem)
 
+        // The server says why it has none: the phone shows that instead.
+        h.serveConfig(problems = mapOf("syd-rail" to "TfNSW refused the server's API key (HTTP 401)."))
+        h.core.checkForUpdates()
+        assertEquals("TfNSW refused the server's API key (HTTP 401).", h.core.dataStatus.first().timetableProblem)
+
         // It offers one, but the download fails.
         h.serveConfig(h.packInfo("v1"))
         h.server.on("GET", "/v1/packs/syd-rail/*") { respond("", HttpStatusCode.NotFound) }

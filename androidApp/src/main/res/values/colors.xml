@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Night theme's Screen colour (NightColors.screen): window, splash and icon background. -->
+    <color name="screen">#FF0C0C0A</color>
+    <!-- Notification accent: the train's body colour (Night caution amber). -->
+    <color name="notification_accent">#FFFFB020</color>
+</resources>

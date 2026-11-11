@@ -35,10 +35,15 @@ RUN groupadd --system --gid 10001 tt \
 
 COPY --from=build /src/server/app/build/install/tt-server /opt/tt-server
 
+# A fixed heap, not a share of RAM: inside Docker inside an LXC container the JVM can see the
+# host's memory rather than the container's, and building the bus timetable fills whatever heap it
+# is given. Measured on 12 Nov 2026 (both packs built from scratch): -Xmx1g peaks at about 1.33 GB
+# for the whole process, which fits a 2 GB container; 75% of 2 GB (1.5 GB) peaked at 1.67 GB and
+# was killed by the host. On a machine with more memory, raise it with JAVA_OPTS in deploy/.env.
 ENV PATH="/opt/tt-server/bin:${PATH}" \
     TT_DATA_DIR=/data \
     TT_PORT=8080 \
-    JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+    JAVA_OPTS="-Xmx1g -XX:+ExitOnOutOfMemoryError"
 
 VOLUME ["/data"]
 USER tt

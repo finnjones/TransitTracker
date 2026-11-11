@@ -27,7 +27,10 @@ server (directly or over SSH).
 
 - An always-on **Linux** computer: a mini PC, an old laptop, a NUC, a Raspberry Pi 4/5 with
   4 GB+ RAM, or a NAS that runs Docker. 64-bit (x86-64 or ARM64).
-- About 1 GB of free RAM (2 GB once buses are added) and a few GB of disk.
+- 2 GB of RAM and a few GB of disk. tt-server peaks at about 1.3 GB while it builds the bus
+  timetable (at start-up when it has none, and when TfNSW publishes a new one); the rest of the
+  time it needs far less. Its Java heap is fixed at 1 GB (`JAVA_OPTS` in the Dockerfile); on a
+  bigger machine you can raise it in `.env`, e.g. `JAVA_OPTS=-Xmx2g -XX:+ExitOnOutOfMemoryError`.
 - **A domain whose DNS is on Cloudflare** (about A$15/year if you don't already have one), and a
   free Cloudflare Zero Trust account.
 - **Home Assistant OS cannot run this.** HA OS only runs Home Assistant add-ons, not Docker

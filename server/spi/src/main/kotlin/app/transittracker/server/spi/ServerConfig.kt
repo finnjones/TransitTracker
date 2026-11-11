@@ -129,6 +129,10 @@ data class FeedDefinition(
  * - Metro static: `/v2/gtfs/schedule/metro` (its trip ids match every v2 Metro trip update). The v1
  *   bundle (`/v1/gtfs/schedule/metro`) is frozen at version 17092024 (Metro North West only, 13
  *   stations) and none of its trips run in the current window: a pack built from it has no metro.
+ * - Light rail static: one v1 bundle per network (there is no v2: 404). `/v1/gtfs/schedule/lightrail`
+ *   is the Inner West line alone, so the three Sydney networks are listed by name. They merge with
+ *   the train bundle at shared stations (Central, Circular Quay, Town Hall, Wynyard, Parramatta) with no
+ *   conflicts; with them the pack is about 2 MB compressed (checked 11 Nov 2026).
  */
 object DefaultSources {
     val feeds: List<FeedDefinition> = listOf(
@@ -151,8 +155,14 @@ object DefaultSources {
     val packs: List<PackDefinition> = listOf(
         PackDefinition(
             name = "syd-rail",
-            modes = setOf(Mode.TRAIN, Mode.METRO),
-            gtfsPaths = listOf("/v1/gtfs/schedule/sydneytrains", "/v2/gtfs/schedule/metro"),
+            modes = setOf(Mode.TRAIN, Mode.METRO, Mode.LIGHT_RAIL),
+            gtfsPaths = listOf(
+                "/v1/gtfs/schedule/sydneytrains",
+                "/v2/gtfs/schedule/metro",
+                "/v1/gtfs/schedule/lightrail/cbdandsoutheast", // L2, L3
+                "/v1/gtfs/schedule/lightrail/innerwest", // L1
+                "/v1/gtfs/schedule/lightrail/parramatta", // L4
+            ),
         ),
     )
 }

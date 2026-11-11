@@ -189,7 +189,7 @@ class EndToEndTest {
         val pack = config.packs.single()
         assertEquals("syd-rail", pack.name)
         assertEquals("20261111T0640", pack.version)
-        assertEquals(setOf(Mode.TRAIN, Mode.METRO), pack.modes.toSet())
+        assertEquals(setOf(Mode.TRAIN, Mode.METRO, Mode.LIGHT_RAIL), pack.modes.toSet())
         assertEquals("/v1/packs/syd-rail/20261111T0640", pack.url)
         val packs = Codecs.json.decodeFromString(PacksResponse.serializer(), getAuthed("/v1/packs", token).bodyAsText())
         assertEquals(listOf(pack), packs.packs)

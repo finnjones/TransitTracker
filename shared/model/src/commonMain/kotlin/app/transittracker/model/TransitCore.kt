@@ -48,7 +48,11 @@ interface TransitCore {
 
     // ---- Alerts and status ----
     val alerts: Flow<List<Alert>>
+    /** Alerts whose routes or stops (including parent stations) touch the saved trip [tripId]. */
+    fun alertsFor(tripId: String): Flow<List<Alert>>
     val dataStatus: Flow<DataStatus>
+    /** Pull to refresh: fetches config and installs newer timetable packs now. False when offline or not joined. */
+    suspend fun checkForUpdates(): Boolean
 
     // ---- Push watches (stored on the server) ----
     val watches: Flow<List<WatchDto>>
@@ -56,6 +60,8 @@ interface TransitCore {
     suspend fun watchService(ref: ServiceRef, rules: WatchRules = WatchRules()): WatchDto
     suspend fun deleteWatch(id: String)
     suspend fun sendTestNotification(id: String): Boolean
+    /** Pull to refresh: reloads watches from the server. False when that failed. */
+    suspend fun refreshWatches(): Boolean
     /** Maps an FCM data payload (see [PushKeys]) to the service to open, if any. */
     fun openFromNotification(data: Map<String, String>): ServiceRef?
 
@@ -143,6 +149,7 @@ data class StopCall(
     val skipped: Boolean,
     /** True once the expected departure is in the past. */
     val passed: Boolean,
+    val position: LatLng? = null,
 )
 
 data class ServiceDetail(
@@ -155,6 +162,8 @@ data class ServiceDetail(
     val carCount: Int? = null,
     val dataAgeMs: Long? = null,
     val stale: Boolean = false,
+    /** The service's line on the map, when the timetable has one. */
+    val shapeId: ShapeId? = null,
 )
 
 data class TrackingState(
@@ -180,6 +189,12 @@ data class DataStatus(
     val joined: Boolean,
     val attribution: String,
     val statusMessage: String? = null,
+    /** Server feature flags from `/v1/config` (e.g. "planner"). */
+    val features: Map<String, Boolean> = emptyMap(),
+    /** Below this app version the front end shows "Update required". */
+    val minAppVersion: String = "0",
+    /** Most push watches this device may have. */
+    val maxWatches: Int = 10,
 )
 
 @Serializable

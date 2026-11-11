@@ -39,6 +39,24 @@ jobs:
           path: "**/build/reports/tests/"
           retention-days: 7
 
+  image-check:
+    name: Build image (no push)
+    needs: build
+    # Branches other than main and pull requests: prove deploy/Dockerfile still builds.
+    if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   image:
     name: Publish image
     needs: build

@@ -15,6 +15,8 @@ RUN --mount=type=cache,target=/root/.gradle ./gradlew --version --no-daemon
 
 COPY shared ./shared
 COPY server ./server
+# GTFS-Realtime .proto files used by :server:live (Wire code generation).
+COPY proto ./proto
 RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew :server:app:installDist --no-daemon --console=plain
 

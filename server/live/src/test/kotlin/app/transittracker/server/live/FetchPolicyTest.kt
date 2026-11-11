@@ -258,6 +258,13 @@ class FetchPolicyTest {
     }
 
     @Test
+    fun `the TfNSW limiter spaces every call, with no burst`() = runTest {
+        val limiter = TfnswQuota.rateLimiter(4, nanoTime = { testScheduler.currentTime * 1_000_000 })
+        val times = (1..5).map { limiter.acquire(); testScheduler.currentTime }
+        assertEquals(listOf(0L, 250L, 500L, 750L, 1000L), times)
+    }
+
+    @Test
     fun `rate limiter allows a burst then spaces calls`() = runTest {
         val limiter = virtualRateLimiter(4)
         repeat(4) { limiter.acquire() }

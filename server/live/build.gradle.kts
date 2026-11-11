@@ -28,4 +28,9 @@ dependencies {
     testRuntimeOnly(libs.logback)
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+    useJUnitPlatform()
+    // Real feed excerpts live at the repository root (testdata/realtime).
+    systemProperty("tt.testdata", rootProject.layout.projectDirectory.dir("testdata").asFile.absolutePath)
+    inputs.dir(rootProject.layout.projectDirectory.dir("testdata"))
+}

@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# Runs tt-admin inside the running tt-server container, e.g.
+#   ./tt-admin invite --expires-days 7 --note "Sam"
+#   ./tt-admin devices
+#   ./tt-admin revoke <deviceId>
+# Run ./tt-admin help for all commands.
+set -eu
+cd "$(dirname "$0")"
+# -T: no TTY, so output can be piped and the script works from cron.
+exec docker compose exec -T tt-server tt-admin "$@"

@@ -271,7 +271,9 @@ class TimetableRulesTest {
 
     @Test
     fun theChipAndBannersFollowTheDataStatus() {
-        val offline = DataStatus(emptyList(), null, liveStale = false, serverReachable = false, joined = true, attribution = "")
+        // A timetable is installed (there are journeys); only the server cannot be reached.
+        val installed = listOf(app.transittracker.model.PackStatus("syd-rail", "1", null, updateAvailable = false))
+        val offline = DataStatus(installed, null, liveStale = false, serverReachable = false, joined = true, attribution = "")
         val s = buildTimetableState(inputs(listOf(journey("a", 8 * 60)), status = offline), now)
         assertEquals(DataChip.Offline, s.chip)
         assertEquals(1, s.banners.size)

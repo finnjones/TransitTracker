@@ -137,7 +137,12 @@ fun banners(status: DataStatus?, today: ServiceDate): List<HomeBanner> {
         if (!status.serverReachable) add(HomeBanner(BannerKind.OFFLINE, "No live data. Showing the timetable."))
         else if (status.liveStale) add(HomeBanner(BannerKind.STALE, "Live data is delayed. Showing the last update."))
         status.statusMessage?.takeIf { it.isNotBlank() }?.let { add(HomeBanner(BannerKind.MESSAGE, it)) }
-        if (status.packs.any { it.downloading }) add(HomeBanner(BannerKind.UPDATING, "Updating timetable…"))
+        // Joined, but the first timetable has not arrived yet (the app was closed during onboarding's download).
+        if (status.joined && status.packs.none { it.version != null }) {
+            add(HomeBanner(BannerKind.UPDATING, "Getting the timetable. Your trips appear when it is ready."))
+        } else if (status.packs.any { it.downloading }) {
+            add(HomeBanner(BannerKind.UPDATING, "Updating timetable…"))
+        }
         if (status.packs.any { p -> p.validTo != null && p.validTo!! < today }) {
             add(HomeBanner(BannerKind.OUT_OF_DATE, "Timetable is out of date. Connect to update."))
         }

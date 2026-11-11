@@ -1006,6 +1006,24 @@ Rough weeks for one developer; estimates only.
 **F0–F6: about 14 weeks, plus about two weeks of backend work for the planner
 (section 8.5).**
 
+### 9.1 Where the build stands
+
+Every screen in section 5 except Alarms (5.10) is built in `app/ui` and runs
+on the fake core and the fake planner: Home, trip timetable, service, live
+tracking and the Map tab, the three planner screens with save-as-route, saved
+places and route editing, Alerts, Notify and the watch editor, onboarding and
+Settings, with the three page transitions and both themes. Each has unit tests
+for its rules and its state holder, and rendered screenshots
+(`./gradlew :app:ui:screenshots`).
+
+| Still to do | Why it is not done |
+|---|---|
+| Run it against the real server | The screens have only been run on fake data. The Android shell wires the real core in its `live` flavour; nothing here could install or run an Android app, so that is the first thing to try on a phone |
+| The planner's server endpoints (section 8.5) | A separate piece of server work. Until it lands, the live app's planner answers "unavailable" and the demo app uses the fake planner |
+| GO, alarms, the home-screen widget, sounds, the iOS shell | Deliberately left for later (F7) |
+| The gaps in section 8.3 | Each has a workaround in the app today |
+| Large font sizes, and gestures on the map | Not exercised: there is no display here. Screens were checked from still renders at phone size and density |
+
 ---
 
 ## 10. Risks

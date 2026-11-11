@@ -1,0 +1,12 @@
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color
+APS_1a,SydneyTrains,T8,City Circle to Macarthur via Airport,T8 Airport & South Line,2,,00954C,FFFFFF
+APS_1e,SydneyTrains,T8,City Circle to Leppington via Sydenham,T8 Airport & South Line,2,,00954C,FFFFFF
+CCN_1c,NSWTrains,CCN,Central to Newcastle Interchange via Strathfield,Central Coast & Newcastle Line,2,,D11F2F,FFFFFF
+ESI_2a,SydneyTrains,T4,Waterfall to Bondi Junction via City,T4 Eastern Suburbs & Illawarra Line,2,,005AA3,FFFFFF
+ESI_2d,SydneyTrains,T4,Cronulla to Bondi Junction via City,T4 Eastern Suburbs & Illawarra Line,2,,005AA3,FFFFFF
+IWL_1a,SydneyTrains,T2,City Circle to Parramatta,T2 Leppington & Inner West Line,2,,0098CD,FFFFFF
+IWL_2a,SydneyTrains,T2,Parramatta to City Circle ,T2 Leppington & Inner West Line,2,,0098CD,FFFFFF
+NTH_1a,SydneyTrains,T9,North Shore to Hornsby and Berowra via City and Strathfield,T9 Northern Line,2,,D11F2F,FFFFFF
+WST_2c,SydneyTrains,T1,Emu Plains to Berowra via City ,T1 Western Line,2,,F99D1C,FFFFFF
+WST_2d,SydneyTrains,T1,Richmond to Berowra via City ,T1 Western Line,2,,F99D1C,FFFFFF
+SMNW_M1,SMNW,M1,Metro North West & Bankstown Line,Sydney Metro Network,401,,168388,FFFFFF

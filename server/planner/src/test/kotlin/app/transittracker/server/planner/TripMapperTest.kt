@@ -229,11 +229,28 @@ class TripMapperTest {
         assertEquals("Central", Names.stopName(LegStopDto(disassembledName = "Central Station, Platform 16")))
         assertEquals("Seven Hills", Names.stopName(LegStopDto(disassembledName = "Seven Hills Station, Stand A")))
         assertEquals("Seven Hills Rd opp Monaro St", Names.stopName(LegStopDto(disassembledName = "Seven Hills Rd opp Monaro St")))
-        assertEquals("Circular Quay", Names.stopName(LegStopDto(name = "Circular Quay, Wharf 4, Sydney")))
+        val sydney = ParentDto(name = "Sydney", type = "locality")
+        assertEquals("Circular Quay", Names.stopName(LegStopDto(name = "Circular Quay, Wharf 4, Sydney", parent = sydney)))
+        // Live shapes (11 Nov 2026): a bus stand keeps its street, a wharf its name.
+        assertEquals(
+            "Macquarie University Station, Herring Rd",
+            Names.stopName(LegStopDto(disassembledName = "Macquarie University Station, Herring Rd, Stand D")),
+        )
+        assertEquals("Davistown, Central RSL Wharf", Names.stopName(LegStopDto(disassembledName = "Davistown, Central RSL Wharf")))
+        assertEquals("Bondi Junction", Names.stopName(LegStopDto(disassembledName = "Bondi Junction Station, Stand D")))
+        assertEquals(
+            "Wharf 3, Side A",
+            Names.platform(LegStopDto(disassembledName = "Circular Quay, Wharf 3, Side A", properties = platformName("Wharf 3, Side A"))),
+        )
+        assertEquals("3", Names.platform(LegStopDto(disassembledName = "Epping Station, Platform 3", properties = platformName("Platform 3"))))
+        assertEquals("Stand D", Names.platform(LegStopDto(properties = platformName("Bondi Junction Station, Stand D"))))
+        assertNull(Names.platform(LegStopDto(disassembledName = "Glenayr Ave at Hall St", properties = platformName("Glenayr Ave at Hall St"))))
         assertEquals("Wharf 4", Names.platform(LegStopDto(name = "Circular Quay, Wharf 4, Sydney")))
         assertEquals("Stand A", Names.platform(LegStopDto(disassembledName = "Seven Hills Station, Stand A")))
         assertNull(Names.platform(LegStopDto(disassembledName = "Seven Hills Rd opp Monaro St")))
     }
+
+    private fun platformName(value: String) = kotlinx.serialization.json.JsonObject(mapOf("platformName" to kotlinx.serialization.json.JsonPrimitive(value)))
 
     private fun app.transittracker.model.ItineraryLeg.expectedMs(): Long? = from.expectedMs ?: to.expectedMs
 }

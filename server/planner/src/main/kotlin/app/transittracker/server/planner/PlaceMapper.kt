@@ -63,17 +63,36 @@ internal data class RankedPlace(val place: Place, val matchQuality: Int, val isB
 internal object PlaceRanking {
     /** Distance bands in metres: within a band, TfNSW's own match quality decides. */
     private val BANDS = doubleArrayOf(2_000.0, 10_000.0, 50_000.0)
+    private val WORD = Regex("[^\\p{L}\\p{N}]+")
 
-    /** TfNSW's order (best match first); with [near], nearer bands first. Then [limit]. */
-    fun rank(places: List<RankedPlace>, near: LatLng?, limit: Int): List<Place> {
-        val byQuality = compareByDescending<RankedPlace> { it.isBest }.thenByDescending { it.matchQuality }.thenBy { it.order }
-        val sorted = if (near == null) {
-            places.sortedWith(byQuality)
-        } else {
-            places.sortedWith(compareBy<RankedPlace> { band(Geo.distanceMetres(near, it.place.position)) }.then(byQuality))
+    /**
+     * Ranks in three tiers, then by distance band ([near]) and TfNSW's `matchQuality` and order:
+     *
+     * 1. TfNSW's best match (`isBest`);
+     * 2. stops whose name has every word searched ("strathfield" -> Strathfield Station, North
+     *    Strathfield Station), so a station-like search finds stations first;
+     * 3. everything else.
+     *
+     * Checked on the live API (11 Nov 2026): stop_finder lists locations alphabetically within each
+     * type, scores stops ~980 and streets, suburbs and POIs ~240, and flags one location `isBest`.
+     * Ranking by distance first put "Strathfield College, Haymarket" above Strathfield Station for a
+     * phone in the CBD.
+     */
+    fun rank(places: List<RankedPlace>, query: String, near: LatLng?, limit: Int): List<Place> {
+        val words = words(query)
+        val tier = { p: RankedPlace ->
+            when {
+                p.isBest -> 0
+                p.place.kind == PlaceKind.STOP && words.isNotEmpty() && words(p.place.name).let { name -> words.all { w -> name.any { it.startsWith(w) } } } -> 1
+                else -> 2
+            }
         }
-        return sorted.take(limit).map { it.place }
+        val byQuality = compareByDescending<RankedPlace> { it.matchQuality }.thenBy { it.order }
+        val inTier = if (near == null) byQuality else compareBy<RankedPlace> { band(Geo.distanceMetres(near, it.place.position)) }.then(byQuality)
+        return places.sortedWith(compareBy(tier).then(inTier)).take(limit).map { it.place }
     }
+
+    private fun words(text: String): List<String> = text.lowercase().split(WORD).filter { it.isNotEmpty() }
 
     private fun band(metres: Double): Int = BANDS.indexOfFirst { metres <= it }.let { if (it < 0) BANDS.size else it }
 }

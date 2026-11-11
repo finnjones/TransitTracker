@@ -38,7 +38,7 @@ internal object ProductClasses {
     const val WALK = 99
     const val FOOTPATH = 100
 
-    /** `iconId` 23 = "On Demand" (product class 5) [K]. */
+    /** `iconId` 23 = "On Demand": product class 5 in KRAIL's capture [K], class 10 on the live API (dropped either way). */
     const val ON_DEMAND_ICON = 23
 
     fun classify(transportation: TransportationDto?, footPath: List<FootPathInfoDto>?): LegClass {
@@ -86,21 +86,47 @@ internal object Names {
     private val PLATFORM = Regex("""^(Platform|Stand|Wharf|Bay|Side|Track|Gate)\s+[A-Za-z0-9]{1,6}$""", RegexOption.IGNORE_CASE)
     private val STATION_SUFFIX = Regex("""\s+Station$""", RegexOption.IGNORE_CASE)
 
-    /** "Central Station, Platform 16, Sydney" -> "Central"; "Seven Hills Rd opp Monaro St" unchanged. */
+    /**
+     * A leg stop's display name: "Central Station, Platform 16" -> "Central"; a bus stand keeps its
+     * street ("Macquarie University Station, Herring Rd, Stand D" -> "Macquarie University Station,
+     * Herring Rd"), a wharf its name ("Davistown, Central RSL Wharf"). " Station" goes only from a
+     * name that is just the station.
+     */
     fun stopName(stop: LegStopDto): String? {
-        val first = withoutPlatform(stop.disassembledName ?: stop.name) ?: return null
-        return STATION_SUFFIX.replace(first, "").trim().ifEmpty { null }
+        val parts = nameParts(stop.disassembledName) ?: nameParts(stop.name)?.let { withoutLocality(it, stop) } ?: return null
+        val name = parts.joinToString(", ")
+        return (if (parts.size == 1) STATION_SUFFIX.replace(name, "").trim() else name).ifEmpty { null }
     }
 
-    /** The first part of a comma-separated name that is not a platform: "Central Station, Platform 16" -> "Central Station". */
-    fun withoutPlatform(raw: String?): String? =
-        raw?.split(',')?.map { it.trim() }?.firstOrNull { it.isNotEmpty() && !PLATFORM.matches(it) }
+    /**
+     * Every part of a comma-separated name that is not a platform: "Central Station, Platform 16" ->
+     * "Central Station"; "Davistown, Central RSL Wharf" stays whole (on the live API the first part
+     * alone is sometimes just the suburb).
+     */
+    fun withoutPlatform(raw: String?): String? = nameParts(raw)?.joinToString(", ")
 
-    /** "Platform 2" -> "2"; "Stand A", "Wharf 3" as they are. Null when the planner names none. */
+    private fun nameParts(raw: String?): List<String>? =
+        raw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() && !PLATFORM.matches(it) }?.takeIf { it.isNotEmpty() }
+
+    /** The long `name` ends with the suburb ("Strathfield Station, Platform 3, Strathfield"): drop it. */
+    private fun withoutLocality(parts: List<String>, stop: LegStopDto): List<String> {
+        val locality = generateSequence(stop.parent) { it.parent }.firstOrNull { it.type == "locality" }?.name?.trim()
+        return if (parts.size > 1 && parts.last().equals(locality, ignoreCase = true)) parts.dropLast(1) else parts
+    }
+
+    /**
+     * "Platform 2" -> "2"; "Stand A", "Wharf 3" and "Wharf 3, Side A" (ferries' `platformName`) as
+     * they are. Null when the planner names none: for ordinary bus stops `platformName` is the stop's
+     * name, which is ignored.
+     */
     fun platform(stop: LegStopDto): String? {
-        val candidates = listOfNotNull(stop.properties.string("platformName")) +
-            listOfNotNull(stop.disassembledName, stop.name).flatMap { it.split(',') }
-        val found = candidates.map { it.trim() }.firstOrNull { PLATFORM.matches(it) } ?: return null
+        val named = stop.properties.string("platformName")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+        val found = if (!named.isNullOrEmpty() && named.all { PLATFORM.matches(it) }) {
+            named.joinToString(", ")
+        } else {
+            (named.orEmpty() + listOfNotNull(stop.disassembledName, stop.name).flatMap { it.split(',') })
+                .map { it.trim() }.firstOrNull { PLATFORM.matches(it) } ?: return null
+        }
         return if (found.startsWith("Platform ", ignoreCase = true)) found.substring(9).trim() else found
     }
 
@@ -184,20 +210,23 @@ internal class TripMapper(
                 LegClass.Walk -> out += walkLeg(leg, ends, first = i == 0, last = i == raw.lastIndex)
                 is LegClass.Ride -> {
                     val ride = rideLeg(leg, cls.mode)
-                    val redundant = leg.footPathInfoRedundant == true
+                    // `footPathInfoRedundant` is NOT read: on the live API it is true on every Sydney Trains
+                    // leg with an AFTER walk to the next ride, and no separate walk leg exists then. A walk
+                    // that is its own leg is detected by adjacency instead, so it is never added twice.
                     val before = leg.footPathInfo.orEmpty().filter { it.position.equals("BEFORE", true) }.sumOf { it.duration ?: 0 }
                     // A walk already in front of this ride (its own leg, or the previous ride's AFTER walk) wins.
                     val prevIsWalk = out.isNotEmpty() && out.last().ride == null
-                    if (before > 0 && !redundant && !prevIsWalk) {
+                    if (before > 0 && !prevIsWalk) {
                         val from = out.lastOrNull()?.leg?.to ?: endPoint(ends.from, "Start", 0)
                         out += embeddedWalk(from = from, to = ride.leg.from, durationS = before.toInt(), endsAtTo = true)
                     }
                     out += ride
                     val nextIsWalk = i < raw.lastIndex && classes[i + 1] == LegClass.Walk
-                    if (!redundant && !nextIsWalk) {
+                    if (!nextIsWalk) {
                         val after = leg.footPathInfo.orEmpty().filter { it.position.equals("AFTER", true) }.sumOf { it.duration ?: 0 }
                         val next = raw.getOrNull(i + 1)
-                        val to = next?.origin?.let { point(it, departure = true, fallback = ends.to, fallbackName = "Destination", resolveIds = true) }
+                        val nextMode = (classes.getOrNull(i + 1) as? LegClass.Ride)?.mode
+                        val to = next?.origin?.let { point(it, departure = true, fallback = ends.to, fallbackName = "Destination", resolveIds = true, mode = nextMode) }
                             ?: endPoint(ends.to, "Destination", 0)
                         val durationS = when {
                             after > 0 -> after.toInt()
@@ -279,8 +308,8 @@ internal class TripMapper(
         val origin = leg.origin ?: throw IllegalArgumentException("ride without origin")
         val destination = leg.destination ?: throw IllegalArgumentException("ride without destination")
         val realtime = leg.isRealtimeControlled == true
-        val from = point(origin, departure = true, fallback = null, fallbackName = "", resolveIds = true, realtime = realtime)
-        val to = point(destination, departure = false, fallback = null, fallbackName = "", resolveIds = true, realtime = realtime)
+        val from = point(origin, departure = true, fallback = null, fallbackName = "", resolveIds = true, realtime = realtime, mode = mode)
+        val to = point(destination, departure = false, fallback = null, fallbackName = "", resolveIds = true, realtime = realtime, mode = mode)
         if (from.scheduledMs == 0L || to.scheduledMs == 0L) throw IllegalArgumentException("ride without times")
         val transportation = leg.transportation
         val routeName = transportation?.disassembledName ?: transportation?.number
@@ -302,7 +331,7 @@ internal class TripMapper(
                 mode = mode,
                 routeName = routeName,
                 headsign = transportation?.destination?.name?.let { Names.placeName(null, it) },
-                stopCount = leg.stopSequence?.size?.minus(1)?.takeIf { it > 0 },
+                stopCount = stopCount(leg.stopSequence),
                 realtime = realtime,
                 cancelled = cancelled,
                 occupancy = occupancy(origin.properties.string("occupancy")),
@@ -313,8 +342,8 @@ internal class TripMapper(
                     transportation?.properties.string("RealtimeTripId"),
                     transportation?.properties.string("AVMSTripID"),
                 ).distinct(),
-                boardingStopIds = knownIds(origin),
-                alightingStopIds = knownIds(destination),
+                boardingStopIds = knownIds(origin, mode),
+                alightingStopIds = knownIds(destination, mode),
                 departureMs = departures,
             ),
             coords = coords,
@@ -333,13 +362,14 @@ internal class TripMapper(
         fallbackName: String,
         resolveIds: Boolean,
         realtime: Boolean = false,
+        mode: Mode? = null,
     ): LegPoint {
         val planned = time(if (departure) stop.departureTimePlanned else stop.arrivalTimePlanned)
             ?: time(if (departure) stop.departureTimeBaseTimetable else stop.arrivalTimeBaseTimetable)
             ?: time(if (departure) stop.arrivalTimePlanned else stop.departureTimePlanned)
         val estimated = time(if (departure) stop.departureTimeEstimated else stop.arrivalTimeEstimated)
         val isStop = stop.type in STOP_TYPES
-        val stopId = if (resolveIds && isStop) knownIds(stop).firstOrNull() else null
+        val stopId = if (resolveIds && isStop) knownIds(stop, mode).firstOrNull() else null
         val position = latLng(stop.coord) ?: fallback ?: throw IllegalArgumentException("point without position")
         val name = (if (isStop) Names.stopName(stop) else Names.placeName(stop.disassembledName, stop.name))
             ?: fallbackName.ifEmpty { throw IllegalArgumentException("point without name") }
@@ -355,15 +385,29 @@ internal class TripMapper(
 
     private fun endPoint(position: LatLng, name: String, timeMs: Long) = LegPoint(name = name, position = position, scheduledMs = timeMs)
 
-    /** The planner's ids for a stop (platform, station, legacy id) that exist in the timetable. */
-    private fun knownIds(stop: LegStopDto): List<StopId> {
+    /**
+     * The planner's ids for a stop (platform, station, legacy id) that exist in the timetable.
+     *
+     * For a ride on [mode], only timetable stops that [mode] serves count: on the live API a bus
+     * stand at a railway station has the station as its `parent` (Bondi Junction Stand D -> 202210),
+     * which must not become the bus stop's id. For a walk's end ([mode] null) only the stop's own id.
+     */
+    private fun knownIds(stop: LegStopDto, mode: Mode?): List<StopId> {
         val tt = timetable ?: return emptyList()
-        return listOfNotNull(
-            stop.id,
-            stop.parent?.id?.takeIf { stop.parent.type in STOP_TYPES },
-            stop.parent?.properties.string("stopId"),
-            stop.properties.string("stopId"),
-        ).distinct().filter { tt.stop(it) != null }
+        val candidates = if (mode == null) {
+            listOfNotNull(stop.id)
+        } else {
+            listOfNotNull(
+                stop.id,
+                stop.parent?.id?.takeIf { stop.parent.type in STOP_TYPES },
+                stop.parent?.properties.string("stopId"),
+                stop.properties.string("stopId"),
+            )
+        }
+        return candidates.distinct().filter { id ->
+            val known = tt.stop(id) ?: return@filter false
+            mode == null || known.modes.isEmpty() || mode in known.modes
+        }
     }
 
     private fun mergeWalks(drafts: List<Draft>): List<Draft> {
@@ -438,6 +482,20 @@ internal class TripMapper(
             val (lat, lon) = coord
             if (lat.isNaN() || lon.isNaN() || lat !in -90.0..90.0 || lon !in -180.0..180.0) return null
             return LatLng(lat, lon)
+        }
+
+        /**
+         * Stops ridden: the stops after boarding that the service calls at. On the live API
+         * `stopSequence` also lists stations an express runs through, without any time (a CCN train
+         * Strathfield -> Epping lists 9 stations and calls at 2); those are not counted. Without any
+         * times at all, every listed stop counts.
+         */
+        internal fun stopCount(sequence: List<LegStopDto>?): Int? {
+            val after = sequence?.drop(1)?.takeIf { it.isNotEmpty() } ?: return null
+            val timed = after.count { s ->
+                listOf(s.arrivalTimePlanned, s.arrivalTimeEstimated, s.departureTimePlanned, s.departureTimeEstimated).any { it != null }
+            }
+            return (if (timed > 0) timed else after.size).takeIf { it > 0 }
         }
 
         private fun walkSeconds(path: List<LatLng>): Int {

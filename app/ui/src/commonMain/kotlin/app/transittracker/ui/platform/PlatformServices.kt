@@ -49,6 +49,12 @@ interface PlatformServices {
     /** The device id text shown in Settings > About (needed to revoke a device); null before joining. */
     val deviceId: StateFlow<String?>
 
+    /**
+     * Checks for and installs newer builds of the app (Settings > About, CHECK FOR UPDATES);
+     * null where the build cannot update itself (demo, desktop, builds without a release feed).
+     */
+    val updater: AppUpdater? get() = null
+
     // ---- System motion state (plan 2.3: sprites hold still and transitions cut)
     val systemReduceMotion: StateFlow<Boolean>
     val batterySaver: StateFlow<Boolean>
@@ -67,6 +73,7 @@ class FakePlatformServices(
     reduceMotion: Boolean = false,
     batterySaver: Boolean = false,
     override val isDebugBuild: Boolean = true,
+    override val updater: AppUpdater? = FakeAppUpdater(),
 ) : PlatformServices {
     val location = MutableStateFlow(location)
     val locationPermissionState = MutableStateFlow(locationPermission)

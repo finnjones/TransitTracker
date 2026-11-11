@@ -7,6 +7,7 @@ import app.transittracker.model.WatchDto
 import app.transittracker.ui.places.PlacesStore
 import app.transittracker.ui.platform.PermissionState
 import app.transittracker.ui.platform.PlatformServices
+import app.transittracker.ui.platform.UpdateState
 import app.transittracker.ui.settings.CardDensity
 import app.transittracker.ui.settings.ClockFormat
 import app.transittracker.ui.settings.SettingsStore
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
@@ -58,6 +60,8 @@ data class SettingsUiState(
     val test: TestState = TestState(),
     val appVersion: String = "",
     val deviceId: String? = null,
+    /** The app-update rows of About. */
+    val update: UpdateWords = updateWords(null),
     /** A developer build: the debug gallery row is shown. */
     val debugBuild: Boolean = false,
 )
@@ -100,7 +104,9 @@ class SettingsStateHolder(
         platform.notificationPermission, platform.batterySaver, platform.systemReduceMotion, platform.deviceId,
     ) { p, b, m, id -> Phone(p, b, m, id) }
 
-    override val state: StateFlow<SettingsUiState> = combine(dataInputs, settings.settings, phone, test) { d, ui, ph, t ->
+    private val updates: Flow<UpdateState?> = platform.updater?.state ?: flowOf(null)
+
+    override val state: StateFlow<SettingsUiState> = combine(dataInputs, settings.settings, phone, test, updates) { d, ui, ph, t, u ->
         val status = d.status
         SettingsUiState(
             loaded = true,
@@ -119,10 +125,17 @@ class SettingsStateHolder(
             test = t,
             appVersion = platform.appVersion,
             deviceId = ph.deviceId,
+            update = updateWords(u),
             debugBuild = platform.isDebugBuild,
         )
     }.distinctUntilChanged().stateIn(
-        scope, SharingStarted.Eagerly, SettingsUiState(appVersion = platform.appVersion, debugBuild = platform.isDebugBuild),
+        scope,
+        SharingStarted.Eagerly,
+        SettingsUiState(
+            appVersion = platform.appVersion,
+            update = updateWords(platform.updater?.state?.value),
+            debugBuild = platform.isDebugBuild,
+        ),
     )
 
     // ---- display: every change is stored at once
@@ -136,6 +149,17 @@ class SettingsStateHolder(
 
     private fun change(f: (UiSettings) -> UiSettings) {
         scope.launch { settings.update(f) }
+    }
+
+    // ---- app updates
+
+    /** The update button: check the release feed, or install what it found. */
+    fun updateApp(action: UpdateAction) {
+        val updater = platform.updater ?: return
+        when (action) {
+            UpdateAction.CHECK -> updater.check()
+            UpdateAction.INSTALL -> updater.install()
+        }
     }
 
     // ---- notifications

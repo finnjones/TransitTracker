@@ -11,14 +11,34 @@ plugins {
 val pushConfigured = file("google-services.json").isFile
 if (pushConfigured) apply(plugin = "com.google.gms.google-services")
 
-// The live flavour's server address, read at build time: Gradle property `tt.baseUrl`, then the
-// TT_BASE_URL environment variable, then `tt.baseUrl` in local.properties. Blank means the app
-// asks for it on first start. It is never committed to the repository.
-val baseUrl: String = providers.gradleProperty("tt.baseUrl").orNull?.takeIf { it.isNotBlank() }
-    ?: providers.environmentVariable("TT_BASE_URL").orNull?.takeIf { it.isNotBlank() }
-    ?: rootProject.file("local.properties").takeIf { it.isFile }?.let { f ->
-        Properties().apply { f.inputStream().use { load(it) } }.getProperty("tt.baseUrl")
-    }.orEmpty().trim()
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+}
+
+/** A build setting: Gradle property [property], then environment variable [env], then [property] in local.properties. */
+fun setting(property: String, env: String): String =
+    providers.gradleProperty(property).orNull?.takeIf { it.isNotBlank() }
+        ?: providers.environmentVariable(env).orNull?.takeIf { it.isNotBlank() }
+        ?: localProperties.getProperty(property).orEmpty().trim()
+
+// The live flavour's server address, read at build time (tt.baseUrl / TT_BASE_URL). Blank means
+// the app asks for it on first start. It is never committed to the repository.
+val baseUrl: String = setting("tt.baseUrl", "TT_BASE_URL")
+
+// Version: CI passes its run number (TT_VERSION_CODE), so every build it publishes is newer than
+// the last. Local builds are 1 / 0.1.0 unless tt.versionCode says otherwise.
+val buildNumber: Int? = setting("tt.versionCode", "TT_VERSION_CODE").toIntOrNull()?.takeIf { it > 0 }
+
+// In-app updates: the GitHub repository ("owner/name") whose releases the app checks
+// (tt.updateRepo / TT_UPDATE_REPO; in GitHub Actions, the repository being built). Blank turns
+// the CHECK FOR UPDATES button off. See androidApp/README.md, "Updates".
+val updateRepo: String = setting("tt.updateRepo", "TT_UPDATE_REPO")
+    .ifEmpty { providers.environmentVariable("GITHUB_REPOSITORY").orNull.orEmpty().trim() }
+
+// Release signing. Updates only install over an APK signed with the same key, so releases are
+// signed with one long-lived key (never committed): tt.signing.storeFile / TT_SIGNING_STORE_FILE
+// and its passwords and alias. Without it, release builds are unsigned.
+val signingStore: String = setting("tt.signing.storeFile", "TT_SIGNING_STORE_FILE")
 
 fun String.asJavaString(): String = "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
@@ -30,8 +50,8 @@ android {
         applicationId = "app.transittracker"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = buildNumber ?: 1
+        versionName = if (buildNumber != null) "0.1.$buildNumber" else "0.1.0"
         buildConfigField("boolean", "PUSH_CONFIGURED", pushConfigured.toString())
     }
 
@@ -41,6 +61,7 @@ android {
         create("live") {
             dimension = "data"
             buildConfigField("String", "BASE_URL", baseUrl.asJavaString())
+            buildConfigField("String", "UPDATE_REPO", updateRepo.asJavaString())
         }
         // Fake data on the real clock (like the desktop window): the whole UI with no server.
         create("demo") {
@@ -48,6 +69,19 @@ android {
             applicationIdSuffix = ".demo"
             versionNameSuffix = "-demo"
             buildConfigField("String", "BASE_URL", "".asJavaString())
+            // The demo is not published as a release; it does not update itself.
+            buildConfigField("String", "UPDATE_REPO", "".asJavaString())
+        }
+    }
+
+    if (signingStore.isNotEmpty()) {
+        signingConfigs {
+            create("release") {
+                storeFile = rootProject.file(signingStore)
+                storePassword = setting("tt.signing.storePassword", "TT_SIGNING_STORE_PASSWORD")
+                keyAlias = setting("tt.signing.keyAlias", "TT_SIGNING_KEY_ALIAS")
+                keyPassword = setting("tt.signing.keyPassword", "TT_SIGNING_KEY_PASSWORD")
+            }
         }
     }
 
@@ -55,6 +89,7 @@ android {
         release {
             // R8 is off for now (no keep rules written yet); see androidApp/README.md.
             isMinifyEnabled = false
+            if (signingStore.isNotEmpty()) signingConfig = signingConfigs.getByName("release")
         }
     }
 

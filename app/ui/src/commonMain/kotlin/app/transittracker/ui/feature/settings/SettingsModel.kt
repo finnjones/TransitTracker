@@ -5,7 +5,10 @@ import app.transittracker.model.PackStatus
 import app.transittracker.model.ServiceDate
 import app.transittracker.model.ServiceTime
 import app.transittracker.ui.format.Lamp
+import app.transittracker.ui.platform.AppUpdate
 import app.transittracker.ui.platform.PermissionState
+import app.transittracker.ui.platform.UpdateProblem
+import app.transittracker.ui.platform.UpdateState
 import app.transittracker.ui.theme.ColorRole
 import kotlinx.datetime.TimeZone
 
@@ -145,6 +148,108 @@ fun testWords(outcome: TestOutcome): String = when (outcome) {
 }
 
 // ---------------------------------------------------------------- about
+
+/** What the update button does. */
+enum class UpdateAction { CHECK, INSTALL }
+
+/**
+ * The app-update rows of the About group: a lamp and colour (none before the first check), a
+ * headline, a sentence, and the button ([button] null for none; [busy] draws it disabled).
+ */
+data class UpdateWords(
+    val lamp: Lamp?,
+    val role: ColorRole,
+    val headline: String,
+    val detail: String?,
+    val button: String?,
+    val action: UpdateAction = UpdateAction.CHECK,
+    val busy: Boolean = false,
+    /** The release notes of an update on offer. */
+    val notes: String? = null,
+)
+
+/** "31.4 MB": one decimal, from bytes; blank when the size is unknown. */
+fun sizeWords(bytes: Long): String {
+    if (bytes <= 0) return ""
+    val tenths = (bytes + 50_000) / 100_000
+    return "${tenths / 10}.${tenths % 10} MB"
+}
+
+private fun versionWords(update: AppUpdate) = "Version ${update.versionName}"
+
+/** [state] null: this build cannot update itself. */
+fun updateWords(state: UpdateState?): UpdateWords = when (state) {
+    null -> UpdateWords(
+        null, ColorRole.SECONDARY, "Updates are not set up for this build.",
+        "Install new versions by hand.", null,
+    )
+    UpdateState.Idle -> UpdateWords(
+        null, ColorRole.SECONDARY, "App updates", "Check for a newer version of TransitTracker.", "CHECK FOR UPDATES",
+    )
+    UpdateState.Checking -> UpdateWords(
+        Lamp.RING, ColorRole.INFO, "Checking for updates", null, "CHECKING...", busy = true,
+    )
+    UpdateState.UpToDate -> UpdateWords(
+        Lamp.CIRCLE, ColorRole.GO, "You have the latest version.", null, "CHECK AGAIN",
+    )
+    is UpdateState.Available -> UpdateWords(
+        Lamp.RING, ColorRole.INFO, "${versionWords(state.update)} is ready to install.",
+        sizeWords(state.update.sizeBytes).let { if (it.isEmpty()) null else "$it download." },
+        "INSTALL UPDATE", UpdateAction.INSTALL, notes = state.update.notes.ifBlank { null },
+    )
+    is UpdateState.Downloading -> {
+        val percent = state.fraction?.let { "${(it.coerceIn(0f, 1f) * 100).toInt()}%" }
+        UpdateWords(
+            Lamp.RING, ColorRole.INFO, "Downloading ${versionWords(state.update).lowercase()}",
+            "Keep TransitTracker open until it finishes.",
+            if (percent == null) "DOWNLOADING..." else "DOWNLOADING $percent", UpdateAction.INSTALL, busy = true,
+        )
+    }
+    is UpdateState.Installing -> UpdateWords(
+        Lamp.RING, ColorRole.INFO, "Installing ${versionWords(state.update).lowercase()}",
+        "If your phone asks, tap Update. TransitTracker closes while it updates; open it again afterwards.",
+        "INSTALLING...", UpdateAction.INSTALL, busy = true,
+    )
+    is UpdateState.NeedsPermission -> UpdateWords(
+        Lamp.TRIANGLE, ColorRole.CAUTION, "Allow TransitTracker to install updates",
+        "Your phone asks first. Turn on \"Allow from this source\", then come back here.",
+        "OPEN PHONE SETTINGS", UpdateAction.INSTALL,
+    )
+    is UpdateState.Failed -> problemWords(state)
+}
+
+private fun problemWords(state: UpdateState.Failed): UpdateWords {
+    val retry = if (state.update != null) UpdateAction.INSTALL else UpdateAction.CHECK
+    return when (state.problem) {
+        UpdateProblem.CHECK_FAILED -> UpdateWords(
+            Lamp.TRIANGLE, ColorRole.CAUTION, "Couldn't check for updates.", "Check your connection and try again.",
+            "TRY AGAIN", UpdateAction.CHECK,
+        )
+        UpdateProblem.DOWNLOAD_FAILED -> UpdateWords(
+            Lamp.TRIANGLE, ColorRole.CAUTION, "The download didn't finish.", "Check your connection and try again.",
+            "TRY AGAIN", retry,
+        )
+        UpdateProblem.BAD_DOWNLOAD -> UpdateWords(
+            Lamp.TRIANGLE, ColorRole.CAUTION, "The download was damaged.", "Nothing was installed. Try again.",
+            "TRY AGAIN", retry,
+        )
+        UpdateProblem.DIFFERENT_SIGNATURE -> UpdateWords(
+            Lamp.CROSS, ColorRole.STOP, "Your phone refused this update.",
+            "This copy of TransitTracker was signed with a different key, so updates can't install over it. " +
+                "Uninstall it once and install the latest release by hand (you will need a new invite code). " +
+                "Updates install from the app after that.",
+            null,
+        )
+        UpdateProblem.CANCELLED -> UpdateWords(
+            Lamp.RING, ColorRole.INFO, "Update not installed.", "Install it whenever you're ready.",
+            "INSTALL UPDATE", retry,
+        )
+        UpdateProblem.INSTALL_FAILED -> UpdateWords(
+            Lamp.TRIANGLE, ColorRole.CAUTION, "Your phone couldn't install the update.", "Try again in a moment.",
+            "TRY AGAIN", retry,
+        )
+    }
+}
 
 const val DEVICE_ID_NOTE =
     "This is how the server knows your phone. If you lose it, give this ID to the person who invited you so they can remove it."

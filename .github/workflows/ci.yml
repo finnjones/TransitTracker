@@ -13,6 +13,11 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Android versionCode (and versionName 0.1.<n>): every run is newer than the one before, so the
+  # app's CHECK FOR UPDATES offers each release published below.
+  TT_VERSION_CODE: ${{ github.run_number }}
+
 jobs:
   build:
     name: Build and test
@@ -48,6 +53,71 @@ jobs:
           name: test-reports
           path: "**/build/reports/tests/"
           retention-days: 7
+
+  # Pushes to main: a signed live APK as a GitHub release ("android-<run number>"), which the
+  # app's Settings > About > CHECK FOR UPDATES finds and installs. Needs the signing key secrets
+  # (androidApp/README.md, "Updates"); without them this job only warns.
+  android-release:
+    name: Publish Android release
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # earlier android-* tags, for the release notes
+
+      - name: Signing key
+        id: key
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret, so no Android release was published. See androidApp/README.md (Updates)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+          # Push stays on in releases when the Firebase config is given as a secret.
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then printf '%s' "$GOOGLE_SERVICES_JSON" > androidApp/google-services.json; fi
+
+      - uses: actions/setup-java@v5
+        if: steps.key.outputs.ready == 'true'
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v5
+        if: steps.key.outputs.ready == 'true'
+
+      - name: Build signed APK
+        if: steps.key.outputs.ready == 'true'
+        env:
+          TT_SIGNING_STORE_FILE: ${{ runner.temp }}/release.jks
+          TT_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          TT_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          TT_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :androidApp:assembleLiveRelease --console=plain
+
+      - name: Publish release
+        if: steps.key.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name="0.1.${TT_VERSION_CODE}"
+          apk="transittracker-${name}.apk"
+          cp androidApp/build/outputs/apk/live/release/androidApp-live-release.apk "$apk"
+          # Notes: the commits since the previous Android release (the latest 20).
+          prev=$(git describe --tags --abbrev=0 --match 'android-*' 2>/dev/null || true)
+          range=${prev:+$prev..}${GITHUB_SHA}
+          git log --no-merges --format='- %s' -n 20 "$range" > notes.md
+          [ -s notes.md ] || git log -1 --format='- %s' "$GITHUB_SHA" > notes.md
+          gh release create "android-${TT_VERSION_CODE}" "$apk" \
+            --target "$GITHUB_SHA" --title "TransitTracker ${name}" --notes-file notes.md
 
   image-check:
     name: Build image (no push)

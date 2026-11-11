@@ -30,6 +30,7 @@ import androidx.core.content.ContextCompat
 import app.transittracker.model.LatLng
 import app.transittracker.ui.platform.PermissionState
 import app.transittracker.ui.platform.PlatformServices
+import app.transittracker.ui.platform.ReleaseFeedUpdater
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +50,8 @@ class AndroidPlatformServices(
     private val app: Application,
     override val appVersion: String,
     override val deviceId: StateFlow<String?>,
+    /** In-app updates (Settings > About); null in builds that cannot update themselves. */
+    override val updater: ReleaseFeedUpdater? = null,
 ) : PlatformServices {
     private val prefs = app.getSharedPreferences("platform", Context.MODE_PRIVATE)
     private val main = Handler(Looper.getMainLooper())
@@ -121,6 +124,8 @@ class AndroidPlatformServices(
         notificationState.value = notificationPermissionState()
         reduceMotionState.value = animationsOff()
         batterySaverState.value = powerSaveMode()
+        // Back from "Install unknown apps": an update waiting for it carries on.
+        updater?.onResume()
     }
 
     // ---- Location
@@ -193,7 +198,7 @@ class AndroidPlatformServices(
     override fun openNotificationSettings() {
         val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, app.packageName)
-        start(intent)
+        startActivity(intent)
     }
 
     // ---- Links
@@ -201,10 +206,11 @@ class AndroidPlatformServices(
     override fun openUrl(url: String) {
         val uri = Uri.parse(url)
         if (uri.scheme != "https" && uri.scheme != "http") return
-        start(Intent(Intent.ACTION_VIEW, uri))
+        startActivity(Intent(Intent.ACTION_VIEW, uri))
     }
 
-    private fun start(intent: Intent) {
+    /** Starts [intent] from the visible activity when there is one (else as a new task). */
+    fun startActivity(intent: Intent) {
         val from: Context = activity ?: app
         if (from !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {

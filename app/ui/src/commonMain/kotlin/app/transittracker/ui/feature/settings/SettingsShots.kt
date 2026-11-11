@@ -18,8 +18,11 @@ import app.transittracker.ui.fake.CoreScenario
 import app.transittracker.ui.fake.LiveData
 import app.transittracker.ui.gallery.Shot
 import app.transittracker.ui.nav.Tab
+import app.transittracker.ui.platform.FakeAppUpdater
 import app.transittracker.ui.platform.FakePlatformServices
 import app.transittracker.ui.platform.PermissionState
+import app.transittracker.ui.platform.UpdateProblem
+import app.transittracker.ui.platform.UpdateState
 import app.transittracker.ui.settings.ThemePreference
 import app.transittracker.ui.settings.UiSettings
 import app.transittracker.ui.state.rememberStateHolder
@@ -70,6 +73,8 @@ object SettingsShots {
 
     private val day = UiSettings(theme = ThemePreference.DAY)
 
+    private fun updating(state: UpdateState) = deps(platform = FakePlatformServices(updater = FakeAppUpdater(state)))
+
     val shots: List<Shot> = listOf(
         Shot("settings-top") { Page(remember { deps() }) },
         Shot("settings-data") { Page(remember { deps() }, SettingsGroup.DATA) },
@@ -92,6 +97,19 @@ object SettingsShots {
             Page(remember { deps() }, SettingsGroup.NOTIFICATIONS, noWatch = true, sendTest = true)
         },
         Shot("settings-about") { Page(remember { deps() }, SettingsGroup.ABOUT) },
+        Shot("settings-about-update-available") {
+            Page(remember { updating(UpdateState.Available(FakeAppUpdater.SAMPLE)) }, SettingsGroup.ABOUT)
+        },
+        Shot("settings-about-update-downloading") {
+            Page(remember { updating(UpdateState.Downloading(FakeAppUpdater.SAMPLE, 0.45f)) }, SettingsGroup.ABOUT)
+        },
+        Shot("settings-about-update-permission") {
+            Page(remember { updating(UpdateState.NeedsPermission(FakeAppUpdater.SAMPLE)) }, SettingsGroup.ABOUT)
+        },
+        Shot("settings-about-up-to-date") { Page(remember { updating(UpdateState.UpToDate) }, SettingsGroup.ABOUT) },
+        Shot("settings-about-update-failed") {
+            Page(remember { updating(UpdateState.Failed(UpdateProblem.CHECK_FAILED)) }, SettingsGroup.ABOUT)
+        },
         Shot("settings-licences") { Licences() },
         Shot("settings-top-day", DayColors) { Page(remember { deps(settings = day) }) },
         Shot("settings-display-day", DayColors) { Page(remember { deps(settings = day) }, SettingsGroup.DISPLAY) },

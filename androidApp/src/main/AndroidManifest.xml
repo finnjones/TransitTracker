@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- In-app updates (Settings > About): install a newer APK of this app. The person allows
+         "Install unknown apps" once; on Android 12+ later updates then install without a prompt. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
     <!-- Location is optional: the app works without GPS hardware. -->
     <uses-feature android:name="android.hardware.location" android:required="false" />
@@ -46,6 +50,18 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- In-app updates: the installer's answers, and "updated" once the new version is in. -->
+        <receiver
+            android:name=".UpdateStatusReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".AppReplacedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- What FCM uses for background messages (the server names the channel in each one). -->
         <meta-data

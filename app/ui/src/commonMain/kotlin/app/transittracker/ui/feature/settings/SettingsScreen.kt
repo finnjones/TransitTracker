@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.transittracker.ui.app.LocalAppDeps
 import app.transittracker.ui.components.ButtonKind
@@ -69,6 +70,7 @@ class SettingsActions(
     val allow: () -> Unit = {},
     val openPhoneSettings: () -> Unit = {},
     val sendTest: () -> Unit = {},
+    val updateApp: (UpdateAction) -> Unit = {},
     val openLicences: () -> Unit = {},
     val closeLicences: () -> Unit = {},
     val openDebugGallery: () -> Unit = {},
@@ -98,6 +100,7 @@ fun SettingsScreen() {
             allow = holder::allowNotifications,
             openPhoneSettings = holder::openPhoneSettings,
             sendTest = holder::sendTest,
+            updateApp = holder::updateApp,
             openLicences = { licences = true },
             closeLicences = { licences = false },
             openDebugGallery = { nav.push(Route.DebugGallery) },
@@ -355,6 +358,7 @@ private fun AboutGroup(state: SettingsUiState, actions: SettingsActions) {
         PixelText("App version")
         PixelText(state.appVersion, style = TtTheme.type.row15Strong, color = c.textSecondary)
     }
+    UpdateRows(state.update, actions.updateApp)
     DashedDivider()
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Label("DEVICE ID", color = c.textSecondary, bold = true, size = LabelSize.L10)
@@ -363,4 +367,37 @@ private fun AboutGroup(state: SettingsUiState, actions: SettingsActions) {
     }
     NavRow("Font and data licences", "Four fonts, one licence", actions.openLicences)
     if (state.debugBuild) NavRow("Debug gallery", null, actions.openDebugGallery, hint = "FOR DEVELOPERS")
+}
+
+/** Under the version: where an app update has got to, and the one button that moves it on. */
+@Composable
+private fun UpdateRows(words: UpdateWords, onAction: (UpdateAction) -> Unit) {
+    val c = TtTheme.colors
+    DashedDivider()
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (words.lamp != null) {
+            StateLine(words.lamp, words.role, words.headline, words.detail)
+        } else {
+            Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                PixelText(words.headline, style = TtTheme.type.row15Strong)
+                words.detail?.let { PixelText(it, style = TtTheme.type.reading15, color = c.textSecondary) }
+            }
+        }
+        words.notes?.let { notes ->
+            Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Label("WHAT'S NEW", color = c.textSecondary, bold = true, size = LabelSize.L10)
+                PixelText(
+                    notes, style = TtTheme.type.reading15, color = c.textReading,
+                    maxLines = 6, overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        words.button?.let { text ->
+            PixelButton(
+                text, { onAction(words.action) }, Modifier.fillMaxWidth(),
+                kind = if (words.action == UpdateAction.INSTALL) ButtonKind.PRIMARY else ButtonKind.SECONDARY,
+                enabled = !words.busy,
+            )
+        }
+    }
 }

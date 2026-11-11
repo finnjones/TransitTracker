@@ -53,7 +53,10 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
     @Volatile
     private var pendingPushToken: String? = null
 
-    override val platform = AndroidPlatformServices(app, appVersionText, deviceId)
+    /** Updates from the GitHub releases CI publishes (null when the build names no repository). */
+    private val updater = AppUpdates.create(app, scope)
+
+    override val platform = AndroidPlatformServices(app, appVersionText, deviceId, updater)
     override val startup: StateFlow<Startup> = state.asStateFlow()
 
     init {

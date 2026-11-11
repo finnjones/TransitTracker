@@ -868,6 +868,23 @@ needs nothing new.
 Settings (theme, time format, density) and alarm definitions are front-end
 data, kept in the app's own store.
 
+**Found while the screens were built.** The screens work without these (each
+has a workaround, named here), so none blocks a first release.
+
+| Need | What the front end does today | Proposal |
+|---|---|---|
+| A stop by its ID (name, parent station, position) | Station names come only from saved trips; the planner treats "has lines" as "known" and finds the station by name nearby; the map finds stop positions by searching for each stop's name | `suspend fun stop(id): Stop?` on the interface |
+| A line by its ID | Alert badges for lines not on a saved trip show the raw ID | `suspend fun route(id): Route?` |
+| The lines a saved trip can use | The app's one alert rule (`ui/alerts`) takes the lines that call at both ends of a leg | `suspend fun linesFor(trip): Set<RouteId>`, or `alertsFor(tripId)` as above |
+| A one-off watch for part of a run | The watch covers the whole run | `watchService(ref, rules, boardStopId, alightStopId)` on the interface (it exists on `DefaultTransitCore`) |
+| Why a watch could not be saved | Guessed from the HTTP status and the message | A typed result: saved, limit reached, offline, not found |
+| Pausing a watch with no end date | Pauses for ten years | A paused flag, or a null end |
+| Timetable download progress, failure and retry | Progress by file (done, half, none); "no change for 60 s" counts as stalled; RETRY only listens again | Bytes done and total and a failure reason in `PackStatus`; `checkForUpdates()` on the interface |
+| A name for a timetable file | Tidies the ID ("syd-rail" becomes "Syd rail") | A display name in `PackStatus` |
+| Walking time from an address to a stop | Straight-line distance at 80 m a minute, marked as an estimate; the user can correct it | A walking-time answer from the planner |
+| The map's line shape | Straight segments between stops | `shapeId` and `StopCall.position` as above; the change is confined to `CoreMapGeometry.service()` |
+| Plan a journey from a station on the map | Opens the planner from a saved place that uses the station, else blank | Front end: let `Route.PlanJourney` take a starting point |
+
 ### 8.4 Testing
 
 - **Screenshot tests** of every screen, component and vehicle state against

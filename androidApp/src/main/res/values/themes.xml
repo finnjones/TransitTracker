@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The window is the Screen colour from the first frame, so start-up never flashes white.
+         Compose draws everything else; the activity makes the bars transparent (edge to edge). -->
+    <style name="Theme.TransitTracker" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/screen</item>
+        <item name="android:colorBackground">@color/screen</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

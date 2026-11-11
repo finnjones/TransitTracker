@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ also draws a system splash: the Screen colour behind the launcher icon. -->
+    <style name="Theme.TransitTracker" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/screen</item>
+        <item name="android:colorBackground">@color/screen</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowSplashScreenBackground">@color/screen</item>
+    </style>
+</resources>

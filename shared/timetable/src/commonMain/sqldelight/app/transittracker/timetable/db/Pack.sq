@@ -1,0 +1,202 @@
+-- Timetable pack schema (plan section 8.2). One SQLite file per pack, zstd-compressed for download.
+-- Integer ids are pack-internal; GTFS ids are kept in `gtfs_id` columns. Stop, route and shape ids are
+-- stable across pack versions (the builder persists an id map); the rest are dense per version.
+-- Blob formats are defined in app.transittracker.timetable.PackCodec.
+
+CREATE TABLE meta (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+) WITHOUT ROWID;
+
+CREATE TABLE stops (
+    id INTEGER NOT NULL PRIMARY KEY,
+    gtfs_id TEXT NOT NULL UNIQUE,
+    parent_id INTEGER,
+    name TEXT NOT NULL,
+    -- Microdegrees (WGS84 * 1e6).
+    lat_e6 INTEGER NOT NULL,
+    lon_e6 INTEGER NOT NULL,
+    platform_code TEXT,
+    -- GTFS location_type (0 stop/platform, 1 station).
+    location_type INTEGER NOT NULL,
+    -- ModeBits bitmask of modes serving the stop (stations: union of their platforms).
+    modes INTEGER NOT NULL,
+    -- GTFS wheelchair_boarding after parent inheritance: 0 unknown, 1 yes, 2 no.
+    wheelchair INTEGER NOT NULL
+);
+
+CREATE INDEX stops_parent ON stops(parent_id);
+
+CREATE TABLE routes (
+    id INTEGER NOT NULL PRIMARY KEY,
+    gtfs_id TEXT NOT NULL UNIQUE,
+    agency_id TEXT,
+    short_name TEXT NOT NULL,
+    long_name TEXT NOT NULL,
+    route_type INTEGER NOT NULL,
+    -- ModeBits single bit.
+    mode INTEGER NOT NULL,
+    color TEXT,
+    text_color TEXT,
+    sort_order INTEGER
+);
+
+CREATE TABLE patterns (
+    id INTEGER NOT NULL PRIMARY KEY,
+    route_id INTEGER NOT NULL,
+    stop_count INTEGER NOT NULL,
+    -- Zigzag-delta varints of stops.id, in calling order.
+    stops BLOB NOT NULL,
+    -- Varint deltas of GTFS stop_sequence; NULL means 1, 2, 3, ...
+    sequences BLOB,
+    -- One byte per stop: pickup_type | drop_off_type << 2; NULL means all regular.
+    flags BLOB
+);
+
+CREATE TABLE time_profiles (
+    id INTEGER NOT NULL PRIMARY KEY,
+    stop_count INTEGER NOT NULL,
+    -- Varints: dwell at stop 0, then per later stop (run from previous departure, dwell).
+    times BLOB NOT NULL
+);
+
+CREATE TABLE services (
+    id INTEGER NOT NULL PRIMARY KEY,
+    gtfs_id TEXT NOT NULL UNIQUE,
+    -- YYYYMMDD of bit 0.
+    start_date TEXT NOT NULL,
+    -- Little-endian bitset: bit i = service runs on start_date + i days.
+    days BLOB NOT NULL
+);
+
+CREATE TABLE trips (
+    id INTEGER NOT NULL PRIMARY KEY,
+    gtfs_id TEXT NOT NULL UNIQUE,
+    pattern_id INTEGER NOT NULL,
+    profile_id INTEGER NOT NULL,
+    -- GTFS seconds of the arrival at the first stop.
+    start_secs INTEGER NOT NULL,
+    service_id INTEGER NOT NULL,
+    headsign TEXT NOT NULL,
+    direction INTEGER,
+    shape_id INTEGER,
+    -- Bits 0-1 GTFS wheelchair_accessible, bits 2-3 bikes_allowed.
+    flags INTEGER NOT NULL
+);
+
+CREATE INDEX trips_pattern ON trips(pattern_id, start_secs);
+
+CREATE TABLE stop_patterns (
+    stop_id INTEGER NOT NULL,
+    pattern_id INTEGER NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (stop_id, pattern_id, position)
+) WITHOUT ROWID;
+
+CREATE TABLE transfers (
+    from_stop_id INTEGER NOT NULL,
+    to_stop_id INTEGER NOT NULL,
+    transfer_type INTEGER NOT NULL,
+    min_transfer_secs INTEGER NOT NULL,
+    PRIMARY KEY (from_stop_id, to_stop_id)
+) WITHOUT ROWID;
+
+CREATE TABLE shapes (
+    id INTEGER NOT NULL PRIMARY KEY,
+    gtfs_id TEXT NOT NULL UNIQUE,
+    -- Google encoded polyline, precision 5.
+    polyline TEXT NOT NULL
+);
+
+-- ---- Reads ----
+
+selectMeta:
+SELECT key, value FROM meta;
+
+stopByGtfsId:
+SELECT s.*, p.gtfs_id AS parent_gtfs_id FROM stops s LEFT JOIN stops p ON p.id = s.parent_id
+WHERE s.gtfs_id = ?;
+
+stopsByIds:
+SELECT s.*, p.gtfs_id AS parent_gtfs_id FROM stops s LEFT JOIN stops p ON p.id = s.parent_id
+WHERE s.id IN ?;
+
+stopsByParent:
+SELECT s.*, p.gtfs_id AS parent_gtfs_id FROM stops s LEFT JOIN stops p ON p.id = s.parent_id
+WHERE s.parent_id = ?
+ORDER BY s.platform_code, s.gtfs_id;
+
+stopsByNameLike:
+SELECT s.*, p.gtfs_id AS parent_gtfs_id FROM stops s LEFT JOIN stops p ON p.id = s.parent_id
+WHERE s.name LIKE ? ESCAPE '\';
+
+stopsInBox:
+SELECT s.*, p.gtfs_id AS parent_gtfs_id FROM stops s LEFT JOIN stops p ON p.id = s.parent_id
+WHERE s.lat_e6 BETWEEN ? AND ? AND s.lon_e6 BETWEEN ? AND ?;
+
+stopKeys:
+SELECT id, gtfs_id, parent_id FROM stops;
+
+allRoutes:
+SELECT * FROM routes;
+
+patternsAtStops:
+SELECT stop_id, pattern_id, position FROM stop_patterns WHERE stop_id IN ?;
+
+patternById:
+SELECT * FROM patterns WHERE id = ?;
+
+profileById:
+SELECT * FROM time_profiles WHERE id = ?;
+
+tripsForPattern:
+SELECT * FROM trips WHERE pattern_id = ? AND start_secs BETWEEN ? AND ?;
+
+tripByGtfsId:
+SELECT * FROM trips WHERE gtfs_id = ?;
+
+allServices:
+SELECT * FROM services;
+
+transfersFrom:
+SELECT t.*, s.gtfs_id AS to_gtfs_id FROM transfers t JOIN stops s ON s.id = t.to_stop_id
+WHERE t.from_stop_id = ?
+ORDER BY s.gtfs_id;
+
+shapeByGtfsId:
+SELECT polyline FROM shapes WHERE gtfs_id = ?;
+
+shapeGtfsIdById:
+SELECT gtfs_id FROM shapes WHERE id = ?;
+
+-- ---- Writes (pack builder only) ----
+
+insertMeta:
+INSERT INTO meta(key, value) VALUES (?, ?);
+
+insertStop:
+INSERT INTO stops VALUES ?;
+
+insertRoute:
+INSERT INTO routes VALUES ?;
+
+insertPattern:
+INSERT INTO patterns VALUES ?;
+
+insertProfile:
+INSERT INTO time_profiles VALUES ?;
+
+insertService:
+INSERT INTO services VALUES ?;
+
+insertTrip:
+INSERT INTO trips VALUES ?;
+
+insertStopPattern:
+INSERT INTO stop_patterns VALUES ?;
+
+insertTransfer:
+INSERT INTO transfers VALUES ?;
+
+insertShape:
+INSERT INTO shapes VALUES ?;

@@ -1,0 +1,133 @@
+{
+ "version": "10.6.21.17",
+ "systemMessages": [],
+ "journeys": [
+  {
+   "rating": 0,
+   "isAdditional": false,
+   "interchanges": 0,
+   "legs": [
+    {
+     "duration": 720,
+     "distance": 900,
+     "origin": {
+      "id": "streetID:2926666:0:57057445:-1:Smith St:Summer Hill:Smith St::Smith St:2000:ANY:DIVA_STREET",
+      "isGlobalId": false,
+      "name": "Smith St, Summer Hill",
+      "disassembledName": "Smith St",
+      "type": "street",
+      "coord": [
+       -33.8949,
+       151.1377
+      ],
+      "niveau": 0,
+      "parent": {
+       "id": "placeID:95302562:1",
+       "name": "Summer Hill",
+       "type": "locality"
+      },
+      "properties": {},
+      "departureTimeBaseTimetable": "2026-11-10T22:00:00Z",
+      "departureTimePlanned": "2026-11-10T22:00:00Z",
+      "departureTimeEstimated": "2026-11-10T22:00:00Z"
+     },
+     "destination": {
+      "id": "streetID:748647168:0:57057445:-1:Lackey St:Summer Hill:Lackey St::Lackey St:2000:ANY:DIVA_STREET",
+      "isGlobalId": false,
+      "name": "Lackey St, Summer Hill",
+      "disassembledName": "Lackey St",
+      "type": "street",
+      "coord": [
+       -33.8908,
+       151.1386
+      ],
+      "niveau": 0,
+      "parent": {
+       "id": "placeID:95302562:1",
+       "name": "Summer Hill",
+       "type": "locality"
+      },
+      "properties": {},
+      "arrivalTimeBaseTimetable": "2026-11-10T22:12:00Z",
+      "arrivalTimePlanned": "2026-11-10T22:12:00Z",
+      "arrivalTimeEstimated": "2026-11-10T22:12:00Z"
+     },
+     "transportation": {
+      "product": {
+       "class": 100,
+       "name": "footpath",
+       "iconId": 100
+      },
+      "properties": {
+       "tripCode": 0,
+       "lineDisplay": "LINE"
+      }
+     },
+     "stopSequence": [
+      {
+       "id": "streetID:2926666:0:57057445:-1:Smith St:Summer Hill:Smith St::Smith St:2000:ANY:DIVA_STREET",
+       "isGlobalId": false,
+       "name": "Smith St, Summer Hill",
+       "disassembledName": "Smith St",
+       "type": "street",
+       "coord": [
+        -33.8949,
+        151.1377
+       ],
+       "niveau": 0,
+       "parent": {
+        "id": "placeID:95302562:1",
+        "name": "Summer Hill",
+        "type": "locality"
+       },
+       "properties": {}
+      },
+      {
+       "id": "streetID:748647168:0:57057445:-1:Lackey St:Summer Hill:Lackey St::Lackey St:2000:ANY:DIVA_STREET",
+       "isGlobalId": false,
+       "name": "Lackey St, Summer Hill",
+       "disassembledName": "Lackey St",
+       "type": "street",
+       "coord": [
+        -33.8908,
+        151.1386
+       ],
+       "niveau": 0,
+       "parent": {
+        "id": "placeID:95302562:1",
+        "name": "Summer Hill",
+        "type": "locality"
+       },
+       "properties": {}
+      }
+     ],
+     "coords": [
+      [
+       -33.8949,
+       151.1377
+      ],
+      [
+       -33.89285,
+       151.13815
+      ],
+      [
+       -33.8908,
+       151.1386
+      ]
+     ],
+     "footPathInfo": [
+      {
+       "position": "IDEST",
+       "duration": 720,
+       "footPathElem": []
+      }
+     ],
+     "infos": []
+    }
+   ],
+   "daysOfService": {
+    "rvb": "1"
+   }
+  }
+ ]
+}

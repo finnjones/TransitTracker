@@ -1,0 +1,61 @@
+# TransitTracker home server: tt-server behind a Cloudflare Tunnel (cloudflared).
+# See deploy/README.md. Run from this directory:  docker compose up -d
+#
+# Nothing is published on the host or your router. cloudflared makes an outbound connection to
+# Cloudflare; the public hostname you configure in Cloudflare Zero Trust (e.g. tt.example.com)
+# is forwarded through it to http://tt-server:8080 on the private `tt` network below.
+
+name: transittracker
+
+services:
+  cloudflared:
+    # Pin CLOUDFLARED_VERSION in .env to a release tag (e.g. 2026.10.0) for repeatable deploys.
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-latest}
+    command: tunnel --no-autoupdate run
+    environment:
+      # Token from Zero Trust -> Networks -> Tunnels -> your tunnel. Keep it secret.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in deploy/.env}
+    networks:
+      - tt
+    depends_on:
+      - tt-server
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  tt-server:
+    # Builds from this repository by default. To use the image CI publishes instead, set TT_IMAGE
+    # in .env (e.g. ghcr.io/<owner>/<repo>/tt-server:latest) and run `docker compose pull`.
+    image: ${TT_IMAGE:-transittracker/tt-server:local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file: .env
+    environment:
+      # Fixed inside the container; these override .env.
+      TT_DATA_DIR: /data
+      TT_PORT: "8080"
+      # Requests only arrive through cloudflared, so CF-Connecting-IP is the real client address.
+      TT_TRUSTED_PROXY: cloudflare
+    volumes:
+      - tt-data:/data
+      - ./secrets:/secrets:ro               # put firebase-service-account.json here
+    networks:
+      - tt
+    # No `ports:` on purpose: tt-server is reachable only through the tunnel.
+    restart: unless-stopped
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  tt: {}
+
+volumes:
+  tt-data:

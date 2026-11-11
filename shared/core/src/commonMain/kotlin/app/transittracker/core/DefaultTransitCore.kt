@@ -145,6 +145,12 @@ class DefaultTransitCore internal constructor(
         updater.update(cfg.packs)
     }
 
+    /**
+     * Pull to refresh: [updatePacks] now. True when the server answered (whether or not a pack
+     * was installed); false when not joined or offline.
+     */
+    override suspend fun checkForUpdates(): Boolean = updatePacks() != null
+
     private fun applyConfig(cfg: ConfigResponse) {
         configState.value = cfg
         poller.applyIntervals(cfg.pollIntervalS, cfg.trackerPollIntervalS)
@@ -341,6 +347,19 @@ class DefaultTransitCore internal constructor(
         if (loadToken() != null) scope.launch { poller.ensureAlerts() }
     }
 
+    override fun alertsFor(tripId: String): Flow<List<Alert>> {
+        val trip = tripStore.trips.map { list -> list.firstOrNull { it.id == tripId } }.distinctUntilChanged()
+        return combine(trip, alerts, holder.generation) { t, list, _ -> t to list }
+            .mapLatest { (t, list) ->
+                if (t == null || list.isEmpty()) {
+                    emptyList()
+                } else {
+                    holder.read { tt -> alertsForTrip(t, list, tt) } ?: alertsForTrip(t, list, null)
+                }
+            }
+            .distinctUntilChanged()
+    }
+
     override val dataStatus: Flow<DataStatus> = combine(
         updater.status,
         poller.snapshot,
@@ -359,6 +378,9 @@ class DefaultTransitCore internal constructor(
             joined = joined,
             attribution = cfg?.attribution ?: DEFAULT_ATTRIBUTION,
             statusMessage = cfg?.statusMessage,
+            features = cfg?.features.orEmpty(),
+            minAppVersion = cfg?.minAppVersion ?: "0",
+            maxWatches = cfg?.maxWatches ?: DEFAULT_MAX_WATCHES,
         )
     }.distinctUntilChanged()
 
@@ -471,11 +493,6 @@ class DefaultTransitCore internal constructor(
 
     // ---- Alarms ----
 
-    override suspend fun checkForUpdates(): Boolean = updatePacks() != null
-
-    // PART C: placeholder until alertsFor is implemented.
-    override fun alertsFor(tripId: String): Flow<List<Alert>> = TODO("alertsFor")
-
     override suspend fun nextAlarmTimes(alarm: AlarmSpec, count: Int): List<Long> {
         val trip = tripStore.get(alarm.savedTripId) ?: return emptyList()
         val now = timeSync.nowMillis()
@@ -500,6 +517,9 @@ class DefaultTransitCore internal constructor(
         const val TICK_MS = 30_000L
         const val SEARCH_LIMIT = 30
         const val DEFAULT_ATTRIBUTION = "Data: Transport for NSW (CC BY 4.0)"
+
+        /** [DataStatus.maxWatches] before the server's `/v1/config` has been seen. */
+        const val DEFAULT_MAX_WATCHES = 10
     }
 }
 

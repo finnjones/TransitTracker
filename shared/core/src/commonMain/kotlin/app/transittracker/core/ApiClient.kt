@@ -8,8 +8,12 @@ import app.transittracker.model.ConfigResponse
 import app.transittracker.model.DeviceUpdate
 import app.transittracker.model.JoinRequest
 import app.transittracker.model.JoinResponse
+import app.transittracker.model.LatLng
 import app.transittracker.model.MediaTypes
 import app.transittracker.model.Mode
+import app.transittracker.model.PlacesResponse
+import app.transittracker.model.PlanRequest
+import app.transittracker.model.PlanResponse
 import app.transittracker.model.RealtimeResponse
 import app.transittracker.model.RouteId
 import app.transittracker.model.ServiceDate
@@ -58,8 +62,17 @@ sealed interface ApiResult<out T> {
     /** The server answered with a non-success status; [error] is the parsed problem JSON, if any. */
     data class HttpFailure(val status: Int, val error: ApiError?) : ApiResult<Nothing>
 
-    /** The server could not be reached or the response could not be decoded. */
-    data class NetworkFailure(val message: String, val cause: Throwable? = null) : ApiResult<Nothing>
+    /**
+     * The server could not be reached or the response could not be decoded.
+     *
+     * @property reachedServer true when the server answered but its body could not be decoded
+     *   (a malformed response rather than no connection).
+     */
+    data class NetworkFailure(
+        val message: String,
+        val cause: Throwable? = null,
+        val reachedServer: Boolean = false,
+    ) : ApiResult<Nothing>
 }
 
 /** The value of a [ApiResult.Success], or null. */
@@ -167,6 +180,27 @@ class ApiClient(
     suspend fun testWatch(id: String): ApiResult<TestPushResponse> =
         call(HttpMethod.Post, watchPath(ApiPaths.WATCH_TEST, id))
 
+    /**
+     * `GET /v1/places?q=…&lat=…&lon=…&limit=…` (JSON): stops, addresses and places matching
+     * [query], nearer to [near] first when given. The caller validates [query] and [limit]
+     * (see [RemoteJourneyPlanner]).
+     */
+    suspend fun places(query: String, near: LatLng? = null, limit: Int = 10): ApiResult<PlacesResponse> = call(
+        HttpMethod.Get, ApiPaths.PLACES,
+        query = buildList {
+            add("q" to query)
+            if (near != null) {
+                add("lat" to near.lat.toString())
+                add("lon" to near.lon.toString())
+            }
+            add("limit" to limit.toString())
+        },
+    )
+
+    /** `POST /v1/plan` (JSON): journeys for [request]. */
+    suspend fun plan(request: PlanRequest): ApiResult<PlanResponse> =
+        call(HttpMethod.Post, ApiPaths.PLAN, body = ApiJson.encodeToString(PlanRequest.serializer(), request))
+
     /** Downloads raw bytes from a server-relative [path] (e.g. a pack URL). */
     suspend fun download(path: String): ApiResult<ByteArray> = call(HttpMethod.Get, path, accept = "*/*")
 
@@ -259,8 +293,8 @@ class ApiClient(
         }
         ApiResult.Success(value, notModified, serverTime)
     } catch (e: SerializationException) {
-        ApiResult.NetworkFailure("Bad response: ${e.message}", e)
+        ApiResult.NetworkFailure("Bad response: ${e.message}", e, reachedServer = true)
     } catch (e: IllegalArgumentException) {
-        ApiResult.NetworkFailure("Bad response: ${e.message}", e)
+        ApiResult.NetworkFailure("Bad response: ${e.message}", e, reachedServer = true)
     }
 }

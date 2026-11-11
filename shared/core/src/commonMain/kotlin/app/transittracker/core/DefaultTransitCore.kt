@@ -102,6 +102,12 @@ class DefaultTransitCore internal constructor(
     private var started = false
     private val checkMutex = Mutex()
 
+    /**
+     * Journey planning over tt-server (`/v1/places`, `/v1/plan`). Results say `Offline` when the
+     * server cannot be reached and `Unavailable` when it has no planner right now.
+     */
+    val planner: app.transittracker.model.JourneyPlanner = RemoteJourneyPlanner(api)
+
     /** Results of the latest pack update check. */
     val lastPackReport: Flow<List<PackUpdateResult>> = updater.lastReport
 

@@ -9,7 +9,10 @@ make station names hard to read at phone sizes:
    stem (as the font's own D and P have) and a bar that joins the stem, giving two counters.
 2. Capital Z is a mirrored S and reads as a 2: "Zetland" looks like "2etland". It is redrawn
    with two full bars and a stepped diagonal.
-3. The standard ligatures join "fi", "fl" and "ff" into shapes that read as other letters:
+3. The round brackets bulge to a point in the middle and read as curly braces:
+   "(CC BY 4.0)" looks like "{CC BY 4.0}". They are redrawn as a straight stroke with turned
+   ends, one cell narrower.
+4. The standard ligatures join "fi", "fl" and "ff" into shapes that read as other letters:
    "Strathfield" looks like "StrathAeld". The `liga` (and `dlig`) features are switched off for
    every script, so the letters are always drawn separately on every platform.
 
@@ -28,7 +31,7 @@ from fontTools.ttLib import TTFont
 FONT_DIR = Path(__file__).resolve().parents[2] / "app/ui/src/commonMain/composeResources/font"
 FILES = ["pixelify_sans_400.ttf", "pixelify_sans_600.ttf", "pixelify_sans_700.ttf"]
 FAMILY = "TT Pixelify"
-NOTE = "Modified from Pixelify Sans 1.000 for TransitTracker: capitals B and Z redrawn, standard ligatures off."
+NOTE = "Modified from Pixelify Sans 1.000 for TransitTracker: B, Z and round brackets redrawn, standard ligatures off."
 
 
 def contours(font, name):
@@ -75,6 +78,41 @@ def redraw_z(font):
     ]
     replace_glyph(font, name, [outline], left)
     return True
+
+
+def redraw_brackets(font):
+    """A straight stroke with turned ends instead of a pointed bulge. Returns False when already done."""
+    cmap = font.getBestCmap()
+    changed = False
+    for char in "()":
+        name = cmap[ord(char)]
+        shape = contours(font, name)
+        if len(shape) == 1 and len(shape[0]) == 12:
+            continue
+        if len(shape) != 1 or len(shape[0]) != 20:
+            raise SystemExit(f"unexpected {char} outline in {font.reader.file.name}: {shape}")
+        p = shape[0]
+        advance, bearing = font["hmtx"][name]
+        if char == "(":
+            # Move the turned ends one cell left, onto the old middle cell; the stem is the old bulge.
+            outline = [
+                (p[2][0], p[0][1]), (p[2][0], p[1][1]), (p[4][0], p[1][1]), (p[4][0], p[8][1]),
+                (p[7][0], p[8][1]), (p[7][0], p[9][1]), (p[12][0], p[9][1]), (p[12][0], p[11][1]),
+                (p[14][0], p[11][1]), (p[14][0], p[17][1]), (p[16][0], p[17][1]), (p[16][0], p[0][1]),
+            ]
+            narrower = p[0][0] - p[2][0]
+        else:
+            # The turned ends stay; the stem is the old middle cell.
+            outline = [
+                (p[0][0], p[0][1]), (p[0][0], p[1][1]), (p[2][0], p[1][1]), (p[2][0], p[8][1]),
+                (p[8][0], p[8][1]), (p[8][0], p[9][1]), (p[10][0], p[9][1]), (p[10][0], p[11][1]),
+                (p[12][0], p[11][1]), (p[12][0], p[17][1]), (p[18][0], p[17][1]), (p[18][0], p[19][1]),
+            ]
+            narrower = p[14][0] - p[12][0]
+        replace_glyph(font, name, [outline], bearing)
+        font["hmtx"][name] = (advance - narrower, bearing)
+        changed = True
+    return changed
 
 
 def redraw_b(font):
@@ -135,10 +173,10 @@ def main():
     for file in FILES:
         path = FONT_DIR / file
         font = TTFont(path)
-        done = [redraw_b(font), redraw_z(font), ligatures_off(font), rename(font)]
+        done = [redraw_b(font), redraw_z(font), redraw_brackets(font), ligatures_off(font), rename(font)]
         if any(done):
             font.save(path)
-        print(f"{file}: B redrawn={done[0]} Z redrawn={done[1]} ligatures off={done[2]} renamed={done[3]}")
+        print(f"{file}: B={done[0]} Z={done[1]} brackets={done[2]} ligatures off={done[3]} renamed={done[4]}")
 
 
 if __name__ == "__main__":

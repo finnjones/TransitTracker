@@ -99,4 +99,17 @@ class AdminTest {
             broken.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `check-gtfs dry-runs a build, reports it and publishes nothing`() {
+        clock.now = java.time.Instant.parse("2026-11-10T16:00:00Z").toEpochMilli() // 03:00 Wed 11 Nov, Sydney
+        val (code, output) = run("check-gtfs", "syd-rail", Fixtures.miniRail.toString())
+        assertEquals(0, code, output)
+        assertContains(output, "== Merge")
+        assertContains(output, "== Services from each input in the pack (service date 20261111)")
+        assertContains(output, "OK: this input would build and publish.")
+        assertTrue(!config.packsDir.resolve("syd-rail").exists())
+        assertEquals(2, run("check-gtfs").first)
+        assertEquals(1, run("check-gtfs", "syd-rail", dir.resolve("missing.zip").toString()).first)
+    }
 }

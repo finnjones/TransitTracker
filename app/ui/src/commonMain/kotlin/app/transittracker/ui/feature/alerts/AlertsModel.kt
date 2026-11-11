@@ -10,6 +10,10 @@ import app.transittracker.model.SavedTrip
 import app.transittracker.model.StopId
 import app.transittracker.model.TimeRange
 import app.transittracker.model.TripId
+import app.transittracker.ui.alerts.alertEnded
+import app.transittracker.ui.alerts.alertTouchesTrip
+import app.transittracker.ui.alerts.severityRank
+import app.transittracker.ui.alerts.tripFootprint
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.format.formatDayDate
 import app.transittracker.ui.settings.ClockFormat
@@ -58,43 +62,6 @@ data class AlertCard(
 ) {
     val id: String get() = alert.id
     val expandable: Boolean get() = alert.description.isNotBlank() || !alert.url.isNullOrBlank()
-}
-
-// ---------------------------------------------------------------- which alerts touch which trip
-
-/** What a saved trip passes through: its stops as saved, the lines it can use, its services today. */
-data class TripFootprint(val stops: Set<StopId>, val routes: Set<RouteId>, val services: Set<TripId>)
-
-/**
- * The footprint of [trip]: every origin and destination stop of its legs as saved, its line
- * filters plus the lines of its upcoming [journeys] (a trip without a line filter still runs on
- * the lines its services run on), and those services' trip ids.
- */
-fun tripFootprint(trip: SavedTrip, journeys: List<Journey>): TripFootprint {
-    val legs = journeys.flatMap { it.legs }
-    return TripFootprint(
-        stops = trip.legs.flatMap { it.originStopIds + it.destinationStopIds }.toSet(),
-        routes = trip.legs.flatMap { it.routeIds.orEmpty() }.toSet() + legs.map { it.routeId },
-        services = legs.map { it.ref.tripId }.toSet(),
-    )
-}
-
-/** True when [alert] names a stop, a line or a service of [footprint]. */
-fun alertTouchesTrip(alert: Alert, footprint: TripFootprint): Boolean =
-    alert.stopIds.any { it in footprint.stops } ||
-        alert.routeIds.any { it in footprint.routes } ||
-        alert.tripIds.any { it in footprint.services }
-
-/** True when every period of [alert] is over. An alert with no period is in force until it is withdrawn. */
-fun alertEnded(alert: Alert, nowMs: Long): Boolean =
-    alert.activePeriods.isNotEmpty() && alert.activePeriods.none { p -> p.endMs == null || nowMs < p.endMs!! }
-
-/** Worst first: SEVERE, WARNING, INFO, UNKNOWN. */
-fun severityRank(s: AlertSeverity): Int = when (s) {
-    AlertSeverity.SEVERE -> 0
-    AlertSeverity.WARNING -> 1
-    AlertSeverity.INFO -> 2
-    AlertSeverity.UNKNOWN -> 3
 }
 
 /** The word beside the severity icon. */
@@ -184,6 +151,8 @@ data class AlertsInputs(
     val status: DataStatus? = null,
     /** Everything known about lines, by route id. */
     val lines: Map<RouteId, LineInfo> = emptyMap(),
+    /** Trip id -> the lines it can use even when no service is coming up (`tripLines`). */
+    val tripLines: Map<String, Set<RouteId>> = emptyMap(),
 )
 
 /** Pure: the Alerts tab for [inputs] at [nowMs]. */
@@ -192,7 +161,9 @@ fun buildAlertsState(inputs: AlertsInputs, nowMs: Long): AlertsUiState {
     val trips = inputs.trips
     if (alerts == null || trips == null) return AlertsUiState(loading = true, nowMs = nowMs)
     val sortedTrips = trips.sortedBy { it.order }
-    val prints = sortedTrips.associateWith { tripFootprint(it, inputs.upcoming[it.id].orEmpty()) }
+    val prints = sortedTrips.associateWith {
+        tripFootprint(it, inputs.upcoming[it.id].orEmpty(), inputs.tripLines[it.id].orEmpty())
+    }
     val names = knownStopNames(sortedTrips)
     val shown = alerts.filter { !alertEnded(it, nowMs) }
     val cards = shown.map { a ->

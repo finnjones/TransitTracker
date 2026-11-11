@@ -29,6 +29,8 @@ drawn by [tools/sprites/make_sprites.py](../tools/sprites/make_sprites.py).
 | F1 | Visual direction | **Decided** | **A · Indicator board**: a dark platform-indicator look (section 2.1) |
 | F2 | Ground colour | **Decided** | **Neutral charcoal, no purple or blue tint.** All colour on screen comes from line identity and service status (section 2.4) |
 | F3 | Role of animation | **Decided** | **Central.** Animated pixel vehicles show where each service is and which way it is going, for every mode; page changes use game-style transitions (section 3) |
+| F3a | Vehicle in the page transition | **Decided** | **It matches the service being opened**, in mode and line colour: a bus for a bus trip, a ferry for a ferry (section 3.4) |
+| F3b | Transition timing | **Decided** | **As prototyped:** the new page is usable within 300 ms |
 | F4 | UI toolkit | To confirm | **Compose Multiplatform**, screens shared by Android and iOS. The look is fully custom, so nothing is lost by not using each platform's own widgets, and iOS later becomes a thin shell. This changes one line of the backend plan ("screens stay native") |
 | F5 | Map | To confirm | **Our own pixel line map** for rail; a street map only when buses arrive. Matches the look, needs no map key or billing, works on both platforms |
 | F6 | Themes | To confirm | **Night** by default, **Day** for sunlight, follow the phone setting |
@@ -246,8 +248,13 @@ Each is four frames at about 8 frames a second on a grid no larger than
 
 | Sprite | Preview | Used |
 |---|---|---|
-| Four-car train | ![Four-car train](design/sprites/preview/train-t9-long.gif) | The train that crosses the screen in a page transition (section 3.4) |
+| Four-car train | ![Four-car train](design/sprites/preview/train-t9-long.gif) | Crosses the screen when a train service is opened (section 3.4) |
+| Four-car metro | ![Four-car metro](design/sprites/preview/metro-m1-long.gif) | Crosses the screen when a metro service is opened |
+| Coupled light rail pair | ![Coupled light rail pair](design/sprites/preview/lightrail-pair.gif) | Crosses the screen when a light rail service is opened |
 | Train from above | ![Train from above](design/sprites/preview/train-t9-top.gif) | The live map, where vehicles are seen from overhead and turn with the line |
+
+Buses, coaches and ferries cross the screen as the single vehicle shown in the
+first table.
 
 A mode the app does not know (`OTHER`) uses a plain arrow marker in the line
 colour.
@@ -306,11 +313,12 @@ top of the Service screen.
 Three transitions, each tied to one kind of move so that the motion itself
 tells you where you went. All are stepped, not eased, in keeping with the
 pixel look. They can be tried in the "Page transitions" artboard on the canvas
-(press Play, then tap the trip, TRACK ON MAP, the back buttons and the tabs).
+(press Play, then tap any of the four trips, TRACK ON MAP, the back buttons and
+the tabs).
 
 | Transition | Used for | What happens | New page usable after |
 |---|---|---|---|
-| **Vehicle pass** | Opening something from a list (a service from Home or the timetable), and going back | A vehicle crosses the screen and the new page is wiped in behind it. Going back, it runs the other way. The vehicle is the mode of the service being opened: a bus for a bus trip, a ferry for a ferry | 300 ms; the vehicle clears the screen by 640 ms and never blocks touches |
+| **Vehicle pass** | Opening something from a list (a service from Home or the timetable), and going back | A vehicle crosses the screen and the new page is wiped in behind it. Going back, it runs the other way. The vehicle matches the service being opened, in mode and line colour | 300 ms; the vehicle never blocks touches. A four-car train or metro clears the screen by 640 ms, a bus or ferry by 400 ms |
 | **Doors** | Entering and leaving the live map; arriving at Home after onboarding | Carriage doors with amber edge strips close over the page and open on the new one | 300 ms |
 | **Split-flap** | Switching bottom tabs; changing the day in a timetable; rows whose values changed after a refresh | Rows flip in from top to bottom, like a departure board | 280 ms for the first row, all rows by 500 ms |
 | **Cut** | Reduce motion, battery saver, opening from a notification, or a second tap during a transition | Instant | 0 ms |
@@ -361,8 +369,8 @@ in the app the stripe is tinted from `Route.color`.
 |---|---|
 | Six modes, moving, side on | Doors-open frames for metro, light rail and coach |
 | Doors-open frames for train, bus and ferry | Overhead views of the other five modes for the map |
-| Four-car train for the transition | Bus, tram and ferry versions of the transition vehicle |
-| Train from above for the map | Outlined versions for the Day theme; the `OTHER` marker |
+| Transition vehicles for all six modes | Outlined versions for the Day theme |
+| Train from above for the map | The `OTHER` marker |
 
 ---
 
@@ -745,9 +753,6 @@ Rough weeks for one developer; estimates only.
 
 - Is Compose Multiplatform acceptable (F4), given the backend plan said
   screens stay native?
-- Should the vehicle that crosses the screen always match the mode of the
-  service being opened (assumed yes), or always be a train as the app's
-  signature?
 - Should cancelled services stay visible on Home, or collapse to a one-line
   note?
 - How many following services per card: two (as drawn) or more with fewer

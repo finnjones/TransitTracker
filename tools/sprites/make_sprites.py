@@ -305,6 +305,15 @@ def consist(car_fn, livery, frame, cars):
     return g
 
 
+def coupled(a, b):
+    """Two vehicles joined nose to tail by a 1 px coupler."""
+    g = Grid(a.w + 1 + b.w, max(a.h, b.h))
+    g.blit(a, 0, 0)
+    g.rect(a.w, a.h - 5, a.w, a.h - 4, UNDER)
+    g.blit(b, a.w + 1, 0)
+    return g
+
+
 def train_top(livery, frame, cars=3):
     """Top-down train heading down the screen, for the line map. 8 px wide."""
     g = Grid(8, cars * 12 + (cars - 1))
@@ -397,7 +406,11 @@ MOVING = {
     "bus": lambda f: with_trail(bus(BUS, f), f, (4, 8, 6)),
     "coach": lambda f: with_trail(coach(COACH, f), f, (4, 8, 6)),
     "ferry": lambda f: ferry(FERRY, f),
+    # Longer versions that cross the screen in the page transition. Bus, coach and
+    # ferry cross as they are.
     "train-t9-long": lambda f: with_trail(consist(train_car, T9, f, 4), f, (4, 9, 6)),
+    "metro-m1-long": lambda f: with_trail(consist(metro_car, M1, f, 4), f, (5, 9, 7)),
+    "lightrail-pair": lambda f: with_trail(coupled(tram(LIGHT_RAIL, f), tram(LIGHT_RAIL, f)), f, (6, 9, 7)),
     "train-t9-top": lambda f: train_top(T9, f),
 }
 

@@ -56,6 +56,7 @@ class MapStateHolder(
     private val nearMe = MutableStateFlow<NearMe>(NearMe.Idle)
     private val selection = MutableStateFlow<MapSelection?>(null)
     private val lineGeometry = MutableStateFlow<List<LineGeometry>>(emptyList())
+    private val ridden = MutableStateFlow<List<RiddenStretch>>(emptyList())
     private val details = MutableStateFlow<Map<ServiceRef, Pair<ServiceDetail, ServiceGeometry>>>(emptyMap())
     private val fetchedAt = HashMap<ServiceRef, Long>()
     private val reckonings = HashMap<String, Pair<Pair<Long, LatLng>, Reckoning>>()
@@ -102,13 +103,13 @@ class MapStateHolder(
 
     override val state: StateFlow<MapUiState> = combine(
         combine(trips, lineInfo.onStart { emit(emptyMap()) }, departures.onStart { emit(emptyList()) }) { t, l, d -> Triple(t, l, d) },
-        lineGeometry,
+        combine(lineGeometry, ridden) { g, r -> g to r },
         tracked.onStart { emit(emptyList()) },
         core.dataStatus.map<DataStatus, DataStatus?> { it }.onStart { emit(null) },
         combine(nearMe, selection, places.places) { n, s, p -> Triple(n, s, p) },
-    ) { (t, lines, deps), geo, vs, status, (near, sel, places) ->
+    ) { (t, lines, deps), (geo, rides), vs, status, (near, sel, places) ->
         loadLines(deps)
-        buildMapState(MapInputs(t?.size, lines, geo, vs, status, near, sel, places), clock.nowMillis())
+        buildMapState(MapInputs(t?.size, lines, geo, vs, status, near, sel, places, rides), clock.nowMillis())
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, MapUiState())
 
     private fun refOf(v: VehiclePosition): ServiceRef? {
@@ -130,17 +131,24 @@ class MapStateHolder(
         }
     }
 
-    /** Draws the lines from two sample services per line (both directions where the trips have them). */
+    /**
+     * Draws the lines from two sample services per line (both directions where the trips have
+     * them), plus one service of each leg the trips ride (line, where boarded, where left), whose
+     * stretch between those two stops is the trips' own ([riddenStretch]).
+     */
     private fun loadLines(deps: List<Departure>) {
         val samples = deps.groupBy { it.routeId }.values.flatMap { ds -> ds.distinctBy { it.headsign }.take(2) }.map { it.ref }
-        val key = samples.toSet()
+        val legs = deps.distinctBy { Triple(it.routeId, it.originStopId, it.destinationStopId) }
+        val key = samples.toSet() to legs.map { Triple(it.routeId, it.originStopId, it.destinationStopId) }.toSet()
         if (key == linesKey || samples.isEmpty()) return
         linesKey = key
         linesJob?.cancel()
         linesJob = scope.launch {
             runCatching {
-                val ds = samples.map { core.service(it).first() }
+                val legDetails = legs.map { it to core.service(it.ref).first() }
+                val ds = (samples.map { core.service(it).first() } + legDetails.map { it.second }).distinctBy { it.ref }
                 lineGeometry.value = geometry.lines(ds)
+                ridden.value = legDetails.mapNotNull { (dep, d) -> riddenStretch(dep, d, geometry.service(d)) }
             }
         }
     }
@@ -192,4 +200,18 @@ class MapStateHolder(
             nearMe.value = NearMe.Shown(MapProjection.Sydney.project(here), stops)
         }
     }
+}
+
+/**
+ * The stretch [dep]'s leg rides on its service [detail] (drawn as [g]): from the call at its
+ * boarding stop to the last call at its alighting stop. Null when either is not found or the
+ * service could not be placed (schematic).
+ */
+fun riddenStretch(dep: Departure, detail: ServiceDetail, g: ServiceGeometry): RiddenStretch? {
+    if (g.schematic || g.names.size != detail.calls.size) return null
+    val b = detail.calls.indexOfFirst { it.stopId == dep.originStopId }
+    val a = detail.calls.indexOfLast { it.stopId == dep.destinationStopId }
+    if (b < 0 || a <= b) return null
+    val keys = (b until a).filter { g.names[it] != g.names[it + 1] }.map { g.segmentKeyAt(it) }.toSet()
+    return RiddenStretch(dep.routeId, keys, g.names[b], g.names[a])
 }

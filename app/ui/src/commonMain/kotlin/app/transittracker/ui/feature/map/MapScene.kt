@@ -25,6 +25,12 @@ data class MapScene(
     val lineWidthDots: Int = 4,
     /** The positions are invented (schematic fallback): the map says "NOT TO SCALE". */
     val schematic: Boolean = false,
+    /**
+     * Past this zoom (metres per dot) vehicles are drawn as small tokens in their line's colour,
+     * not sprites: forty three-car trains across the whole network would hide the lines they run
+     * on. Null: always sprites (a map with a few vehicles).
+     */
+    val compactVehiclesAboveMpd: Double? = null,
 ) {
     /** Everything on the map, for fitting and for keeping the camera in reach. */
     val bounds: MapBox? by lazy {
@@ -61,6 +67,11 @@ data class SceneLine(
     val badgeTextColor: Color? = null,
     /** Ridden already (a finished ride of the journey): drawn dimmed end to end. */
     val done: Boolean = false,
+    /**
+     * Context, not a ride of yours (the Map tab's line beyond the stretch your trips use): drawn
+     * thin and dim, under the lines that are not muted.
+     */
+    val muted: Boolean = false,
 )
 
 enum class StationKind {

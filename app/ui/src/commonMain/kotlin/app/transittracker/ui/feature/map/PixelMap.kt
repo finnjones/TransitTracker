@@ -56,6 +56,7 @@ import app.transittracker.ui.components.pixelBorder
 import app.transittracker.ui.components.pixelFill
 import app.transittracker.ui.feature.map.TopDown.drawTurned
 import app.transittracker.ui.format.badgeTextColor
+import app.transittracker.ui.sprites.SpriteLook
 import app.transittracker.ui.sprites.blinkOn
 import app.transittracker.ui.sprites.frame
 import app.transittracker.ui.theme.ColorRole
@@ -336,11 +337,13 @@ private fun DrawScope.drawLines(
         cache.key = key
     }
     val lw = scene.lineWidthDots
-    val half = lw / 2
-    val brush = Size(lw * dotPx, lw * dotPx)
-    for ((line, cells) in cache.value) {
+    // Muted lines (context) first and thin, so the lines that matter draw over them.
+    for ((line, cells) in cache.value.sortedBy { !it.first.muted }) {
         val travelled = line.travelledBy?.let { spots[it]?.distance }
         val dim = lerp(line.color, c.screen, if (c.isDay) 0.55f else 0.5f)
+        val width = if (line.muted) maxOf(1, lw / 3) else lw
+        val half = width / 2
+        val brush = Size(width * dotPx, width * dotPx)
         for ((i, cell) in cells.withIndex()) {
             // A walk: dashes of two line widths, in the text colour (the streets under it are grey).
             if (line.walk) {
@@ -353,7 +356,7 @@ private fun DrawScope.drawLines(
             val x = (cell.x - half) * dotPx
             val y = (cell.y - half) * dotPx
             if (x > size.width || y > size.height || x < -brush.width || y < -brush.height) continue
-            val color = if (line.done || (travelled != null && cell.distance < travelled)) dim else line.color
+            val color = if (line.muted || line.done || (travelled != null && cell.distance < travelled)) dim else line.color
             drawRect(color, Offset(x, y), brush)
         }
     }
@@ -459,6 +462,11 @@ private fun DrawScope.drawVehicles(
         val cx = (p.ix + sx) * dotPx
         val cy = (p.iy + sy) * dotPx
         if (cx < -80 * dotPx || cy < -80 * dotPx || cx > size.width + 80 * dotPx || cy > size.height + 80 * dotPx) continue
+        if (scene.compactVehiclesAboveMpd?.let { cam.metresPerDot > it } == true) {
+            out[v.id] = drawToken(v, spot.headingDeg, cx, cy, dotPx, c)
+            if (v.selected) drawSelection(cx, cy, dotPx, c)
+            continue
+        }
         val grid = TopDown.turned(v.mode, v.cars, headingStep(spot.headingDeg, TopDown.HEADING_STEPS))
         drawTurned(grid, cx, cy, dotPx, v.color, v.look, frame, outline)
         if (v.cancelled) {
@@ -475,6 +483,31 @@ private fun DrawScope.drawVehicles(
         out[v.id] = Box(left + e[0] * dotPx, top + e[1] * dotPx, left + (e[2] + 1) * dotPx, top + (e[3] + 1) * dotPx)
     }
     return out
+}
+
+/**
+ * A vehicle seen from far out: a 6-dot square with its corners cut, in its line's colour with a
+ * Screen rim, and a 2-dot nose in Text on the side it is heading. Faded and ghost vehicles are
+ * drawn at half strength. Returns its box.
+ */
+private fun DrawScope.drawToken(v: SceneVehicle, headingDeg: Double, cx: Float, cy: Float, dotPx: Float, c: TtColors): Box {
+    val alpha = if (v.look == SpriteLook.NORMAL) 1f else 0.45f
+    val x0 = floor(cx / dotPx).toInt() - 3
+    val y0 = floor(cy / dotPx).toInt() - 3
+    fun cell(x: Int, y: Int, w: Int, h: Int, color: Color) =
+        drawRect(color, Offset((x0 + x) * dotPx, (y0 + y) * dotPx), Size(w * dotPx, h * dotPx))
+    // Rim (8 x 8, corners cut), then the body (6 x 6, corners cut).
+    cell(0, -1, 6, 8, c.screen)
+    cell(-1, 0, 8, 6, c.screen)
+    val body = if (v.cancelled) c.stop else v.color.copy(alpha = alpha)
+    cell(1, 0, 4, 6, body)
+    cell(0, 1, 6, 4, body)
+    // The nose: heading 0 is south (down the screen), 90 west, 180 north, 270 east.
+    val rad = headingDeg * kotlin.math.PI / 180.0
+    val nx = (-kotlin.math.sin(rad) * 2).roundToInt()
+    val ny = (kotlin.math.cos(rad) * 2).roundToInt()
+    cell(2 + nx, 2 + ny, 2, 2, c.text.copy(alpha = alpha))
+    return Box((x0 - 1) * dotPx, (y0 - 1) * dotPx, (x0 + 7) * dotPx, (y0 + 7) * dotPx)
 }
 
 /** Corner brackets around the selected vehicle, in Text, 11 dots out from its centre. */
@@ -588,9 +621,13 @@ private fun DrawScope.drawLabels(
     val gap = 3 * dotPx
     // Your stops first, then the lines' route badges, then every other name in the room left.
     val (first, rest) = requests.partition { it.priority <= BADGE_AFTER_PRIORITY }
-    val placedFirst = placeLabels(first, bounds, blocking, obstacles + vehicles.values, gap)
-    val badgeBoxes = placeBadges(scene, cam, w, h, badges, bounds, blocking + placedFirst.values + obstacles + vehicles.values, dotPx)
-    val placed = placedFirst + placeLabels(rest, bounds, blocking, obstacles + vehicles.values + placedFirst.values + badgeBoxes.values, gap)
+    // Sprites keep names off them; small tokens (a zoomed-out Map tab) do not: a station's name
+    // matters more than seeing every vehicle under it.
+    val tokens = scene.compactVehiclesAboveMpd?.let { cam.metresPerDot > it } == true
+    val solid = if (tokens) emptyList() else vehicles.values.toList()
+    val placedFirst = placeLabels(first, bounds, blocking, obstacles + solid, gap)
+    val badgeBoxes = placeBadges(scene, cam, w, h, badges, bounds, blocking + placedFirst.values + obstacles, vehicles.values.toList(), dotPx)
+    val placed = placedFirst + placeLabels(rest, bounds, blocking, obstacles + solid + placedFirst.values + badgeBoxes.values, gap)
     for ((id, b) in placed) {
         val l = labels[id] ?: continue
         drawStationLabel(l, b, padX, padY, dotPx, c)
@@ -632,26 +669,30 @@ private fun placeBadges(
     badges: Map<String, TextLayoutResult>,
     bounds: Box,
     taken: List<Box>,
+    vehicles: List<Box>,
     dotPx: Float,
 ): Map<String, Box> {
     val out = LinkedHashMap<String, Box>()
     for (line in scene.lines) {
         val text = badges[line.id] ?: continue
-        val path = line.segments.maxByOrNull { it.path.length }?.path ?: continue
-        if (path.length <= 0.0) continue
         val bw = text.size.width + 2 * BADGE_PAD_X * dotPx
         val bh = text.size.height + 2 * BADGE_PAD_Y * dotPx
-        for (f in listOf(0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8)) {
-            val p = cam.toDots(path.pointAt(path.length * f), w, h)
+        // Spots along the line: the middle of each stretch, longest first, then either side.
+        val spots = line.segments.filter { it.path.length > 0.0 }.sortedByDescending { it.path.length }.flatMap { seg ->
+            listOf(0.5, 0.35, 0.65, 0.2, 0.8).map { f -> seg.path.pointAt(seg.path.length * f) }
+        }
+        fun boxAt(m: MapPoint): Box {
+            val p = cam.toDots(m, w, h)
             // Snapped to whole dots, centred on the line's cell.
             val left = floor(p.ix - bw / 2 / dotPx) * dotPx
             val top = floor(p.iy - bh / 2 / dotPx) * dotPx
-            val b = Box(left, top, left + bw, top + bh)
-            if (!b.inside(bounds)) continue
-            if (taken.any { it.overlaps(b) } || out.values.any { it.overlaps(b, dotPx) }) continue
-            out[line.id] = b
-            break
+            return Box(left, top, left + bw, top + bh)
         }
+        fun free(b: Box, alsoClearOf: List<Box>) =
+            b.inside(bounds) && taken.none { it.overlaps(b) } && alsoClearOf.none { it.overlaps(b) } && out.values.none { it.overlaps(b, dotPx) }
+        // Clear of the vehicles if it can be; over one rather than no badge at all.
+        val b = spots.asSequence().map(::boxAt).firstOrNull { free(it, vehicles) } ?: spots.asSequence().map(::boxAt).firstOrNull { free(it, emptyList()) }
+        if (b != null) out[line.id] = b
     }
     return out
 }

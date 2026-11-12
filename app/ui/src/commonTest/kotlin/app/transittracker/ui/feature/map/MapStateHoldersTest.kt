@@ -185,9 +185,19 @@ class MapStateHoldersTest {
     fun theMapShowsTheSavedTripsLinesAndTheirLiveVehicles() = runTest {
         val deps = AppDeps.fake()
         val h = map(deps, backgroundScope)
-        val s = h.state.first { !it.loading && it.scene.lines.size == 3 && it.liveCount > 0 }
-        assertEquals(setOf("T1", "T9", "M1"), s.scene.lines.map { it.id }.toSet())
+        fun routes(st: MapUiState) = st.scene.lines.map { it.id.removeSuffix("~rest") }.toSet()
+        val s = h.state.first { st -> !st.loading && routes(st).size == 3 && st.liveCount > 0 && st.scene.focus != null }
+        assertEquals(setOf("T1", "T9", "M1"), routes(s))
         assertTrue(s.scene.stations.any { it.name == "Central" })
+        // The stretches the trips ride are drawn with their route badge; the rest of a line is muted.
+        val ridden = s.scene.lines.filter { !it.muted }
+        assertEquals(setOf("T1", "T9", "M1"), ridden.map { it.id }.toSet())
+        assertTrue(ridden.all { it.badge != null })
+        assertTrue(s.scene.lines.any { it.muted }, "the rest of a line is context")
+        // Where the trips board and get off are named; Strathfield (Home) is one of them.
+        assertTrue(s.scene.stations.single { it.name == "Strathfield" }.let { !it.minor && it.priority <= 2 })
+        assertTrue(s.scene.stations.any { it.minor })
+        assertEquals(MAP_TAB_TOKENS_ABOVE_MPD, s.scene.compactVehiclesAboveMpd)
         assertIs<TrackChip.Live>(s.chip)
         assertNull(s.banner)
         // Each vehicle in its line colour, and dead-reckoned once its service has loaded.

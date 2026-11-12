@@ -145,6 +145,7 @@ fun MapContent(state: MapUiState, clock: WallClock, actions: MapActions, modifie
                     onVehicleTap = { actions.selectVehicle(it.id) },
                     onEmptyTap = actions.clear,
                     actions = state.vehicleWords.map { (id, words) -> "Show $words" to { actions.selectVehicle(id) } },
+                    showAllLabel = "Whole lines",
                 )
             }
             Box(Modifier.fillMaxWidth().height(dot.dp).background(c.divider))

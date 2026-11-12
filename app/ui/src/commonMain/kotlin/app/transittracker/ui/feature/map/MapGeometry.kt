@@ -274,7 +274,10 @@ fun schematicGeometry(calls: List<StopCall>, spacing: Double = SCHEMATIC_SPACING
 
 const val SCHEMATIC_SPACING = 1_000.0
 
-/** Merges the services of one line into stretches between stations (each stretch once). */
+/**
+ * Merges the services of one line into stretches between stations (each stretch once), each
+ * along the path of the first service seen running it.
+ */
 fun mergeLine(routeId: RouteId, services: List<ServiceGeometry>): LineGeometry {
     val segments = LinkedHashMap<String, LineSegment>()
     val stations = LinkedHashMap<String, LineStation>()
@@ -288,9 +291,11 @@ fun mergeLine(routeId: RouteId, services: List<ServiceGeometry>): LineGeometry {
             if (i + 1 < g.stopPoints.size) {
                 val key = g.segmentKeyAt(i)
                 if (key !in segments && g.names[i] != g.names[i + 1]) {
-                    // Store every stretch in its canonical direction so lanes agree both ways.
+                    // Store every stretch in its canonical direction so lanes agree both ways. The
+                    // stretch follows the service's path (its line shape, when it has one).
                     val forward = g.names[i] <= g.names[i + 1]
-                    val pts = if (forward) listOf(g.stopPoints[i], g.stopPoints[i + 1]) else listOf(g.stopPoints[i + 1], g.stopPoints[i])
+                    val along = g.path.slice(g.stopDistances[i], g.stopDistances[i + 1]).points
+                    val pts = if (forward) along else along.reversed()
                     segments[key] = LineSegment(key, MapPath(pts))
                 }
             }

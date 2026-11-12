@@ -88,6 +88,18 @@ data class MapUiState(
     val liveCount: Int = 0,
 )
 
+/**
+ * A stretch of a line that a saved trip rides: the line's stretches between stations from where
+ * the leg is boarded to where it is left (keys as [segmentKey]), and those two stations.
+ */
+data class RiddenStretch(val routeId: RouteId, val segmentKeys: Set<String>, val from: String, val to: String)
+
+/** Past this zoom the Map tab draws vehicles as tokens ([MapScene.compactVehiclesAboveMpd]). */
+const val MAP_TAB_TOKENS_ABOVE_MPD = 15.0
+
+/** A vehicle this far from your stretches is drawn faded: it is on the line, not on your way. */
+private const val OFF_STRETCH_M = 300.0
+
 /** Inputs to [buildMapState]. */
 data class MapInputs(
     val tripCount: Int?,
@@ -98,6 +110,8 @@ data class MapInputs(
     val nearMe: NearMe,
     val selection: MapSelection?,
     val places: List<SavedPlace>,
+    /** The stretches the saved trips ride; empty until known (every line is then drawn whole). */
+    val ridden: List<RiddenStretch> = emptyList(),
 )
 
 /** Vehicles whose position may be drawn: fresh, on a known line, not cancelled. */
@@ -109,6 +123,11 @@ fun drawableVehicles(vehicles: List<TrackedVehicle>, nowMs: Long): List<TrackedV
 /**
  * Everything the Map tab draws (pure): the saved trips' lines, their live vehicles (none when
  * offline; faded when stale), stations, NEAR ME, the selected card, the banner and chip.
+ *
+ * The stretches your trips ride ([MapInputs.ridden]) are the map: drawn full width with the
+ * route's badge, named at their ends (where you board, change and get off), and what the map
+ * fits. The rest of each line is thin and dim context, its stations notches named only when
+ * zoomed in, and vehicles away from your stretches are faded.
  */
 fun buildMapState(i: MapInputs, nowMs: Long): MapUiState {
     if (i.tripCount == null) return MapUiState(loading = true)
@@ -117,20 +136,46 @@ fun buildMapState(i: MapInputs, nowMs: Long): MapUiState {
     val stale = status?.liveStale == true
     val noTrips = i.tripCount == 0
 
-    val lines = i.geometry.map { g ->
-        SceneLine(g.routeId, parseLineColor(i.lines[g.routeId]?.color) ?: DefaultLineColor, g.segments)
+    val mine: Map<RouteId, Set<String>> = i.ridden.groupBy { it.routeId }.mapValues { (_, s) -> s.flatMap { it.segmentKeys }.toSet() }
+    val focusLine = i.ridden.isNotEmpty()
+    val yours = ArrayList<LineSegment>()
+    val lines = i.geometry.flatMap { g ->
+        val info = i.lines[g.routeId]
+        val color = parseLineColor(info?.color) ?: DefaultLineColor
+        val keys = mine[g.routeId]
+        if (keys == null) return@flatMap listOf(SceneLine(g.routeId, color, g.segments))
+        val (ridden, rest) = g.segments.partition { it.key in keys }
+        yours += ridden
+        listOfNotNull(
+            rest.takeIf { it.isNotEmpty() }?.let { SceneLine("${g.routeId}~rest", color, it, muted = true) },
+            ridden.takeIf { it.isNotEmpty() }?.let {
+                SceneLine(g.routeId, color, it, badge = info?.name?.takeIf { n -> n.isNotEmpty() }, badgeTextColor = parseLineColor(info?.textColor))
+            },
+        )
     }
+    // Stations where you board, change and get off are marked and named; the rest are notches.
+    val ends = i.ridden.flatMap { listOf(it.from, it.to) }.toSet()
+    val onYours = mine.values.flatten().flatMap { it.split('|') }.toSet()
     val selectedStation = (i.selection as? MapSelection.Station)
     val nearStops = (i.nearMe as? NearMe.Shown)?.stops.orEmpty()
     val nearNames = nearStops.map { shortStopName(it.name) }.toSet()
     val stations = LinkedHashMap<String, SceneStation>()
     for (g in i.geometry) for (s in g.stations) {
         if (s.name in stations) continue
+        val near = s.name in nearNames
+        val selected = selectedStation?.name == s.name
+        val minor = focusLine && !near && !selected && s.name !in ends
         stations[s.name] = SceneStation(
             id = "st-${s.name}", name = s.name, point = s.point,
-            kind = if (s.name in nearNames) StationKind.NEARBY else StationKind.PLAIN,
-            priority = if (s.name in nearNames) 3 else 10, stopId = s.stopId,
-            selected = selectedStation?.name == s.name,
+            kind = if (near) StationKind.NEARBY else StationKind.PLAIN,
+            priority = when {
+                near -> 3
+                !minor && focusLine -> 2
+                !minor -> 10
+                s.name in onYours -> 15
+                else -> 30
+            },
+            stopId = s.stopId, selected = selected, minor = minor,
         )
     }
     for (s in nearStops) {
@@ -152,9 +197,11 @@ fun buildMapState(i: MapInputs, nowMs: Long): MapUiState {
             v.geometry != null && v.reckoning != null -> VehicleMotion.Reckoned(v.geometry, v.reckoning)
             else -> VehicleMotion.Free(MapProjection.Sydney.project(v.position.position), ((v.position.bearing ?: 180f).toDouble() + 180.0) % 360.0)
         }
+        val here = MapProjection.Sydney.project(v.position.position)
+        val away = focusLine && routeId != null && routeId in mine && yours.none { it.path.snap(here).offset <= OFF_STRETCH_M }
         SceneVehicle(
             v.position.vehicleId, mode, color, motion,
-            look = if (stale || v.detail?.stale == true) SpriteLook.FADED else SpriteLook.NORMAL,
+            look = if (stale || v.detail?.stale == true || away) SpriteLook.FADED else SpriteLook.NORMAL,
             cars = 1, routeId = routeId,
             selected = (i.selection as? MapSelection.Vehicle)?.id == v.position.vehicleId,
         )
@@ -163,8 +210,14 @@ fun buildMapState(i: MapInputs, nowMs: Long): MapUiState {
     val you = (i.nearMe as? NearMe.Shown)?.you
     val focus = if (you != null) {
         MapBox.around(listOf(you) + nearStops.map { MapProjection.Sydney.project(it.position) })?.grow(500.0)
-    } else null
-    val scene = MapScene(lines, stations.values.toList(), sceneVehicles, you, focus, lineWidthDots = 3)
+    } else {
+        // Your stretches, not the whole of every line they are on.
+        MapBox.around(yours.flatMap { it.path.points })?.grow(400.0)
+    }
+    val scene = MapScene(
+        lines, stations.values.toList(), sceneVehicles, you, focus, lineWidthDots = 4,
+        compactVehiclesAboveMpd = MAP_TAB_TOKENS_ABOVE_MPD,
+    )
 
     val vehicleCard = (i.selection as? MapSelection.Vehicle)?.let { sel ->
         val v = shown.firstOrNull { it.position.vehicleId == sel.id } ?: return@let null
@@ -213,7 +266,7 @@ fun buildMapState(i: MapInputs, nowMs: Long): MapUiState {
         vehicleCard = vehicleCard,
         stationCard = stationCard,
         nearMe = i.nearMe,
-        fitKey = listOf(i.geometry.map { it.routeId }, you),
+        fitKey = listOf(i.geometry.map { it.routeId }, you, i.ridden.map { it.routeId to it.from }),
         description = description,
         vehicleWords = words,
         liveCount = shown.size,

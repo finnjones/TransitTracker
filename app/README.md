@@ -369,6 +369,13 @@ on and the connection to make (the bus after the train), not the next departure.
   "© OPENSTREETMAP" and Settings > Licences has the ODbL notice. Rebuild the file with
   `tools/basemap/build_basemap.py` (an OSM extract of Greater Sydney from download.openstreetmap.fr
   and the coastline's water polygons from osmdata.openstreetmap.de; see its header).
+- The Map tab is drawn around the stretches the saved trips ride (`RiddenStretch`, one service
+  of each leg read by `MapStateHolder`): those are full width with their route badge and are what
+  the map fits; the rest of each line is thin and dim (`SceneLine.muted`). Only the stations where
+  trips board and get off are marked and named; the others are notches named when zoomed in.
+  Zoomed out past `MAP_TAB_TOKENS_ABOVE_MPD` vehicles are small tokens with a nose for their
+  heading, not sprites, and those away from your stretches are faded. Its lines follow the
+  services' shapes. WHOLE LINES fits everything.
 
 ## Rules for feature work (parallel agents)
 

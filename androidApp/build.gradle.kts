@@ -6,10 +6,11 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
-// Push is optional: with google-services.json next to this file the Google services plugin
-// configures Firebase; without it the app builds and runs with push off.
-val pushConfigured = file("google-services.json").isFile
-if (pushConfigured) apply(plugin = "com.google.gms.google-services")
+// Firebase (sign-in with Google, the account's saved data, push) comes from google-services.json
+// next to this file: with it the Google services plugin configures Firebase; without it the app
+// builds and runs with push off and asks for an invite code instead of signing in.
+val firebaseConfigured = file("google-services.json").isFile
+if (firebaseConfigured) apply(plugin = "com.google.gms.google-services")
 
 val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
@@ -21,9 +22,9 @@ fun setting(property: String, env: String): String =
         ?: providers.environmentVariable(env).orNull?.takeIf { it.isNotBlank() }
         ?: localProperties.getProperty(property).orEmpty().trim()
 
-// The live flavour's server address, read at build time (tt.baseUrl / TT_BASE_URL). Blank means
-// the app asks for it on first start. It is never committed to the repository.
-val baseUrl: String = setting("tt.baseUrl", "TT_BASE_URL")
+// The live flavour's server address: tt.baseUrl / TT_BASE_URL at build time, else the default
+// server, https://tt.finnjones.me.
+val baseUrl: String = setting("tt.baseUrl", "TT_BASE_URL").ifEmpty { "https://tt.finnjones.me" }
 
 // Version: CI passes its run number (TT_VERSION_CODE), so every build it publishes is newer than
 // the last. Local builds are 1 / 0.1.0 unless tt.versionCode says otherwise.
@@ -52,7 +53,7 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = buildNumber ?: 1
         versionName = if (buildNumber != null) "0.1.$buildNumber" else "0.1.0"
-        buildConfigField("boolean", "PUSH_CONFIGURED", pushConfigured.toString())
+        buildConfigField("boolean", "FIREBASE_CONFIGURED", firebaseConfigured.toString())
     }
 
     flavorDimensions += "data"
@@ -120,7 +121,7 @@ android {
 
 // Without google-services.json for the demo id, the plugin would fail the demo build: the demo
 // flavour has no push (fake core), so its Google services processing is skipped.
-if (pushConfigured) {
+if (firebaseConfigured) {
     tasks.matching { it.name.startsWith("process") && it.name.contains("Demo") && it.name.endsWith("GoogleServices") }
         .configureEach { enabled = false }
 }
@@ -135,6 +136,11 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
 
     testImplementation(kotlin("test-junit", libs.versions.kotlin.get()))
     testImplementation(libs.junit4)

@@ -89,6 +89,8 @@ class ApiDependencies(
     val limits: RateLimits = RateLimits(clock),
     /** Journey planning (`/v1/places`, `/v1/plan`); [NoPlanner] answers 503 when none is wired. */
     val planner: Planner = NoPlanner,
+    /** Checks sign-in ID tokens for `POST /v1/join`; null when the server has no Firebase project (invite codes only). */
+    val idTokens: IdTokenVerifier? = null,
 )
 
 /** Maximum route ids in one `routes` query. */
@@ -331,7 +333,16 @@ private fun isLoopback(address: String): Boolean =
 private suspend fun join(call: ApplicationCall, deps: ApiDependencies) {
     call.rateLimit(deps.limits.join, call.clientIp(deps.config.trustedProxy))
     val request = call.receivePayload(JoinRequest.serializer())
-    val response = io { deps.devices.join(request.inviteCode, request.platform, request.appVersion) }
+    val idToken = request.idToken?.takeIf { it.isNotBlank() }
+    val response = if (idToken != null) {
+        val verifier = deps.idTokens
+            ?: throw ApiException(503, "sign_in_unavailable", "This server does not accept sign-in yet")
+        val user = io { verifier.verify(idToken) }
+            ?: throw ApiException(401, "sign_in_invalid", "Your sign-in could not be checked. Sign in again.")
+        io { deps.devices.joinUser(user, request.platform, request.appVersion) }
+    } else {
+        io { deps.devices.join(request.inviteCode, request.platform, request.appVersion) }
+    }
     call.respondPayload(JoinResponse.serializer(), response)
 }
 

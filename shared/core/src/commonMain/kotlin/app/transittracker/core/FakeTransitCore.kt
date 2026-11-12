@@ -112,6 +112,20 @@ class FakeTransitCore(
         return JoinResult.Joined("fake-device")
     }
 
+    /** Any token joins, except one containing "denied" (refused) or "offline" (cannot reach the server). */
+    override suspend fun signIn(idToken: String): JoinResult = when {
+        idToken.contains("denied", ignoreCase = true) -> JoinResult.NotAllowed("This account is not allowed on this server.")
+        idToken.contains("offline", ignoreCase = true) -> JoinResult.Failed("Can't reach the server")
+        else -> {
+            joinedState.value = true
+            JoinResult.Joined("fake-device")
+        }
+    }
+
+    override suspend fun signOut() {
+        joinedState.value = false
+    }
+
     override suspend fun updatePushToken(token: String) {
         pushTokens.update { it + token }
     }

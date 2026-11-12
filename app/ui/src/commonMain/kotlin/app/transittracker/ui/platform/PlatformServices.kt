@@ -65,6 +65,12 @@ interface PlatformServices {
      */
     val updater: AppUpdater? get() = null
 
+    /**
+     * Sign-in with an account (Firebase Authentication), which replaces the invite code; null in
+     * builds without it, where onboarding asks for an invite code.
+     */
+    val accounts: AccountService? get() = null
+
     // ---- System motion state (plan 2.3: sprites hold still and transitions cut)
     val systemReduceMotion: StateFlow<Boolean>
     val batterySaver: StateFlow<Boolean>
@@ -84,6 +90,7 @@ class FakePlatformServices(
     batterySaver: Boolean = false,
     override val isDebugBuild: Boolean = true,
     override val updater: AppUpdater? = FakeAppUpdater(),
+    override val accounts: AccountService? = null,
 ) : PlatformServices {
     val location = MutableStateFlow(location)
     val locationPermissionState = MutableStateFlow(locationPermission)

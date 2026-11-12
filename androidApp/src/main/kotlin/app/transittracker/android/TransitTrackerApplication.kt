@@ -21,9 +21,6 @@ sealed interface Startup {
     /** Reading local state (a few milliseconds); the window background shows. */
     data object Loading : Startup
 
-    /** Live build without a server address: ask for it ([AppGraph.setServerAddress]). */
-    data object NeedsServerAddress : Startup
-
     data class Ready(val deps: AppDeps) : Startup
 }
 
@@ -31,9 +28,6 @@ sealed interface Startup {
 interface AppGraph {
     val startup: StateFlow<Startup>
     val platform: AndroidPlatformServices
-
-    /** Stores the server address (already checked by [ServerAddress.normalize]) and creates the core. */
-    fun setServerAddress(url: String)
 
     /** A Firebase push token, now or after a refresh. */
     fun onPushToken(token: String)

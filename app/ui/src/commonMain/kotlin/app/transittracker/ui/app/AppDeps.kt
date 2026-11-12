@@ -47,6 +47,16 @@ class AppDeps(
 ) {
     val follower: JourneyFollower by lazy { JourneyFollower(core, platform, settings, clock) }
 
+    /**
+     * Reads saved trips, places and display settings from storage again: after signing in
+     * brought them down from the user's account. (Recent searches are read when the planner first opens.)
+     */
+    suspend fun reloadSaved() {
+        core.reloadTrips()
+        places.reload()
+        settings.reload()
+    }
+
     companion object {
         /**
          * Fake dependencies for previews, screenshots, tests and the desktop window:

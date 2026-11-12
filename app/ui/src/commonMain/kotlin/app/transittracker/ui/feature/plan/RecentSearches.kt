@@ -70,9 +70,10 @@ class KeyValueRecentSearches(
         }
     }
 
-    private companion object {
+    companion object {
+        /** Where the list is kept (also kept in the user's account, see `AccountData`). */
         const val KEY = "plan.recent"
-        val json = Json { ignoreUnknownKeys = true }
+        private val json = Json { ignoreUnknownKeys = true }
     }
 }
 

@@ -16,7 +16,13 @@ import kotlin.system.exitProcess
 private const val USAGE = """Usage: tt-admin <command> [options]
 
 Commands:
-  invite [--expires-days N] [--note TEXT]   Create a one-time invite code
+  allow <email|*@domain|*> [--note TEXT]    Let that Google account (every account at a domain, or
+                                            anyone) sign in to the app
+  disallow <email|*@domain|*>               Take an entry off the list and cut off the signed-in
+                                            devices it no longer lets in
+  allowed                                   List who may sign in
+  invite [--expires-days N] [--note TEXT]   Create a one-time invite code (for builds without
+                                            Firebase sign-in)
   revoke <deviceId>                         Cut a device off (deletes its token, push token and watches)
   devices                                   List devices
   invites                                   List invites (codes themselves are never stored)
@@ -70,6 +76,35 @@ private class UsageException(message: String) : Exception(message)
 private fun runDbCommand(command: String, args: List<String>, db: Database, out: PrintStream, clock: WallClock): Int {
     val devices = SqliteDeviceStore(db, clock)
     when (command) {
+        "allow" -> {
+            val pattern = args.firstOrNull() ?: throw UsageException("allow needs an email, *@domain or *")
+            val opts = parseOptions(args.drop(1), setOf("--note"))
+            val normalized = AllowedUsers.normalize(pattern)
+                ?: throw UsageException("'$pattern' is not an email address, *@domain or *")
+            if (devices.allowUser(normalized, opts["--note"])) {
+                out.println("Allowed $normalized to sign in")
+            } else {
+                out.println("$normalized was already allowed")
+            }
+            if (normalized == AllowedUsers.ANYONE) out.println("Warning: anyone with a Google account can now use this server")
+        }
+        "disallow" -> {
+            val pattern = args.singleOrNull() ?: throw UsageException("disallow needs exactly one entry")
+            val result = devices.disallowUser(pattern)
+            if (!result.removed) {
+                out.println("$pattern was not on the list")
+                if (result.revokedDevices.isEmpty()) return 1
+            } else {
+                out.println("Removed $pattern")
+            }
+            result.revokedDevices.forEach { out.println("Revoked $it: token, push token and watches deleted") }
+        }
+        "allowed" -> {
+            val all = devices.allowedUsers()
+            out.println(row("WHO", "SINCE", "NOTE"))
+            all.forEach { out.println(row(it.pattern, formatTime(it.createdMs), it.note ?: "")) }
+            if (all.isEmpty()) out.println("Nobody can sign in yet: tt-admin allow <email>")
+        }
         "invite" -> {
             val opts = parseOptions(args, setOf("--expires-days", "--note"))
             val days = opts["--expires-days"]?.let {
@@ -91,11 +126,11 @@ private fun runDbCommand(command: String, args: List<String>, db: Database, out:
         }
         "devices" -> {
             val all = devices.all()
-            out.println(row("DEVICE ID", "PLATFORM", "APP", "PUSH", "JOINED", "LAST SEEN", "STATE"))
+            out.println(row("DEVICE ID", "USER", "PLATFORM", "APP", "PUSH", "JOINED", "LAST SEEN", "STATE"))
             all.forEach {
                 out.println(
                     row(
-                        it.deviceId, it.platform, it.appVersion.ifBlank { "-" },
+                        it.deviceId, it.userEmail ?: "(invite)", it.platform, it.appVersion.ifBlank { "-" },
                         if (it.pushToken != null) (if (it.notificationsEnabled) "yes" else "muted") else "no",
                         formatTime(it.createdMs), formatTime(it.lastSeenMs), if (it.revoked) "revoked" else "active",
                     ),

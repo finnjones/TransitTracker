@@ -39,6 +39,9 @@ interface SettingsStore {
 
     /** Applies [change] atomically and persists the result. */
     suspend fun update(change: (UiSettings) -> UiSettings)
+
+    /** Reads the stored settings again (after they were restored from the user's account). */
+    suspend fun reload() {}
 }
 
 /**
@@ -62,6 +65,10 @@ class KeyValueSettingsStore(private val kv: KeyValueStore) : SettingsStore {
             if (new != old) save(old, new)
             state.value = new
         }
+    }
+
+    override suspend fun reload() {
+        mutex.withLock { state.value = load() }
     }
 
     private suspend fun ensureLoaded(): UiSettings = state.value ?: mutex.withLock {

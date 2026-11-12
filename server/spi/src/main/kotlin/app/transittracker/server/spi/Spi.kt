@@ -217,6 +217,8 @@ data class DeviceRecord(
     val createdMs: Long,
     val lastSeenMs: Long,
     val revoked: Boolean,
+    /** The signed-in account (Firebase) that joined this device; null for invite-code devices. */
+    val userEmail: String? = null,
 )
 
 interface DeviceRepository {

@@ -51,15 +51,19 @@ class TripStore(private val kv: KeyValueStore) {
         listed + list.filter { it.id !in ids }
     }
 
+    /** Forgets the cached list and reads the stored one again (it may have been replaced underneath). */
+    suspend fun reload() {
+        mutex.withLock { state.value = read() }
+    }
+
+    private suspend fun read(): List<SavedTrip> = kv.get(KvKeys.TRIPS)?.let {
+        runCatching { ApiJson.decodeFromString(serializer, it) }.getOrNull()
+    }.orEmpty().sortedBy { it.order }
+
     private suspend fun load(): List<SavedTrip> {
         state.value?.let { return it }
         return mutex.withLock {
-            state.value ?: run {
-                val stored = kv.get(KvKeys.TRIPS)?.let {
-                    runCatching { ApiJson.decodeFromString(serializer, it) }.getOrNull()
-                }.orEmpty()
-                stored.sortedBy { it.order }.also { state.value = it }
-            }
+            state.value ?: read().also { state.value = it }
         }
     }
 

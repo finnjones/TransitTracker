@@ -28,6 +28,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.transittracker.model.LatLng
+import app.transittracker.ui.platform.AccountService
 import app.transittracker.ui.platform.LocationFix
 import app.transittracker.ui.platform.PermissionState
 import app.transittracker.ui.platform.PlatformServices
@@ -58,6 +59,13 @@ class AndroidPlatformServices(
     /** In-app updates (Settings > About); null in builds that cannot update themselves. */
     override val updater: ReleaseFeedUpdater? = null,
 ) : PlatformServices {
+    /** Sign-in ([FirebaseAccountService]); set by the live graph when the build has Firebase. */
+    override var accounts: AccountService? = null
+        internal set
+
+    /** The activity on screen, for what needs a window (the sign-in sheet); null in the background. */
+    internal val currentActivity: Activity? get() = activity
+
     private val prefs = app.getSharedPreferences("platform", Context.MODE_PRIVATE)
     private val main = Handler(Looper.getMainLooper())
 

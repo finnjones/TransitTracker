@@ -187,8 +187,25 @@ class DefaultTransitCore internal constructor(
         emitAll(tokenState.map { it != null })
     }.distinctUntilChanged()
 
-    override suspend fun join(inviteCode: String): JoinResult {
-        val result = api.join(JoinRequest(inviteCode.trim(), config.platform, config.appVersion))
+    override suspend fun join(inviteCode: String): JoinResult =
+        join(JoinRequest(inviteCode.trim(), config.platform, config.appVersion))
+
+    override suspend fun signIn(idToken: String): JoinResult =
+        join(JoinRequest(platform = config.platform, appVersion = config.appVersion, idToken = idToken))
+
+    override suspend fun signOut() {
+        kv.put(KvKeys.DEVICE_TOKEN, null)
+        kv.put(KvKeys.DEVICE_ID, null)
+        kv.put(KvKeys.WATCHES, null)
+        // The push token stays (it belongs to the phone) and is sent again after the next join.
+        kv.get(KvKeys.PUSH_TOKEN)?.let { kv.put(KvKeys.PUSH_TOKEN_PENDING, it) }
+        watchesState.value = null
+        tokenState.value = null
+        tokenLoaded.value = true
+    }
+
+    private suspend fun join(request: JoinRequest): JoinResult {
+        val result = api.join(request)
         return when (result) {
             is ApiResult.Success -> {
                 kv.put(KvKeys.DEVICE_TOKEN, result.value.deviceToken)
@@ -198,11 +215,16 @@ class DefaultTransitCore internal constructor(
                 scope.launch {
                     updatePacks()
                     refreshWatches()
+                    sendPendingPushToken()
                 }
                 JoinResult.Joined(result.value.deviceId)
             }
             is ApiResult.HttpFailure ->
-                if (result.status in 400..499 && result.status != 408 && result.status != 429) {
+                if (result.error?.code == "not_allowed" || result.error?.code == "sign_in_unavailable") {
+                    // Signed in, but this server does not let the account (or anyone signing in) in.
+                    JoinResult.NotAllowed(result.error?.detail ?: result.error?.title.orEmpty())
+                } else if (result.status in 400..499 && result.status != 408 && result.status != 429) {
+                    // The code, or the sign-in token, was refused.
                     JoinResult.InvalidCode
                 } else {
                     JoinResult.Failed(result.error?.title ?: "Server error ${result.status}")
@@ -235,6 +257,8 @@ class DefaultTransitCore internal constructor(
     override suspend fun deleteTrip(id: String) = tripStore.delete(id)
 
     override suspend fun reorderTrips(ids: List<String>) = tripStore.reorder(ids)
+
+    override suspend fun reloadTrips() = tripStore.reload()
 
     // ---- Departures ----
 

@@ -14,7 +14,7 @@ phone ──HTTPS──> Cloudflare (tt.example.com) ──tunnel──> [cloudf
 | `docker-compose.yml` | The two containers: `cloudflared` (the tunnel) and `tt-server` |
 | `Dockerfile` | How the tt-server image is built (from the repository root) |
 | `.env.example` | Every setting, with comments. Copy to `.env` and fill in |
-| `tt-admin` | Runs admin commands (invites, devices, backups) inside the container |
+| `tt-admin` | Runs admin commands (who may sign in, devices, backups) inside the container |
 | `backup.sh` | Nightly backup, keeps 14 days |
 | `hermes-proxmox-deploy-prompt.md` | Hand-off prompt for an AI agent to do this whole setup on Proxmox |
 
@@ -87,9 +87,21 @@ The repository is private: GitHub will ask for your username and a
 4. Copy the **API key** shown for the application. It goes in `.env` as `TFNSW_API_KEY` (step 7).
    Treat it like a password: it never goes on a phone or into git.
 
-## 5. Create a Firebase project for push notifications (free)
+## 5. Firebase: sign-in and push notifications (free)
 
-Skip this section to start without push notifications; you can add it later.
+The app signs in with Google through Firebase Authentication, and the server checks each sign-in
+against the Firebase project. The project already exists for this app: `transittracker-633f552b`
+(its console setup, Google sign-in and Firestore, is in androidApp/README.md, "Sign-in and saved
+data"). For the server:
+
+- **Sign-in** only needs `FIREBASE_PROJECT_ID=transittracker-633f552b` in `.env` (step 7).
+  The server fetches Google's public keys from `www.googleapis.com` to check tokens; no secret is
+  involved. Without a project id, sign-in is refused (`503 sign_in_unavailable`) and only invite
+  codes can join.
+- **Push notifications** also need the service account (steps 3 to 5). Skip them to start
+  without push; you can add it later.
+
+For a new project of your own instead:
 
 1. Go to <https://console.firebase.google.com>, **Create a project** (e.g. "transittracker").
    Google Analytics is not needed. The project stays on the free **Spark** plan; no billing account.
@@ -124,7 +136,7 @@ You need a domain whose DNS is managed by Cloudflare. In the Cloudflare dashboar
    Self-hosted*): application domain `tt.<your-domain>`, path `status`; add a policy
    **Allow** → *Emails* → your email address. Login by one-time PIN is fine.
    **Do not** add an Access application for the whole hostname or for `/v1/*`: the phone app
-   cannot do an Access login. The API has its own protection (invite codes and device tokens).
+   cannot do an Access login. The API has its own protection (sign-in allow list and device tokens).
 4. **Don't let bot protection block the app.** In the main dashboard for your domain:
    *Security → Bots*: keep **Bot Fight Mode** off, or add a WAF custom rule
    (*Security → WAF → Custom rules*) for hostname `tt.<your-domain>` and URI path starting with
@@ -180,22 +192,29 @@ You should see `{"ok":true,"timetableLoaded":...}`. `timetableLoaded` becomes `t
 first timetable build. `https://tt.<your-domain>/status` should ask you to log in with Cloudflare
 Access.
 
-## 10. Invite a friend
+## 10. Let a friend in
 
 ```bash
-./tt-admin invite --expires-days 7 --note "Sam"
+./tt-admin allow sam@gmail.com --note "Sam"
 ```
 
-It prints a code like `K7QM-3XWP`. Send it privately; it works once. Friends type it on the
-app's first screen. Other commands:
+Sam can now tap **SIGN IN WITH GOOGLE** in the app with that Google account. Nobody can sign in
+until you allow them (start with yourself). `allow '*@example.com'` lets in every account at a
+domain, and `allow '*'` anyone with a Google account (think twice: they all share your TfNSW
+quota). Other commands:
 
 ```bash
-./tt-admin devices                 # who has joined, last seen
+./tt-admin allowed                 # who may sign in
+./tt-admin disallow sam@gmail.com  # take them off and cut off their phones
+./tt-admin devices                 # who has joined (with their account), last seen
 ./tt-admin revoke <deviceId>       # cut a device off and delete its data
 ./tt-admin watches                 # everyone's push notification watches
 ./tt-admin notifications --limit 20
 ./tt-admin help
 ```
+
+Invite codes still work for builds of the app without Firebase: `./tt-admin invite --expires-days 7`
+prints a one-time code like `K7QM-3XWP` that such a build asks for on its first screen.
 
 `tt-admin import-gtfs <pack> <zip-or-dir...>` builds a timetable pack from GTFS files you already
 have (the files must be inside the container, e.g. copied into the `tt-data` volume). You normally

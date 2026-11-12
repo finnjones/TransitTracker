@@ -76,7 +76,7 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
     }
 
     override fun onPushToken(token: String) {
-        Push.status.value = Push.GOT_TOKEN
+        Push.step(Push.GOT_TOKEN)
         val c = core
         if (c == null) {
             pendingPushToken = token
@@ -87,13 +87,14 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
 
     /** Hands [token] to the core (which sends it to the server) and says whether the server took it. */
     private suspend fun sendPushToken(c: TransitCore, token: String) {
-        Push.status.value = try {
+        try {
             c.updatePushToken(token)
-            if (kv.get(KvKeys.PUSH_TOKEN_PENDING) == null) Push.REGISTERED else Push.NOT_ACCEPTED
+            // Not accepted yet is usually just offline; the core sends it again on its next check.
+            Push.step(if (kv.get(KvKeys.PUSH_TOKEN_PENDING) == null) Push.REGISTERED else Push.NOT_ACCEPTED)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            "Could not send the token to the server: ${e.message ?: e.javaClass.simpleName}"
+            Push.fail("Could not send the token to the server: ${e.message ?: e.javaClass.simpleName}")
         }
     }
 

@@ -50,8 +50,8 @@ interface PlatformServices {
 
     /**
      * Where this phone's push registration stands, as one plain sentence (Settings >
-     * Notifications): asking for a token, the push service's error, or whether the server took
-     * it. Null where the platform does not report it.
+     * Notifications), e.g. the push service's error. Null hides the line: Android release builds
+     * report only failures, debug builds every step.
      */
     val pushRegistration: StateFlow<String?> get() = NoPushRegistration
 

@@ -28,6 +28,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.transittracker.model.LatLng
+import app.transittracker.ui.platform.LocationFix
 import app.transittracker.ui.platform.PermissionState
 import app.transittracker.ui.platform.PlatformServices
 import app.transittracker.ui.platform.ReleaseFeedUpdater
@@ -155,6 +156,24 @@ class AndroidPlatformServices(
         val fix = if (providers.isEmpty()) null else withTimeoutOrNull(LOCATION_TIMEOUT_MS) { firstFix(lm, providers) }
         // Nothing new in time: an older fix still beats "could not find where you are".
         return (fix ?: known?.takeIf { age(it) < USABLE_NANOS })?.toLatLng()
+    }
+
+    // Each call is guarded by hasLocationPermission(); lint cannot see through the helper.
+    @SuppressLint("MissingPermission")
+    override suspend fun currentFix(nowMs: Long): LocationFix? {
+        if (!hasLocationPermission()) return null
+        val lm = app.getSystemService(LocationManager::class.java) ?: return null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && !lm.isLocationEnabled) return null
+        val known = lastKnown(lm)
+        // Following a journey needs a fix from the last half minute: a train covers a kilometre in one.
+        val fresh: Location? = known?.takeIf { age(it) < FOLLOW_FRESH_NANOS }
+        val providers = if (fresh == null) liveProviders(lm) else emptyList()
+        val location: Location = fresh
+            ?: (if (providers.isEmpty()) null else withTimeoutOrNull(LOCATION_TIMEOUT_MS) { firstFix(lm, providers) })
+            ?: return null
+        // When the fix was taken, on the same clock as nowMs (the phone's wall clock may differ).
+        val takenMs = nowMs - age(location) / 1_000_000L
+        return LocationFix(location.toLatLng(), takenMs, location.takeIf { it.hasAccuracy() }?.accuracy?.toDouble())
     }
 
     /** The providers worth asking for a new fix, best first. GPS needs the precise permission. */
@@ -317,6 +336,7 @@ class AndroidPlatformServices(
         private const val KEY_ASKED_NOTIFICATIONS = "asked.notifications"
         private const val LOCATION_TIMEOUT_MS = 20_000L
         private const val FRESH_NANOS = 2 * 60 * 1_000_000_000L
+        private const val FOLLOW_FRESH_NANOS = 30 * 1_000_000_000L
         private const val USABLE_NANOS = 15 * 60 * 1_000_000_000L
     }
 }

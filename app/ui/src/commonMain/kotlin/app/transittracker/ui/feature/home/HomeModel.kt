@@ -1,11 +1,14 @@
 package app.transittracker.ui.feature.home
 
 import app.transittracker.model.DataStatus
+import app.transittracker.model.Departure
 import app.transittracker.model.DepartureStatus
 import app.transittracker.model.Journey
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.ServiceDate
 import app.transittracker.model.StopId
+import app.transittracker.ui.feature.follow.FollowMatch
+import app.transittracker.ui.feature.follow.FollowStage
 import app.transittracker.ui.places.SavedPlace
 import app.transittracker.ui.places.TripPlaces
 import app.transittracker.ui.settings.CardDensity
@@ -76,9 +79,63 @@ data class TripCard(
     val linkedToPlaces: Boolean,
     /** When nothing runs any more today: the first service of the next day (null if unknown). */
     val noMoreServices: NoMoreServices?,
+    /** Follow my journey: the user is on a journey of this trip (shown first, the rest as other services). */
+    val onTheWay: OnTheWay? = null,
 )
 
 data class NoMoreServices(val firstNextDayMs: Long?)
+
+/** The journey Follow my journey says the user is on, with its live times from the core. */
+data class Followed(val match: FollowMatch, val journey: Journey)
+
+/**
+ * The card of a trip the user is on (Follow my journey): the ride they are on and the connection
+ * to make, or the service they are changing onto. Replaces the next departure as the headline;
+ * the next departures stay underneath as other services.
+ */
+data class OnTheWay(
+    val journey: Journey,
+    val stage: FollowStage,
+    val legIndex: Int,
+    /** Riding: the leg being ridden. Changing: the leg being walked to. */
+    val leg: Departure,
+    /** Riding: the next leg (the connection to make); null on the last leg and while changing. */
+    val next: Departure?,
+    /** Minutes from [leg]'s expected arrival to [next]'s expected departure. */
+    val changeMinutes: Int?,
+    /** The change is shorter than the route allows for walking, or [next] is cancelled. */
+    val tight: Boolean,
+    /** Short name of where [leg] is left ("Parramatta"), when known. */
+    val legEnd: String?,
+    /** Short name of where [leg] is boarded, when known (the change stop while changing). */
+    val legStart: String?,
+) {
+    val arrivalMs: Long get() = journey.arrival.expectedArrivalMs
+    val isLastLeg: Boolean get() = legIndex == journey.legs.lastIndex
+}
+
+/** The [OnTheWay] for [trip] from [followed]; [stopNames] gives short stop names. */
+fun onTheWayOf(trip: SavedTrip, followed: Followed, stopNames: Map<StopId, String>): OnTheWay {
+    val legs = followed.journey.legs
+    val k = followed.match.legIndex.coerceIn(0, legs.lastIndex)
+    val leg = legs[k]
+    val riding = followed.match.stage == FollowStage.RIDING
+    val next = if (riding) legs.getOrNull(k + 1) else null
+    val change = next?.let { ((it.expectedDepartureMs - leg.expectedArrivalMs) / 60_000).toInt() }
+    val allowed = trip.legs.getOrNull(k + 1)?.minConnectionMinutes
+    val tight = next != null && (next.status == DepartureStatus.CANCELLED || (change != null && allowed != null && change < allowed))
+    return OnTheWay(
+        journey = followed.journey,
+        stage = followed.match.stage,
+        legIndex = k,
+        leg = leg,
+        next = next,
+        changeMinutes = change,
+        tight = tight,
+        legEnd = stopNames[leg.destinationStopId],
+        legStart = stopNames[leg.originStopId],
+    )
+}
 
 // ---------------------------------------------------------------- rules
 
@@ -89,6 +146,9 @@ fun headlineOf(journeys: List<Journey>): Journey? =
 /** Up to [count] journeys other than [headline], in time order. */
 fun followingOf(journeys: List<Journey>, headline: Journey?, count: Int = 2): List<Journey> =
     journeys.filter { it !== headline }.sortedBy { it.departure.expectedDepartureMs }.take(count)
+
+/** Other services listed under a journey the user is on. */
+const val OTHER_SERVICES = 3
 
 /** Leave-by window: LEAVE NOW from two minutes before the leave-by time (plan 5.7). */
 const val LEAVE_NOW_WINDOW_MS = 2 * 60_000L
@@ -165,6 +225,8 @@ data class HomeInputs(
     val stopNames: Map<StopId, String> = emptyMap(),
     /** Trip id -> first departure of the next service day. */
     val firstNextDay: Map<String, Long?> = emptyMap(),
+    /** The journey the user is on (Follow my journey), if any. */
+    val follow: Followed? = null,
 )
 
 /** Pure: the home screen for [inputs] at [nowMs]; [today] is the service date `YYYYMMDD`. */
@@ -175,8 +237,13 @@ fun buildHomeState(inputs: HomeInputs, nowMs: Long, today: ServiceDate): HomeUiS
     // Folders in the order their first trip appears.
     val groups = LinkedHashMap<String?, MutableList<SavedTrip>>()
     for (t in trips.sortedBy { it.order }) groups.getOrPut(t.folder?.takeIf { it.isNotBlank() }) { mutableListOf() } += t
-    val folders = groups.map { (name, list) ->
-        HomeFolder(name, list.mapIndexed { i, trip -> card(trip, full = i == 0 && !compact, inputs, placesById, nowMs) })
+    // The trip the user is on (Follow my journey) comes first, on its own, above every folder.
+    val followedId = inputs.follow?.match?.tripId?.takeIf { id -> trips.any { it.id == id } }
+    val onTheWay = followedId?.let { id -> HomeFolder(null, listOf(card(trips.first { it.id == id }, full = true, inputs, placesById, nowMs))) }
+    val folders = listOfNotNull(onTheWay) + groups.mapNotNull { (name, list) ->
+        val rest = list.filter { it.id != followedId }
+        if (rest.isEmpty()) null
+        else HomeFolder(name, rest.mapIndexed { i, trip -> card(trip, full = i == 0 && !compact, inputs, placesById, nowMs) })
     }
     return HomeUiState(
         loading = false,
@@ -206,6 +273,7 @@ private fun card(trip: SavedTrip, full: Boolean, inputs: HomeInputs, places: Map
             leaveByState(dep.expectedDepartureMs, walk, nowMs)?.let { (at, state) -> LeaveBy(at, state, walk, stopName) }
         }
     } else null
+    val onTheWay = inputs.follow?.takeIf { it.match.tripId == trip.id }?.let { onTheWayOf(trip, it, inputs.stopNames) }
     val changes = headline?.legs?.zipWithNext { a, b ->
         ChangeSummary(inputs.stopNames[b.originStopId], ((b.expectedDepartureMs - a.expectedArrivalMs) / 60_000).toInt().coerceAtLeast(0))
     }.orEmpty()
@@ -215,11 +283,13 @@ private fun card(trip: SavedTrip, full: Boolean, inputs: HomeInputs, places: Map
         titleParts = titleParts,
         stationsLine = if (linked || trip.customName != null) stations else null,
         headline = headline,
-        following = followingOf(journeys, headline),
+        // On the way, the next departures are all "other services": the headline among them.
+        following = if (onTheWay != null) journeys.sortedBy { it.departure.expectedDepartureMs }.take(OTHER_SERVICES) else followingOf(journeys, headline),
         changes = changes,
         leaveBy = leaveBy,
         linkedToPlaces = linked,
         noMoreServices = if (journeys.isEmpty()) NoMoreServices(inputs.firstNextDay[trip.id]) else null,
+        onTheWay = onTheWay,
     )
 }
 

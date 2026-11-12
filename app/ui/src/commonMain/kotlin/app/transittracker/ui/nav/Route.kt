@@ -84,6 +84,15 @@ sealed interface Route {
     }
 
     /**
+     * One journey of a saved trip on one map (Follow my journey): every ride from where it is
+     * boarded to where it is left, the walks between them, the vehicles and the user's position.
+     */
+    @Serializable
+    data class JourneyMap(val tripId: String, val legs: List<MapLeg>) : Route {
+        override val title get() = "Your journey"
+    }
+
+    /**
      * Plan a journey: where and when (plan 5.6 step 1). Optional pre-fill with saved place ids
      * ([fromPlaceId] / [toPlaceId], `PlacesStore` ids). [fromOnboarding]: onboarding step 4; once
      * a route is saved the app opens Home with the doors transition.
@@ -190,6 +199,10 @@ data class JourneyEnd(
     fun toPlanEndpoint(): PlanEndpoint = PlanEndpoint(position, plannerPlaceId)
 }
 
+/** One ride of a [Route.JourneyMap]: the service and the stops (platforms) it is boarded and left at. */
+@Serializable
+data class MapLeg(val ref: ServiceRef, val boardStopId: StopId, val alightStopId: StopId)
+
 /** The five bottom-bar destinations (plan 4.1), in bar order. */
 enum class Tab(val root: Route, val label: String) {
     TRIPS(Route.Trips, "TRIPS"),
@@ -203,4 +216,4 @@ enum class Tab(val root: Route, val label: String) {
 val Route.isTabRoot: Boolean get() = Tab.entries.any { it.root == this }
 
 /** True for routes that show the live map (doors on the way in and out, plan 3.4). */
-val Route.isMap: Boolean get() = this is Route.MapTab || this is Route.Tracking
+val Route.isMap: Boolean get() = this is Route.MapTab || this is Route.Tracking || this is Route.JourneyMap

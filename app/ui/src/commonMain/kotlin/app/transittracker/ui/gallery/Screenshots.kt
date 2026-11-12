@@ -2,6 +2,7 @@ package app.transittracker.ui.gallery
 
 import androidx.compose.runtime.Composable
 import app.transittracker.ui.feature.alerts.AlertsShots
+import app.transittracker.ui.feature.follow.FollowShots
 import app.transittracker.ui.feature.home.HomeShots
 import app.transittracker.ui.feature.map.MapShots
 import app.transittracker.ui.feature.notify.NotifyShots
@@ -78,7 +79,7 @@ object Screenshots {
 
     /** Every shot: the design system, the shell and transitions, then each feature's. */
     val all: List<Shot> by lazy {
-        val list = designSystem + AppShots.shots + HomeShots.shots + TimetableShots.shots + ServiceShots.shots +
+        val list = designSystem + AppShots.shots + HomeShots.shots + FollowShots.shots + TimetableShots.shots + ServiceShots.shots +
             PlanShots.shots + PlacesShots.shots + AlertsShots.shots + NotifyShots.shots + MapShots.shots +
             OnboardingShots.shots + SettingsShots.shots
         val dupes = list.groupBy { it.name }.filterValues { it.size > 1 }.keys

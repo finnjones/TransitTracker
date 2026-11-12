@@ -63,6 +63,29 @@ class JourneyTest {
     }
 
     @Test
+    fun underwayHoldsJourneysThatHaveLeftUntilTheyArrive() {
+        val t = at(7, 30)
+        val p = JourneyPlanner(tt, Overlay(tt, LiveSnapshot.EMPTY, t))
+        // 06:45 arrives 07:25 (more than two minutes ago): done. 07:00 and 07:15 have left; 07:30 has not.
+        val journeys = p.underway(twoLeg, t)
+        assertEquals(listOf("R1-04" to "R2-09", "R1-05" to "R2-10"), journeys.map { it.legs[0].ref.tripId to it.legs[1].ref.tripId })
+        // Two minutes' grace after the last arrival.
+        assertEquals(listOf("R1-03", "R1-04", "R1-05"), p.underway(twoLeg, at(7, 26)).map { it.departure.ref.tripId }.take(3))
+    }
+
+    @Test
+    fun underwayMovesTheConnectionWhenTheFirstLegRunsLate() {
+        val t = at(7, 10)
+        val live = snapshotOf(
+            delta("R1-04", "20261111", "R1", StopDelta(1, "A1", 0, 0), StopDelta(2, "B1", 360, 360)),
+            receivedMs = t,
+        )
+        val journey = JourneyPlanner(tt, Overlay(tt, live, t)).underway(twoLeg, t).single { it.departure.ref.tripId == "R1-04" }
+        // B at 07:26 + 5 min → 07:31: the 07:30 is missed, the 07:40 is the connection.
+        assertEquals("R2-10", journey.legs[1].ref.tripId)
+    }
+
+    @Test
     fun serviceDayIncludesAfterMidnightTrips() {
         val day = planner().forServiceDay(single, DAY)
         assertEquals(14, day.size)

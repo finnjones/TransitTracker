@@ -140,6 +140,10 @@ class FakeTransitCore(
         planner.upcoming(trip, now, count)
     }
 
+    override fun underway(tripId: String): Flow<List<Journey>> = journeys(tripId) { planner, trip, now ->
+        planner.underway(trip, now)
+    }
+
     override fun timetable(tripId: String, serviceDate: ServiceDate): Flow<List<Journey>> = journeys(tripId) { planner, trip, _ ->
         planner.forServiceDay(trip, serviceDate)
     }

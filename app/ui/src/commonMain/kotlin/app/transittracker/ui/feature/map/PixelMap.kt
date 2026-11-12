@@ -249,7 +249,8 @@ private fun DrawScope.drawLines(
                 val lane = scene.lanes[seg.key to line.id] ?: 0.0
                 val (sx, sy) = if (lane == 0.0 || seg.path.points.size < 2) 0 to 0 else laneStep(seg.path.points.first(), seg.path.points.last())
                 val shift = (lane * lw).roundToInt()
-                line to rasterPath(seg.path, cam, w, h, sx * shift, sy * shift)
+                val cells = rasterPath(seg.path, cam, w, h, sx * shift, sy * shift)
+                line to if (seg.offset == 0.0) cells else cells.map { it.copy(distance = it.distance + seg.offset) }
             }
         }
         cache.key = key
@@ -260,7 +261,15 @@ private fun DrawScope.drawLines(
     for ((line, cells) in cache.value) {
         val travelled = line.travelledBy?.let { spots[it]?.distance }
         val dim = lerp(line.color, c.screen, if (c.isDay) 0.55f else 0.5f)
-        for (cell in cells) {
+        for ((i, cell) in cells.withIndex()) {
+            // A walk: dashes of two line widths, in the secondary text colour.
+            if (line.walk) {
+                if ((i / (lw * 2)) % 2 == 1) continue
+                val x = (cell.x - half) * dotPx
+                val y = (cell.y - half) * dotPx
+                drawRect(c.textSecondary, Offset(x, y), Size(dotPx * maxOf(1, lw / 2), dotPx * maxOf(1, lw / 2)))
+                continue
+            }
             val x = (cell.x - half) * dotPx
             val y = (cell.y - half) * dotPx
             if (x > size.width || y > size.height || x < -brush.width || y < -brush.height) continue

@@ -67,6 +67,8 @@ class SettingsActions(
     val setReduceMotion: (Boolean) -> Unit = {},
     val setSounds: (Boolean) -> Unit = {},
     val setHaptics: (Boolean) -> Unit = {},
+    val setFollowJourney: (Boolean) -> Unit = {},
+    val allowLocation: () -> Unit = {},
     val allow: () -> Unit = {},
     val openPhoneSettings: () -> Unit = {},
     val sendTest: () -> Unit = {},
@@ -98,6 +100,8 @@ fun SettingsScreen() {
             setReduceMotion = holder::setReduceMotion,
             setSounds = holder::setSounds,
             setHaptics = holder::setHaptics,
+            setFollowJourney = holder::setFollowJourney,
+            allowLocation = holder::allowLocation,
             allow = holder::allowNotifications,
             openPhoneSettings = holder::openPhoneSettings,
             sendTest = holder::sendTest,
@@ -222,6 +226,24 @@ private fun StateLine(lamp: app.transittracker.ui.format.Lamp, role: app.transit
 private fun PlacesGroup(state: SettingsUiState, actions: SettingsActions) {
     NavRow("Saved places", countWords(state.savedPlaces, "place"), actions.openPlaces, divider = false)
     NavRow("Manage routes", countWords(state.savedRoutes, "route"), actions.openRoutes)
+    SwitchRow("Follow my journey", state.display.followJourney, actions.setFollowJourney)
+    PixelText(
+        followWords(state.display.followJourney, state.location),
+        Modifier.padding(bottom = 4.dp), TtTheme.type.reading15, TtTheme.colors.textSecondary,
+    )
+    if (state.display.followJourney && state.location == PermissionState.NOT_ASKED) {
+        PixelButton("ALLOW LOCATION", actions.allowLocation, Modifier.fillMaxWidth().padding(bottom = 8.dp), style = TtTheme.type.label11Bold)
+    }
+}
+
+/** The sentence under Follow my journey. */
+fun followWords(on: Boolean, location: PermissionState): String = when {
+    !on -> "Off. Home always shows the next departures of each route."
+    location == PermissionState.GRANTED ->
+        "While the app is open, your location shows which train or bus you are on, so Home keeps your connection in view."
+    location == PermissionState.DENIED ->
+        "Location is off for TransitTracker, so it cannot tell which service you are on. Turn it on in your phone's settings."
+    else -> "Allow location so TransitTracker can tell which train or bus you are on."
 }
 
 fun countWords(n: Int, noun: String): String = when (n) {

@@ -81,7 +81,10 @@ import app.transittracker.ui.format.statusPresentation
 import app.transittracker.ui.motion.PageTransition
 import app.transittracker.ui.motion.flapRow
 import app.transittracker.ui.nav.LocalNavigator
+import app.transittracker.ui.nav.MapLeg
 import app.transittracker.ui.nav.Route
+import app.transittracker.ui.feature.follow.FollowStage
+import app.transittracker.ui.feature.map.vehicleWord
 import app.transittracker.ui.sprites.VehicleSprite
 import app.transittracker.ui.sprites.VehicleState
 import app.transittracker.ui.sprites.WalkerPose
@@ -98,6 +101,10 @@ class HomeActions(
     val openTimetable: (tripId: String, headline: Departure?) -> Unit = { _, _ -> },
     val planJourney: () -> Unit = {},
     val manageRoutes: () -> Unit = {},
+    /** The journey the user is on, on one map: every ride, the walks between them, the vehicles. */
+    val openJourneyMap: (tripId: String, journey: Journey) -> Unit = { _, _ -> },
+    /** NOT ON THIS: stop following the journey whose first ride is [ServiceRef]. */
+    val notOnThis: (ServiceRef) -> Unit = {},
 )
 
 /** The Trips tab (plan 5.2, Main mockup). */
@@ -105,9 +112,11 @@ class HomeActions(
 fun HomeScreen() {
     val deps = LocalAppDeps.current
     val nav = LocalNavigator.current
-    val holder = rememberStateHolder { scope -> HomeStateHolder(deps.core, deps.places, deps.settings, deps.clock, scope) }
+    val holder = rememberStateHolder { scope ->
+        HomeStateHolder(deps.core, deps.places, deps.settings, deps.clock, scope, follower = deps.follower)
+    }
     val state by holder.state.collectAsState()
-    val actions = remember(nav) {
+    val actions = remember(nav, holder) {
         HomeActions(
             openService = { d ->
                 nav.push(Route.Service(d.ref, d.originStopId, d.destinationStopId), PageTransition.vehiclePass(d.mode, d.routeColor))
@@ -117,6 +126,10 @@ fun HomeScreen() {
             },
             planJourney = { nav.push(Route.PlanJourney()) },
             manageRoutes = { nav.push(Route.ManageRoutes) },
+            openJourneyMap = { id, j ->
+                nav.push(Route.JourneyMap(id, j.legs.map { MapLeg(it.ref, it.originStopId, it.destinationStopId) }))
+            },
+            notOnThis = holder::notOnThis,
         )
     }
     HomeContent(state, deps.clock, holder::service, actions)
@@ -158,7 +171,9 @@ fun HomeContent(
                         val r = row++
                         item(key = "trip-${card.trip.id}") {
                             val m = Modifier.fillMaxWidth().flapRow(r)
-                            if (card.full) FullTripCard(card, state.nowMs, clock, service, actions, m)
+                            val otw = card.onTheWay
+                            if (otw != null) OnTheWayCard(card, otw, state.nowMs, actions, m)
+                            else if (card.full) FullTripCard(card, state.nowMs, clock, service, actions, m)
                             else CompactTripCard(card, state.nowMs, actions, m)
                         }
                     }
@@ -252,6 +267,7 @@ private fun FullTripCard(
             val d = headline.departure
             Headline(d, headline, nowMs, card, actions)
             HeadlineStrip(d, clock, service, Modifier.serviceTaps({ actions.openService(d) }, actions.manageRoutes))
+            for (connection in headline.legs.drop(1)) ConnectionLine(connection, card.trip.id, headline, actions)
         }
         for (j in card.following) {
             Column {
@@ -441,6 +457,157 @@ private fun serviceSentence(d: Departure, cd: CountdownText, statusSpoken: Strin
     if (d.status != DepartureStatus.CANCELLED) append(", ${cd.spoken}")
     d.originPlatform?.let { append(if (d.platformChanged) ", platform changed, now platform $it" else ", platform $it") }
     append(", $statusSpoken")
+}
+
+/**
+ * "THEN [600] 08:14 · STAND C · 4 MIN LATE": a later ride of a multi-leg headline, so the bus is
+ * on the card, not only the train. Tap: that service.
+ */
+@Composable
+private fun ConnectionLine(d: Departure, tripId: String, journey: Journey, actions: HomeActions) {
+    val c = TtTheme.colors
+    val tz = TtTheme.time.timeZone
+    val fmt = TtTheme.time.clockFormat
+    val status = statusPresentation(d)
+    val cancelled = d.status == DepartureStatus.CANCELLED
+    val time = formatClock(if (cancelled) d.scheduledDepartureMs else d.expectedDepartureMs, tz, fmt)
+    val sentence = "Then ${d.routeName} to ${d.headsign}, leaves $time" +
+        (d.originPlatform?.let { ", ${standWord(d.mode).lowercase()} $it" } ?: "") + ", ${status.spoken}"
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 40.dp).serviceTaps({ actions.openService(d) }, actions.manageRoutes, sentence),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Label("THEN", size = LabelSize.L10, color = c.textSecondary)
+        RouteBadge(d.routeName, d.routeColor, null, style = BadgeStyle.COMPACT)
+        PixelText(time, style = TtTheme.type.row15Strong, color = if (cancelled) c.textSecondary else c.text, strike = cancelled, maxLines = 1)
+        d.originPlatform?.let { Label("${standWord(d.mode)} $it", size = LabelSize.L10, color = c.textSecondary) }
+        StatusLine(status, Modifier.weight(1f), size = StatusSize.SMALL)
+    }
+}
+
+/** What a boarding point is called for [mode]: platform, stand, wharf. */
+private fun standWord(mode: Mode): String = when (mode) {
+    Mode.BUS, Mode.COACH -> "STAND"
+    Mode.FERRY -> "WHARF"
+    else -> "PLAT"
+}
+
+// ---------------------------------------------------------------- on your way
+
+/**
+ * Follow my journey (the phone's location says the user is on this trip's journey): the ride
+ * they are on and when it reaches the change, the connection with its own countdown, platform or
+ * stand and status, or, while changing, the service being walked to. Under it the next
+ * departures stay as OTHER SERVICES. Tap: the journey on one map.
+ */
+@Composable
+private fun OnTheWayCard(card: TripCard, otw: OnTheWay, nowMs: Long, actions: HomeActions, modifier: Modifier = Modifier) {
+    val c = TtTheme.colors
+    val tz = TtTheme.time.timeZone
+    val fmt = TtTheme.time.clockFormat
+    val leg = otw.leg
+    val riding = otw.stage == FollowStage.RIDING
+    val openMap = { actions.openJourneyMap(card.trip.id, otw.journey) }
+    PixelPanel(
+        modifier.cardTaps(openMap, actions.manageRoutes, "Map of your journey"),
+        contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = if (card.following.isEmpty()) 12.dp else 0.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            TitleParts(card.titleParts, TtTheme.type.name17)
+            Label("ON YOUR WAY", color = c.go, bold = true, size = LabelSize.L10)
+        }
+        // The ride now (or the one being walked to).
+        val status = statusPresentation(leg)
+        val word = vehicleWord(leg.mode)
+        val (label, target, verb) = if (riding) {
+            Triple("ON THE $word · ARRIVES" + (otw.legEnd?.let { " ${it.uppercase()}" } ?: ""), leg.expectedArrivalMs, "arrives")
+        } else {
+            Triple("CHANGE" + (otw.legStart?.let { " AT ${it.uppercase()}" } ?: "") + " · $word LEAVES", leg.expectedDepartureMs, "leaves")
+        }
+        val cd = countdown(target, nowMs, tz, fmt, status.countdownPrefix, verb)
+        val spoken = "${if (riding) "On the" else "Change to the"} ${leg.routeName} to ${leg.headsign}, ${cd.spoken}, ${status.spoken}"
+        Column(
+            Modifier.fillMaxWidth().serviceTaps({ actions.openService(leg) }, actions.manageRoutes, spoken),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                RouteBadge(leg.routeName, leg.routeColor, null)
+                PixelText(leg.headsign, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Label(label, size = LabelSize.L10, color = c.textSecondary)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                Countdown(cd, size = CountdownSize.L60)
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    PixelText(formatClock(target, tz, fmt), style = TtTheme.type.title22)
+                    Label("ARR " + formatClock(otw.arrivalMs, tz, fmt), color = c.textSecondary)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                StatusLine(status)
+                if (!riding && leg.originPlatform != null) PlatformSign(leg.originPlatform!!, leg.platformChanged)
+            }
+        }
+        // The connection to make.
+        otw.next?.let { next -> NextRide(next, otw, nowMs, actions) }
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PixelButton("MAP", openMap, Modifier.weight(1f), style = TtTheme.type.label11Bold)
+            PixelButton("NOT ON THIS", { actions.notOnThis(otw.journey.departure.ref) }, Modifier.weight(1f), style = TtTheme.type.label11Bold)
+        }
+        if (card.following.isNotEmpty()) {
+            DashedDivider()
+            Label("OTHER SERVICES", Modifier.padding(top = 8.dp), size = LabelSize.L10, color = c.textSecondary)
+            for ((i, j) in card.following.withIndex()) {
+                Column {
+                    if (i > 0) DashedDivider()
+                    ServiceRow(j.departure, nowMs, actions)
+                }
+            }
+        }
+    }
+}
+
+/** The connection while riding: "THEN [600] BUS · LEAVES 08:14 · STAND C", its countdown, the change time. */
+@Composable
+private fun NextRide(next: Departure, otw: OnTheWay, nowMs: Long, actions: HomeActions) {
+    val c = TtTheme.colors
+    val tz = TtTheme.time.timeZone
+    val fmt = TtTheme.time.clockFormat
+    val status = statusPresentation(next)
+    val cancelled = next.status == DepartureStatus.CANCELLED
+    val cd = countdown(next.expectedDepartureMs, nowMs, tz, fmt, status.countdownPrefix)
+    val change = when {
+        cancelled -> "CANCELLED · CHECK OTHER SERVICES"
+        otw.changeMinutes == null -> null
+        otw.tight -> "TIGHT CHANGE · ${otw.changeMinutes.coerceAtLeast(0)} MIN"
+        else -> "${otw.changeMinutes} MIN TO CHANGE" + (otw.legEnd?.let { " AT ${it.uppercase()}" } ?: "")
+    }
+    val spoken = "Then ${next.routeName} to ${next.headsign}, ${cd.spoken}" +
+        (next.originPlatform?.let { ", ${standWord(next.mode).lowercase()} $it" } ?: "") + ", ${status.spoken}" +
+        (change?.let { ", ${it.lowercase()}" } ?: "")
+    Column(
+        Modifier.fillMaxWidth().padding(top = 4.dp).serviceTaps({ actions.openService(next) }, actions.manageRoutes, spoken),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        DashedDivider()
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Label("THEN", size = LabelSize.L10, color = c.textSecondary)
+            RouteBadge(next.routeName, next.routeColor, null)
+            PixelText("${vehicleWord(next.mode)} · ${next.headsign}", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Countdown(cd, size = CountdownSize.S30, color = if (cancelled) c.textSecondary else c.text)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                PixelText(
+                    "LEAVES " + formatClock(if (cancelled) next.scheduledDepartureMs else next.expectedDepartureMs, tz, fmt),
+                    style = TtTheme.type.row15Strong, strike = cancelled, color = if (cancelled) c.textSecondary else c.text,
+                )
+                StatusLine(status, size = StatusSize.SMALL)
+                change?.let { Label(it, size = LabelSize.L10, bold = otw.tight, color = if (otw.tight) c.caution else c.textSecondary) }
+            }
+            next.originPlatform?.let { PlatformSign(it, next.platformChanged) }
+        }
+    }
 }
 
 // ---------------------------------------------------------------- compact card

@@ -14,6 +14,9 @@ enum class PermissionState {
     DENIED,
 }
 
+/** One position from the phone, taken at [timeMs] (epoch ms), with its accuracy radius when known. */
+data class LocationFix(val position: LatLng, val timeMs: Long, val accuracyM: Double? = null)
+
 /**
  * What only the platform shell (Android activity, iOS app) can do. Screens use it through
  * `AppDeps.platform`; [FakePlatformServices] stands in for previews, screenshots and tests.
@@ -27,6 +30,13 @@ interface PlatformServices {
 
     /** One current position, or null without permission / no fix in reasonable time. */
     suspend fun currentLocation(): LatLng?
+
+    /**
+     * A recent position with the time it was taken, for following a journey (a fix minutes old
+     * puts a train kilometres back). Null without permission or a fix. [nowMs] is used when the
+     * platform cannot say when its fix was taken.
+     */
+    suspend fun currentFix(nowMs: Long): LocationFix? = currentLocation()?.let { LocationFix(it, nowMs) }
 
     // ---- Notifications (onboarding step 3, Notify banner, Settings)
     val notificationPermission: StateFlow<PermissionState>

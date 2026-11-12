@@ -23,6 +23,11 @@ data class UiSettings(
     val reduceMotion: Boolean = false,
     val sounds: Boolean = false,
     val haptics: Boolean = true,
+    /**
+     * Follow my journey: while the app is open, the phone's location tells which journey of a
+     * saved trip you are on, so Home shows your connection instead of the next departure.
+     */
+    val followJourney: Boolean = true,
 )
 
 /** Where [UiSettings] live. Screens read [settings] and write with [update]. */
@@ -72,6 +77,7 @@ class KeyValueSettingsStore(private val kv: KeyValueStore) : SettingsStore {
             reduceMotion = kv.get(KEY_REDUCE_MOTION)?.toBooleanStrictOrNull() ?: d.reduceMotion,
             sounds = kv.get(KEY_SOUNDS)?.toBooleanStrictOrNull() ?: d.sounds,
             haptics = kv.get(KEY_HAPTICS)?.toBooleanStrictOrNull() ?: d.haptics,
+            followJourney = kv.get(KEY_FOLLOW)?.toBooleanStrictOrNull() ?: d.followJourney,
         )
     }
 
@@ -82,6 +88,7 @@ class KeyValueSettingsStore(private val kv: KeyValueStore) : SettingsStore {
         if (old.reduceMotion != new.reduceMotion) kv.put(KEY_REDUCE_MOTION, new.reduceMotion.toString())
         if (old.sounds != new.sounds) kv.put(KEY_SOUNDS, new.sounds.toString())
         if (old.haptics != new.haptics) kv.put(KEY_HAPTICS, new.haptics.toString())
+        if (old.followJourney != new.followJourney) kv.put(KEY_FOLLOW, new.followJourney.toString())
     }
 
     private inline fun <reified E : Enum<E>> enumOr(value: String?, default: E): E =
@@ -94,5 +101,6 @@ class KeyValueSettingsStore(private val kv: KeyValueStore) : SettingsStore {
         const val KEY_REDUCE_MOTION = "ui.reduceMotion"
         const val KEY_SOUNDS = "ui.sounds"
         const val KEY_HAPTICS = "ui.haptics"
+        const val KEY_FOLLOW = "ui.followJourney"
     }
 }

@@ -1,0 +1,11 @@
+Map data (c) OpenStreetMap contributors.
+
+The water, roads and railways drawn under the map's lines come from OpenStreetMap
+(https://www.openstreetmap.org), which is made available under the Open Data Commons Open
+Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/
+
+The app's base map file (files/basemap/sydney.txt) is a Derivative Database of OpenStreetMap,
+made by tools/basemap/build_basemap.py (water areas and the coastline's water polygons, and
+highways and railways, clipped to Greater Sydney and simplified). It is offered under the same
+licence, the ODbL 1.0. See https://www.openstreetmap.org/copyright for how OpenStreetMap data
+may be used.

@@ -49,7 +49,9 @@ fun labelBox(anchor: Box, w: Float, h: Float, side: LabelSide, gap: Float): Box 
  * 1. Requests go in [LabelRequest.priority] order (ties keep the given order).
  * 2. Each tries its sides in order; the first box that lies inside [bounds], overlaps no label
  *    already placed (with [gap] pixels clear), no marker other than its own ([markers]) and no
- *    [obstacles] (controls drawn over the map) wins.
+ *    [obstacles] (controls drawn over the map) wins. A box that runs off the edge slides along
+ *    its side, by up to half its length, to come back on screen ([slideInside]): a flag over a
+ *    stop near the edge stays over its stop instead of being dropped.
  * 3. A label with no free side is left out: the marker stays, the name is dropped. Zooming in
  *    makes room, so names come back.
  *
@@ -66,8 +68,7 @@ fun placeLabels(
     val sorted = requests.withIndex().sortedWith(compareBy({ it.value.priority }, { it.index })).map { it.value }
     for (r in sorted) {
         for (side in r.sides) {
-            val b = labelBox(r.anchor, r.width, r.height, side, gap)
-            if (!b.inside(bounds)) continue
+            val b = slideInside(labelBox(r.anchor, r.width, r.height, side, gap), side, bounds) ?: continue
             if (placed.values.any { it.overlaps(b, gap) }) continue
             if (markers.any { it != r.anchor && it.overlaps(b) }) continue
             if (obstacles.any { it.overlaps(b) }) continue
@@ -76,4 +77,24 @@ fun placeLabels(
         }
     }
     return placed
+}
+
+/**
+ * [b] (a label on [side] of its marker) moved along that side, by at most half its own length,
+ * so it lies inside [bounds]: across for a label above or below, up or down for one beside.
+ * The label still reaches past its marker's centre. Null when no such move fits.
+ */
+fun slideInside(b: Box, side: LabelSide, bounds: Box): Box? {
+    if (b.inside(bounds)) return b
+    val across = side == LabelSide.ABOVE || side == LabelSide.BELOW
+    val (lo, hi, min, max) = if (across) listOf(b.left, b.right, bounds.left, bounds.right) else listOf(b.top, b.bottom, bounds.top, bounds.bottom)
+    val limit = (hi - lo) / 2
+    val shift = when {
+        lo < min -> min - lo
+        hi > max -> max - hi
+        else -> 0f
+    }
+    if (kotlin.math.abs(shift) > limit) return null
+    val moved = if (across) b.copy(left = b.left + shift, right = b.right + shift) else b.copy(top = b.top + shift, bottom = b.bottom + shift)
+    return moved.takeIf { it.inside(bounds) }
 }

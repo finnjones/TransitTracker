@@ -50,8 +50,17 @@ data class SceneLine(
     val color: Color,
     val segments: List<LineSegment>,
     val travelledBy: String? = null,
-    /** A walk between two rides: drawn dashed in the secondary text colour, not [color]. */
+    /** A walk between two rides: drawn dashed in the text colour, not [color]. */
     val walk: Boolean = false,
+    /**
+     * The route's name ("T2", "333") drawn as a badge on the line, so rides of the same colour
+     * (Sydney's trains and buses are both blue) can be told apart and matched to the list.
+     */
+    val badge: String? = null,
+    /** The feed's text colour for [badge]; null picks by contrast. */
+    val badgeTextColor: Color? = null,
+    /** Ridden already (a finished ride of the journey): drawn dimmed end to end. */
+    val done: Boolean = false,
 )
 
 enum class StationKind {
@@ -63,6 +72,8 @@ enum class StationKind {
     BOARD,
     /** Where you get off: large, filled, with a GET OFF flag. */
     ALIGHT,
+    /** Where you change between two rides: large, filled (not blinking), with a CHANGE flag. */
+    CHANGE,
     /** A station on the Map tab. */
     PLAIN,
     /** A station near you (NEAR ME). */
@@ -84,7 +95,19 @@ data class SceneStation(
     val selected: Boolean = false,
     /** Words for "skips this stop" and similar, drawn struck through. */
     val skipped: Boolean = false,
+    /**
+     * A stop the ride only passes through: a small notch in the line, its name shown only once
+     * the map is zoomed in close ([MINOR_LABEL_MAX_MPD]), so a bus with forty stops stays a line.
+     */
+    val minor: Boolean = false,
+    /** The words on the flag ("BOARD T2 · 07:26"); null uses the kind's own (BOARD HERE, GET OFF). */
+    val flag: String? = null,
+    /** The flag's colour role ([ColorRole.CAUTION] for a tight change); null draws it in Text. */
+    val flagRole: ColorRole? = null,
 )
+
+/** Names of [SceneStation.minor] stops are drawn only at this zoom (metres per dot) or closer. */
+const val MINOR_LABEL_MAX_MPD = 12.0
 
 /** How a vehicle's position is worked out at draw time. */
 sealed interface VehicleMotion {

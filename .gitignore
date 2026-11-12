@@ -28,3 +28,4 @@ data/
 
 # APKs handed out by hand (downloads, local copies); releases live on GitHub.
 apk/
+__pycache__/

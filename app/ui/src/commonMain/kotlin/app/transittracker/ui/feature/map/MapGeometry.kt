@@ -130,16 +130,7 @@ class CoreMapGeometry(
         val shapeId = detail.shapeId ?: return straight
         val shape = runCatching { core.shape(shapeId) }.getOrDefault(emptyList()).map(projection::project)
         if (shape.size < 2) return straight
-        val path = MapPath(shape)
-        var previous = 0.0
-        val distances = ArrayList<Double>(straight.stopPoints.size)
-        for (point in straight.stopPoints) {
-            val snap = path.snap(point, from = previous)
-            if (snap.offset > MAX_STOP_OFF_SHAPE_M) return straight
-            previous = snap.distance
-            distances += snap.distance
-        }
-        return straight.copy(path = path, stopDistances = distances)
+        return followShape(straight, MapPath(shape))
     }
 
     override suspend fun lines(samples: List<ServiceDetail>): List<LineGeometry> {
@@ -162,6 +153,47 @@ class CoreMapGeometry(
         lock.withLock { stopCache[call.stopId] = match }
         return match
     }
+}
+
+/**
+ * [straight] (stop to stop) redrawn along the service's line [shape], stretch by stretch: each
+ * stop is snapped where the shape first reaches it after the stop before ([snapAhead]); between
+ * two stops that both lie within [maxOffset] of the shape the path follows the shape, and around
+ * a stop that does not (a platform the shape does not pass, a shape cut short) it runs straight,
+ * so one odd stop no longer throws the whole shape away. Fewer than two stops on the shape:
+ * [straight] as it was. Stop positions ([ServiceGeometry.stopPoints]) are kept; the path goes
+ * through the snapped points, and [ServiceGeometry.stopDistances] are measured along it.
+ */
+fun followShape(straight: ServiceGeometry, shape: MapPath, maxOffset: Double = MAX_STOP_OFF_SHAPE_M): ServiceGeometry {
+    val n = straight.stopPoints.size
+    if (n < 2 || shape.points.size < 2) return straight
+    val snaps = arrayOfNulls<PathSnap>(n)
+    var from = 0.0
+    for (i in 0 until n) {
+        val s = shape.snapAhead(straight.stopPoints[i], from)
+        if (s.offset <= maxOffset) {
+            snaps[i] = s
+            from = s.distance
+        }
+    }
+    if (snaps.count { it != null } < 2) return straight
+    val points = ArrayList<MapPoint>()
+    val stopIndex = IntArray(n)
+    for (i in 0 until n) {
+        val here = snaps[i]
+        val before = if (i > 0) snaps[i - 1] else null
+        if (here != null && before != null) {
+            // Both on the shape: the shape's own points between them.
+            for (k in shape.points.indices) {
+                val c = shape.cumulative[k]
+                if (c > before.distance && c < here.distance) points += shape.points[k]
+            }
+        }
+        points += here?.point ?: straight.stopPoints[i]
+        stopIndex[i] = points.lastIndex
+    }
+    val path = MapPath(points)
+    return straight.copy(path = path, stopDistances = stopIndex.map { path.cumulative[it] })
 }
 
 /**

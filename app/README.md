@@ -344,7 +344,31 @@ on and the connection to make (the bus after the train), not the next departure.
   than the route allows), and the next departures underneath as OTHER SERVICES. Multi-leg cards
   that are not followed show the connection as a THEN line.
 - `Route.JourneyMap` draws the whole journey: each ride cut to the stretch ridden, in its line's
-  colour, the walk between rides dashed, each vehicle, and you. `FollowShots` shows both screens.
+  colour with its route badge on it (Sydney's trains and buses are both blue), rides already
+  finished dimmed, the walk between rides dashed, each vehicle under way, and you. Only three
+  kinds of stop get a flag: BOARD (route and time), one CHANGE per interchange (minutes, TIGHT in
+  Caution, and THEN the next route and time) and GET OFF. The stops in between are notches in the
+  line (`SceneStation.minor`), thinned where they crowd and named only when zoomed in to
+  `MINOR_LABEL_MAX_MPD`. A timetabled ride that has not left is not drawn (its ghost would stand
+  on the CHANGE flag); a later ride boarded more than 150 m from where the one before ends (a walk
+  to another street) gets its own BOARD flag. Labels that would run off the edge slide along their
+  side. The map opens on, and RECENTRE returns to, what is happening now (`nowFocus`: the rest of
+  the ride you are on and the start of the next, or the walk and the start of the ride you are
+  changing to); each new stage recentres it, and the fourth button (WHOLE JOURNEY) fits it all.
+  `FollowShots` shows both screens; `MapShots` has `map-journey-train-bus*` (`JourneyMapSamples`:
+  the T2 then the 333 to Bondi Beach, on real stops and line shapes).
+- Rides follow their line's shape (`followShape`): each stop is snapped where the shape first
+  reaches it after the stop before (`snapAhead`; the plain nearest point caught stops on the
+  second pass of the City Circle or a bus loop and threw the shape away, for about one bus trip in
+  ten), and a stop that is off the shape only straightens the stretches either side of it.
+- Under every map (not the schematic fallback) is the base map (`Basemap`, `BasemapStore`):
+  water, roads and railways from OpenStreetMap, bundled as `files/basemap/sydney.txt` (2.2 MB, one
+  feature a line, a kind letter and an encoded polyline) and drawn into a bitmap of one pixel per
+  dot, so it stays pixel art. Roads thin out as the map zooms out (`baseWidthDots`: local streets
+  closer than 8 m a dot, main roads to 60, railways to 150; water always). The map shows
+  "© OPENSTREETMAP" and Settings > Licences has the ODbL notice. Rebuild the file with
+  `tools/basemap/build_basemap.py` (an OSM extract of Greater Sydney from download.openstreetmap.fr
+  and the coastline's water polygons from osmdata.openstreetmap.de; see its header).
 
 ## Rules for feature work (parallel agents)
 

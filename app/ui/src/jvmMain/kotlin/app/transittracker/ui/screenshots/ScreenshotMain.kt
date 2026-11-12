@@ -3,9 +3,11 @@ package app.transittracker.ui.screenshots
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
+import app.transittracker.ui.feature.map.BasemapStore
 import app.transittracker.ui.gallery.Screenshots
 import app.transittracker.ui.gallery.ShotContent
 import org.jetbrains.skia.EncodedImageFormat
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /** Phone size used by every shot, in dp. */
@@ -58,6 +60,9 @@ fun main(args: Array<String>) {
     val only = args.getOrNull(1)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
     val density = System.getenv("TT_SHOT_DENSITY")?.trim()?.takeIf { it.isNotEmpty() }
     val shots = Screenshots.all.filter { only == null || it.name in only }
+    // Load the map's base map up front: it loads in the background, and a shot is taken before
+    // a background load of that size would finish.
+    runBlocking { BasemapStore.load() }
     require(shots.isNotEmpty()) { "no screenshot matches $only; known: ${Screenshots.all.map { it.name }}" }
     for (shot in shots) {
         val file = File(out, shot.name + (if (density != null) "@${density}x" else "") + ".png")

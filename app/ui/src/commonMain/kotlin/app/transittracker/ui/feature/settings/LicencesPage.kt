@@ -29,8 +29,8 @@ import app.transittracker.ui.theme.TtTheme
 
 /**
  * Font and data licences: the four fonts with their copyright line and licence name, the full
- * text a tap away (read from the licence files bundled with the app), and the data attribution
- * the server sends. [texts] lets a preview supply the licence files.
+ * text a tap away (read from the licence files bundled with the app), the map's OpenStreetMap
+ * data, and the data attribution the server sends. [texts] lets a preview supply the licence files.
  */
 @Composable
 fun LicencesPage(attribution: String, onBack: () -> Unit, texts: Map<String, String>? = null) {
@@ -43,8 +43,8 @@ fun LicencesPage(attribution: String, onBack: () -> Unit, texts: Map<String, Str
 private fun rememberLicenceTexts(): Map<String, String> {
     var texts by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(Unit) {
-        texts = FONT_LICENCES.mapNotNull { f ->
-            runCatching { f.file to Res.readBytes(f.file).decodeToString() }.getOrNull()
+        texts = (FONT_LICENCES.map { it.file } + MAP_DATA_FILE).mapNotNull { file ->
+            runCatching { file to Res.readBytes(file).decodeToString() }.getOrNull()
         }.toMap()
     }
     return texts
@@ -85,6 +85,22 @@ fun LicencesContent(attribution: String, onBack: () -> Unit, texts: Map<String, 
                         )
                         if (isOpen) PixelText(text.trim(), style = TtTheme.type.reading15, color = c.textReading)
                     }
+                }
+            }
+            SectionLabel("Map data")
+            PixelPanel(Modifier.fillMaxWidth()) {
+                PixelText("OpenStreetMap", style = TtTheme.type.name17)
+                Label("WATER, ROADS AND RAILWAYS UNDER THE MAP", color = c.textSecondary, size = LabelSize.L10)
+                PixelText(MAP_DATA_CREDIT, style = TtTheme.type.reading15, color = c.textSecondary)
+                Label(MAP_DATA_LICENCE.uppercase(), color = c.textSecondary, bold = true, size = LabelSize.L10)
+                texts[MAP_DATA_FILE]?.let { text ->
+                    val isOpen = open == MAP_DATA_FILE
+                    PixelButton(
+                        if (isOpen) "HIDE LICENCE" else "READ LICENCE",
+                        { open = if (isOpen) null else MAP_DATA_FILE },
+                        Modifier.fillMaxWidth(), kind = ButtonKind.SECONDARY, style = TtTheme.type.label11Bold,
+                    )
+                    if (isOpen) PixelText(text.trim(), style = TtTheme.type.reading15, color = c.textReading)
                 }
             }
             SectionLabel("Timetable and live data")

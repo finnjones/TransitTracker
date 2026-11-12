@@ -16,6 +16,7 @@ import app.transittracker.ui.feature.home.followingOf
 import app.transittracker.ui.feature.home.headlineOf
 import app.transittracker.ui.feature.home.leaveByState
 import app.transittracker.ui.feature.home.walkTo
+import app.transittracker.ui.format.mapStopName
 import app.transittracker.ui.format.shortStopName
 import app.transittracker.ui.places.PlaceIcon
 import app.transittracker.ui.places.PlaceStop
@@ -111,5 +112,8 @@ class HomeRulesTest {
         assertEquals("Central", shortStopName("Central Station"))
         assertEquals("Circular Quay", shortStopName("Circular Quay Wharf 4"))
         assertEquals("Rhodes", shortStopName("Rhodes"))
+        assertEquals("Bondi Beach, Campbell Pde", shortStopName("Bondi Beach, Campbell Pde, Stand C"))
+        assertEquals("Bondi Beach", mapStopName("Bondi Beach, Campbell Pde, Stand C"))
+        assertEquals("Oxford St at Glenmore Rd", mapStopName("Oxford St at Glenmore Rd"))
     }
 }

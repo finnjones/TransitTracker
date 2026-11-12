@@ -13,6 +13,7 @@ import app.transittracker.model.VehiclePosition
 import app.transittracker.ui.format.DefaultLineColor
 import app.transittracker.ui.format.StatusPresentation
 import app.transittracker.ui.format.formatClock
+import app.transittracker.ui.format.mapStopName
 import app.transittracker.ui.format.parseLineColor
 import app.transittracker.ui.format.statusPresentation
 import app.transittracker.ui.sprites.SpriteLook
@@ -247,7 +248,7 @@ fun buildTrackingState(
         val late = (delayAt(call) ?: 0) >= 60
         SceneStation(
             id = "call-$k",
-            name = g.names[k] + if (call.skipped) " · SKIPS" else "",
+            name = mapStopName(g.names[k]) + if (call.skipped) " · SKIPS" else "",
             point = g.stopPoints[k],
             kind = kind,
             detail = detail,

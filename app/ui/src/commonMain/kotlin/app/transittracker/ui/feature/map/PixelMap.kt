@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -39,6 +42,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,6 +55,7 @@ import app.transittracker.ui.components.PixelIcons
 import app.transittracker.ui.components.pixelBorder
 import app.transittracker.ui.components.pixelFill
 import app.transittracker.ui.feature.map.TopDown.drawTurned
+import app.transittracker.ui.format.badgeTextColor
 import app.transittracker.ui.sprites.blinkOn
 import app.transittracker.ui.sprites.frame
 import app.transittracker.ui.theme.ColorRole
@@ -60,6 +65,9 @@ import app.transittracker.ui.theme.TtType
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.roundToInt
+
+/** The WHOLE JOURNEY icon: four corners of a frame on the 7 x 7 grid. */
+internal val FitAllIcon = PixelIconData(7, 7, "M0 0h3v1h-3z M0 1h1v2h-1z M4 0h3v1h-3z M6 1h1v2h-1z M0 4h1v2h-1z M0 6h3v1h-3z M6 4h1v2h-1z M4 6h3v1h-3z")
 
 /** The RECENTRE icon: a crosshair on the 7 x 7 grid. */
 internal val RecentreIcon = PixelIconData(7, 7, "M3 0h1v2h-1z M0 3h2v1h-2z M5 3h2v1h-2z M3 5h1v2h-1z M3 3h1v1h-1z")
@@ -74,7 +82,12 @@ private const val GRID_DOTS = 13
  * on the shared sprite clock so vehicles creep between reports.
  *
  * Pan with a drag, zoom with a pinch or the +/- buttons (within [ZoomLimits]); RECENTRE goes back
- * to [MapScene.focus]. [fitKey] changing also recentres (a new service, NEAR ME). [topInsetDp] /
+ * to [MapScene.focus]. [fitKey] changing also recentres (a new service, NEAR ME). With
+ * [showAllLabel] a fourth button fits everything on the map ([MapScene.bounds]), for a scene whose
+ * focus is only part of it (the journey map's focus is the ride you are on).
+ *
+ * Under everything is the base map ([BasemapStore]: water, roads, railways) unless [showBasemap]
+ * is false or the scene is schematic; the plain grid is drawn instead, and until it has loaded. [topInsetDp] /
  * [bottomInsetDp] are covered by overlays: fitting keeps content out from under them.
  *
  * Taps: [onStationTap], [onVehicleTap] (with a 48 dp target), else [onEmptyTap]. For the screen
@@ -93,6 +106,8 @@ fun PixelMap(
     onVehicleTap: ((SceneVehicle) -> Unit)? = null,
     onEmptyTap: (() -> Unit)? = null,
     actions: List<Pair<String, () -> Unit>> = emptyList(),
+    showAllLabel: String? = null,
+    showBasemap: Boolean = true,
 ) {
     val c = TtTheme.colors
     val type = TtTheme.type
@@ -106,25 +121,39 @@ fun PixelMap(
     LaunchedEffect(fitKey) { camera = null }
     val currentScene by rememberUpdatedState(scene)
     val labels = remember(scene.stations, type, measurer) { measureLabels(scene.stations, measurer, type) }
+    val badges = remember(scene.lines, type, measurer) {
+        scene.lines.mapNotNull { l -> l.badge?.let { l.id to measurer.measure(numeralText(it, type.numerals), type.label11Bold, maxLines = 1) } }.toMap()
+    }
     val captions = remember(scene.vehicles, type, measurer) {
         scene.vehicles.mapNotNull { v -> v.caption?.let { v.id to measurer.measure(it, type.label10Bold.copy(letterSpacing = 1.sp)) } }.toMap()
     }
     val rasters = remember { RasterCache() }
+    // The base map (water, roads, railways) loads once per process; the grid shows until then.
+    val basemap by BasemapStore.state.collectAsState()
+    LaunchedEffect(Unit) { BasemapStore.load() }
+    val baseRaster = remember { BaseRasterCache() }
+    val baseOn = showBasemap && !scene.schematic && basemap != null
     val density = androidx.compose.ui.platform.LocalDensity.current
     val topInsetDots = with(density) { (topInsetDp.toPx() / dot.px).roundToInt() }
     val bottomInsetDots = with(density) { (bottomInsetDp.toPx() / dot.px).roundToInt() }
     val controlsWidthPx = with(density) { (48.dp + 16.dp + 8.dp).toPx() }
-    val controlsHeightPx = with(density) { (topInsetDp + 16.dp + 52.dp * 3 + 8.dp * 2).toPx() }
+    val buttons = if (showAllLabel != null) 4 else 3
+    val controlsHeightPx = with(density) { (topInsetDp + 16.dp + 52.dp * buttons + 8.dp * (buttons - 1)).toPx() }
 
     fun viewDots(): Pair<Int, Int> = max(1, viewPx.width / dot.px) to max(1, viewPx.height / dot.px)
 
-    fun fitCamera(s: MapScene): MapCamera {
+    fun fitCamera(s: MapScene, all: Boolean = false): MapCamera {
         val (w, h) = viewDots()
-        val box = (s.focus ?: s.bounds ?: MapBox(-500.0, -500.0, 500.0, 500.0)).let {
+        val box = ((if (all) null else s.focus) ?: s.bounds ?: MapBox(-500.0, -500.0, 500.0, 500.0)).let {
             if (it.width < 400 && it.height < 400) it.grow(400.0) else it
         }
         val margin = 24
-        return MapCamera.fit(box, w, h, limitsFor(s, w, h), marginDots = margin, marginTop = margin + topInsetDots, marginBottom = margin + bottomInsetDots)
+        // The zoom buttons cover a column on the right: keep what is fitted out from under them.
+        val controlsDots = (controlsWidthPx / dot.px).roundToInt()
+        return MapCamera.fit(
+            box, w, h, limitsFor(s, w, h), marginDots = margin, marginTop = margin + topInsetDots, marginBottom = margin + bottomInsetDots,
+            marginRight = controlsDots + margin / 2,
+        )
     }
 
     fun cameraNow(): MapCamera = camera ?: fitCamera(currentScene)
@@ -167,14 +196,17 @@ fun PixelMap(
             val nowMs = clock.nowMillis()
             // blinkOn / frame read the sprite clock's tick, so the map redraws on every tick
             // (8 a second) and vehicles creep between reports.
-            drawGround(c, cam, w, h, dotPx)
+            val base = basemap?.takeIf { baseOn }
+            if (base != null) drawBasemap(base, cam, w, h, dotPx, c, baseRaster) else drawGround(c, cam, w, h, dotPx)
             val spots = scene.vehicles.associate { it.id to it.spotAt(nowMs, reduce) }
             drawLines(scene, cam, w, h, dotPx, rasters, spots, c)
             scene.you?.let { drawYou(cam.toDots(it, w, h), dotPx, c) }
             val markers = drawStations(scene, cam, w, h, dotPx, c, spriteClock.blinkOn(reduce))
             val vehicleBoxes = drawVehicles(scene, spots, cam, w, h, dotPx, c, spriteClock.frame(2, reduce))
-            val obstacles = listOf(Box(size.width - controlsWidthPx, 0f, size.width, controlsHeightPx))
-            drawLabels(scene, labels, markers, obstacles, captions, vehicleBoxes, dotPx, c)
+            // The zoom controls, and your position (labels and badges keep off it).
+            val youBox = scene.you?.let { cam.toDots(it, w, h) }?.let { p -> Box((p.ix - 8) * dotPx, (p.iy - 8) * dotPx, (p.ix + 8) * dotPx, (p.iy + 8) * dotPx) }
+            val obstacles = listOfNotNull(Box(size.width - controlsWidthPx, 0f, size.width, controlsHeightPx), youBox)
+            drawLabels(scene, cam, w, h, labels, badges, markers, obstacles, captions, vehicleBoxes, dotPx, c)
         }
         Column(
             Modifier.align(Alignment.TopEnd).padding(top = 16.dp + topInsetDp, end = 16.dp),
@@ -187,6 +219,14 @@ fun PixelMap(
             PixelIconButton(PixelIcons.Plus, "Zoom in", { zoomBy(1.6) })
             PixelIconButton(PixelIcons.Minus, "Zoom out", { zoomBy(1 / 1.6) })
             PixelIconButton(RecentreIcon, "Recentre", { camera = null })
+            if (showAllLabel != null) PixelIconButton(FitAllIcon, showAllLabel, { camera = fitCamera(currentScene, all = true) })
+        }
+        if (baseOn) {
+            // OpenStreetMap's credit (ODbL), small, in the corner the controls leave free.
+            Box(
+                Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 8.dp + bottomInsetDp)
+                    .pixelFill(c.screen.copy(alpha = 0.8f)).padding(horizontal = 4.dp, vertical = 2.dp),
+            ) { Label("© OPENSTREETMAP", color = c.textSecondary, size = LabelSize.L10) }
         }
         if (scene.schematic) {
             Box(
@@ -223,6 +263,46 @@ private fun DrawScope.drawGround(c: TtColors, cam: MapCamera, w: Int, h: Int, do
         drawRect(grid, Offset(0f, y * dotPx), Size(size.width, dotPx))
         y += GRID_DOTS
     }
+}
+
+/** The base map drawn for one camera (rebuilt only when the camera, view or theme changes). */
+private class BaseRasterCache {
+    var key: Any? = null
+    var image: ImageBitmap? = null
+}
+
+/** The base map's colours: the water and the streets a step off the ground, never as loud as a line. */
+private fun basemapColors(c: TtColors): BasemapColors = if (c.isDay) {
+    BasemapColors(
+        water = lerp(c.water, c.screen, 0.25f),
+        local = c.panel,
+        secondary = c.panel,
+        main = lerp(c.panel, c.divider, 0.45f),
+        rail = lerp(c.textSecondary, c.screen, 0.55f),
+    )
+} else {
+    BasemapColors(
+        water = lerp(c.water, c.screen, 0.35f),
+        local = c.panel,
+        secondary = c.raised,
+        main = c.divider,
+        rail = lerp(c.textSecondary, c.screen, 0.5f),
+    )
+}
+
+private fun DrawScope.drawBasemap(map: Basemap, cam: MapCamera, w: Int, h: Int, dotPx: Float, c: TtColors, cache: BaseRasterCache) {
+    drawRect(c.screen)
+    val key = listOf(map, cam, w, h, c)
+    val image = cache.image?.takeIf { cache.key == key } ?: rasteriseBasemap(map, cam, w, h, basemapColors(c)).also {
+        cache.key = key
+        cache.image = it
+    }
+    // One bitmap pixel a dot, scaled up without smoothing: whole dots, like the rest of the map.
+    drawImage(
+        image, srcOffset = IntOffset.Zero, srcSize = IntSize(image.width, image.height),
+        dstOffset = IntOffset.Zero, dstSize = IntSize((image.width * dotPx).roundToInt(), (image.height * dotPx).roundToInt()),
+        filterQuality = FilterQuality.None,
+    )
 }
 
 /** Rasterised lines for one camera (rebuilt only when the camera, view or scene changes). */
@@ -262,34 +342,37 @@ private fun DrawScope.drawLines(
         val travelled = line.travelledBy?.let { spots[it]?.distance }
         val dim = lerp(line.color, c.screen, if (c.isDay) 0.55f else 0.5f)
         for ((i, cell) in cells.withIndex()) {
-            // A walk: dashes of two line widths, in the secondary text colour.
+            // A walk: dashes of two line widths, in the text colour (the streets under it are grey).
             if (line.walk) {
                 if ((i / (lw * 2)) % 2 == 1) continue
                 val x = (cell.x - half) * dotPx
                 val y = (cell.y - half) * dotPx
-                drawRect(c.textSecondary, Offset(x, y), Size(dotPx * maxOf(1, lw / 2), dotPx * maxOf(1, lw / 2)))
+                drawRect(c.text, Offset(x, y), Size(dotPx * maxOf(1, lw / 2), dotPx * maxOf(1, lw / 2)))
                 continue
             }
             val x = (cell.x - half) * dotPx
             val y = (cell.y - half) * dotPx
             if (x > size.width || y > size.height || x < -brush.width || y < -brush.height) continue
-            val color = if (travelled != null && cell.distance < travelled) dim else line.color
+            val color = if (line.done || (travelled != null && cell.distance < travelled)) dim else line.color
             drawRect(color, Offset(x, y), brush)
         }
     }
 }
 
-/** Marker size in dots for a station kind. */
-private fun markerDots(kind: StationKind): Int = when (kind) {
-    StationKind.PASSED -> 6
-    StationKind.AHEAD, StationKind.PLAIN, StationKind.NEARBY -> 8
-    StationKind.BOARD, StationKind.ALIGHT -> 12
+/** Marker size in dots for a station; a minor stop is as wide as the line it notches. */
+private fun markerDots(s: SceneStation, lineWidthDots: Int): Int = when {
+    s.minor -> lineWidthDots
+    else -> when (s.kind) {
+        StationKind.PASSED -> 6
+        StationKind.AHEAD, StationKind.PLAIN, StationKind.NEARBY -> 8
+        StationKind.BOARD, StationKind.ALIGHT, StationKind.CHANGE -> 12
+    }
 }
 
 /** Marker boxes in pixels, by station id. */
-private fun markerBox(s: SceneStation, cam: MapCamera, w: Int, h: Int, dotPx: Float): Box {
+private fun markerBox(s: SceneStation, lineWidthDots: Int, cam: MapCamera, w: Int, h: Int, dotPx: Float): Box {
     val p = cam.toDots(s.point, w, h)
-    val n = markerDots(s.kind)
+    val n = markerDots(s, lineWidthDots)
     val left = (p.ix - n / 2) * dotPx
     val top = (p.iy - n / 2) * dotPx
     return Box(left, top, left + n * dotPx, top + n * dotPx)
@@ -297,9 +380,27 @@ private fun markerBox(s: SceneStation, cam: MapCamera, w: Int, h: Int, dotPx: Fl
 
 private fun DrawScope.drawStations(scene: MapScene, cam: MapCamera, w: Int, h: Int, dotPx: Float, c: TtColors, blinkOn: Boolean): Map<String, Box> {
     val out = LinkedHashMap<String, Box>()
+    for (s in scene.stations) out[s.id] = markerBox(s, scene.lineWidthDots, cam, w, h, dotPx)
+    // Minor stops: a notch punched in the line, so the line stays a line however many stops it
+    // has. A notch closer than NOTCH_SPACING_DOTS to a marker or another notch is left out (a
+    // bus's stops at the whole journey's zoom would turn the line into a chain); zooming in
+    // brings them back.
+    val majors = scene.stations.filter { !it.minor }.mapNotNull { out[it.id] }
+    val notches = ArrayList<Box>()
+    val room = NOTCH_SPACING_DOTS * dotPx
+    val hole = max(1, scene.lineWidthDots - 2)
+    val inset = (scene.lineWidthDots - hole) / 2 * dotPx
     for (s in scene.stations) {
-        val b = markerBox(s, cam, w, h, dotPx)
-        out[s.id] = b
+        if (!s.minor) continue
+        val b = out.getValue(s.id)
+        if (b.right < 0 || b.bottom < 0 || b.left > size.width || b.top > size.height) continue
+        if (majors.any { it.overlaps(b, room) } || notches.any { it.overlaps(b, room) }) continue
+        notches += b
+        drawRect(c.screen, Offset(b.left + inset, b.top + inset), Size(hole * dotPx, hole * dotPx))
+    }
+    for (s in scene.stations) {
+        if (s.minor) continue
+        val b = out.getValue(s.id)
         if (b.right < 0 || b.bottom < 0 || b.left > size.width || b.top > size.height) continue
         val tl = Offset(b.left, b.top)
         val sz = Size(b.width, b.height)
@@ -314,9 +415,9 @@ private fun DrawScope.drawStations(scene: MapScene, cam: MapCamera, w: Int, h: I
                 drawRect(c.info, tl, sz)
                 drawRect(if (s.selected) c.info else c.screen, Offset(b.left + border, b.top + border), Size(b.width - 2 * border, b.height - 2 * border))
             }
-            StationKind.BOARD, StationKind.ALIGHT -> {
+            StationKind.BOARD, StationKind.ALIGHT, StationKind.CHANGE -> {
                 // Filled in Text with a Screen-coloured rim; your boarding stop blinks at 1 Hz.
-                val on = s.kind == StationKind.ALIGHT || blinkOn
+                val on = s.kind != StationKind.BOARD || blinkOn
                 drawRect(c.screen, tl, sz)
                 drawRect(c.text.copy(alpha = if (on) 1f else 0.3f), Offset(b.left + border, b.top + border), Size(b.width - 2 * border, b.height - 2 * border))
             }
@@ -324,6 +425,9 @@ private fun DrawScope.drawStations(scene: MapScene, cam: MapCamera, w: Int, h: I
     }
     return out
 }
+
+/** Least room, in dots, between a minor stop's notch and any other marker or notch. */
+private const val NOTCH_SPACING_DOTS = 6
 
 private fun DrawScope.drawYou(p: DotXY, dotPx: Float, c: TtColors) {
     // A ring with a centre dot, the Locate icon at two dots per cell, in Info.
@@ -429,13 +533,14 @@ private fun numeralText(text: String, numerals: FontFamily): AnnotatedString = b
 
 private fun measureLabels(stations: List<SceneStation>, m: TextMeasurer, t: TtType): Map<String, MeasuredLabel> =
     stations.associate { s ->
-        val flagWord = when (s.kind) {
+        val flagWord = s.flag ?: when (s.kind) {
             StationKind.BOARD -> "BOARD HERE"
             StationKind.ALIGHT -> "GET OFF"
+            StationKind.CHANGE -> "CHANGE"
             else -> null
         }
         val nameStyle: TextStyle = when (s.kind) {
-            StationKind.BOARD, StationKind.ALIGHT -> t.name17.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            StationKind.BOARD, StationKind.ALIGHT, StationKind.CHANGE -> t.name17.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
             else -> t.row15
         }
         val nameText = numeralText(s.name, t.numerals)
@@ -443,13 +548,20 @@ private fun measureLabels(stations: List<SceneStation>, m: TextMeasurer, t: TtTy
             s,
             m.measure(nameText, nameStyle.copy(textDecoration = if (s.skipped) TextDecoration.LineThrough else null), maxLines = 1),
             s.detail?.let { m.measure(numeralText(it, t.numerals), t.label10, maxLines = 1) },
-            flagWord?.let { m.measure(it, t.label10Bold, maxLines = 1) },
+            flagWord?.let { m.measure(numeralText(it, t.numerals), t.label10Bold, maxLines = 1) },
         )
     }
 
+/** Labels with this priority or lower (your stops) are placed before the lines' badges. */
+private const val BADGE_AFTER_PRIORITY = 1
+
 private fun DrawScope.drawLabels(
     scene: MapScene,
+    cam: MapCamera,
+    w: Int,
+    h: Int,
     labels: Map<String, MeasuredLabel>,
+    badges: Map<String, TextLayoutResult>,
     markers: Map<String, Box>,
     obstacles: List<Box>,
     captions: Map<String, TextLayoutResult>,
@@ -459,8 +571,10 @@ private fun DrawScope.drawLabels(
 ) {
     val padX = 4 * dotPx
     val padY = 2.5f * dotPx
+    val minorNames = cam.metresPerDot <= MINOR_LABEL_MAX_MPD
     val requests = ArrayList<LabelRequest>()
     for (s in scene.stations) {
+        if (s.minor && !minorNames) continue
         val l = labels[s.id] ?: continue
         val anchor = markers[s.id] ?: continue
         val (lw, lh) = labelSize(l, padX, padY, dotPx)
@@ -468,13 +582,26 @@ private fun DrawScope.drawLabels(
         requests += LabelRequest(s.id, anchor, lw, lh, s.priority, sides)
     }
     val bounds = Box(0f, 0f, size.width, size.height)
-    val placed = placeLabels(requests, bounds, markers.values.toList(), obstacles + vehicles.values, gap = 3 * dotPx)
+    // Minor stops' notches sit inside the line: names may cover them.
+    val minorIds = scene.stations.filter { it.minor }.map { it.id }.toSet()
+    val blocking = markers.filterKeys { it !in minorIds }.values.toList()
+    val gap = 3 * dotPx
+    // Your stops first, then the lines' route badges, then every other name in the room left.
+    val (first, rest) = requests.partition { it.priority <= BADGE_AFTER_PRIORITY }
+    val placedFirst = placeLabels(first, bounds, blocking, obstacles + vehicles.values, gap)
+    val badgeBoxes = placeBadges(scene, cam, w, h, badges, bounds, blocking + placedFirst.values + obstacles + vehicles.values, dotPx)
+    val placed = placedFirst + placeLabels(rest, bounds, blocking, obstacles + vehicles.values + placedFirst.values + badgeBoxes.values, gap)
     for ((id, b) in placed) {
         val l = labels[id] ?: continue
         drawStationLabel(l, b, padX, padY, dotPx, c)
     }
+    for ((lineId, b) in badgeBoxes) {
+        val line = scene.lines.firstOrNull { it.id == lineId } ?: continue
+        val text = badges[lineId] ?: continue
+        drawBadge(line, text, b, dotPx, c)
+    }
     // Vehicle captions ("YOUR TRAIN") go where they fit around the vehicle, after the stations.
-    val taken = placed.values + markers.values + obstacles
+    val taken = placed.values + badgeBoxes.values + blocking + obstacles
     for ((id, text) in captions) {
         val vb = vehicles[id] ?: continue
         val role = scene.vehicles.firstOrNull { it.id == id }?.captionRole ?: ColorRole.CAUTION
@@ -488,12 +615,62 @@ private fun DrawScope.drawLabels(
     }
 }
 
+/** Padding of a route badge, in dots: across, and above and below the name. */
+private const val BADGE_PAD_X = 3
+private const val BADGE_PAD_Y = 1
+
+/**
+ * A box for each line's route badge, centred on the line: halfway along it if that spot is
+ * free of [taken] and on screen, else the next free spot out from the middle. A line with no
+ * free spot goes without (zooming in makes room).
+ */
+private fun placeBadges(
+    scene: MapScene,
+    cam: MapCamera,
+    w: Int,
+    h: Int,
+    badges: Map<String, TextLayoutResult>,
+    bounds: Box,
+    taken: List<Box>,
+    dotPx: Float,
+): Map<String, Box> {
+    val out = LinkedHashMap<String, Box>()
+    for (line in scene.lines) {
+        val text = badges[line.id] ?: continue
+        val path = line.segments.maxByOrNull { it.path.length }?.path ?: continue
+        if (path.length <= 0.0) continue
+        val bw = text.size.width + 2 * BADGE_PAD_X * dotPx
+        val bh = text.size.height + 2 * BADGE_PAD_Y * dotPx
+        for (f in listOf(0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8)) {
+            val p = cam.toDots(path.pointAt(path.length * f), w, h)
+            // Snapped to whole dots, centred on the line's cell.
+            val left = floor(p.ix - bw / 2 / dotPx) * dotPx
+            val top = floor(p.iy - bh / 2 / dotPx) * dotPx
+            val b = Box(left, top, left + bw, top + bh)
+            if (!b.inside(bounds)) continue
+            if (taken.any { it.overlaps(b) } || out.values.any { it.overlaps(b, dotPx) }) continue
+            out[line.id] = b
+            break
+        }
+    }
+    return out
+}
+
+/** A route badge on its line: filled in the line's colour with a Screen rim, the name inside. */
+private fun DrawScope.drawBadge(line: SceneLine, text: TextLayoutResult, b: Box, dotPx: Float, c: TtColors) {
+    drawRect(c.screen, Offset(b.left - dotPx, b.top - dotPx), Size(b.width + 2 * dotPx, b.height + 2 * dotPx))
+    drawRect(line.color, Offset(b.left, b.top), Size(b.width, b.height))
+    val ink = badgeTextColor(line.color, line.badgeTextColor)
+    drawText(text, ink, Offset(b.left + BADGE_PAD_X * dotPx, b.top + BADGE_PAD_Y * dotPx))
+}
+
 private fun labelSize(l: MeasuredLabel, padX: Float, padY: Float, dotPx: Float): Pair<Float, Float> {
     val name = l.name.size
     if (l.flag != null) {
         val flag = l.flag.size
-        val w = max(name.width, flag.width) + 2 * padX + 2 * dotPx
-        val h = name.height + flag.height + 2 * padY + dotPx + 2 * dotPx
+        val detail = l.detail?.size
+        val w = maxOf(name.width, flag.width, detail?.width ?: 0) + 2 * padX + 2 * dotPx
+        val h = name.height + flag.height + (detail?.let { it.height + dotPx } ?: 0f) + 2 * padY + dotPx + 2 * dotPx
         return w to h
     }
     val detail = l.detail?.size
@@ -506,14 +683,18 @@ private fun DrawScope.drawStationLabel(l: MeasuredLabel, b: Box, padX: Float, pa
     val s = l.station
     if (l.flag != null) {
         val board = s.kind == StationKind.BOARD
-        // BOARD HERE: inverted block. GET OFF: outlined block.
-        drawRect(if (board) c.text else c.text, Offset(b.left, b.top), Size(b.width, b.height))
+        val tone = s.flagRole?.let { c.of(it) } ?: c.text
+        // BOARD HERE: inverted block. GET OFF, CHANGE: outlined block (in Caution for a tight change).
+        drawRect(tone, Offset(b.left, b.top), Size(b.width, b.height))
         if (!board) drawRect(c.screen, Offset(b.left + dotPx, b.top + dotPx), Size(b.width - 2 * dotPx, b.height - 2 * dotPx))
-        val ink = if (board) c.screen else c.text
+        val ink = if (board) c.screen else tone
         val x = b.left + dotPx + padX
         val y = b.top + dotPx + padY
         drawText(l.flag, ink, Offset(x, y))
-        drawText(l.name, ink, Offset(x, y + l.flag.size.height + dotPx))
+        val nameY = y + l.flag.size.height + dotPx
+        drawText(l.name, ink, Offset(x, nameY))
+        // A CHANGE flag says what comes next ("THEN 333 · 07:54") under the name.
+        if (l.detail != null) drawText(l.detail, if (board) ink else c.of(s.detailRole), Offset(x, nameY + l.name.size.height + dotPx))
         return
     }
     val nameColor = when (s.kind) {
@@ -524,6 +705,7 @@ private fun DrawScope.drawStationLabel(l: MeasuredLabel, b: Box, padX: Float, pa
     drawRect(c.screen.copy(alpha = 0.75f), Offset(b.left - dotPx, b.top), Size(l.name.size.width + 2 * dotPx, l.name.size.height.toFloat()))
     drawText(l.name, nameColor, Offset(b.left, b.top))
     if (l.detail != null) {
+        drawRect(c.screen.copy(alpha = 0.75f), Offset(b.left - dotPx, b.top + l.name.size.height), Size(l.detail.size.width + 2 * dotPx, l.detail.size.height + dotPx))
         drawText(l.detail, c.of(s.detailRole), Offset(b.left, b.top + l.name.size.height + dotPx))
     }
 }
@@ -556,6 +738,7 @@ private fun hitTest(
     }
     if (best != null) return best
     for (s in scene.stations) {
+        if (s.minor && cam.metresPerDot > MINOR_LABEL_MAX_MPD) continue
         val p = cam.toDots(s.point, w, h)
         val d = Offset(p.ix * dotPx - pos.x, p.iy * dotPx - pos.y).getDistance()
         if (d < bestD) {

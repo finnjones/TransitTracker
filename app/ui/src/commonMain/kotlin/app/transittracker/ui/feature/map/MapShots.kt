@@ -160,7 +160,18 @@ object MapShots {
         override suspend fun lines(samples: List<ServiceDetail>) = emptyList<LineGeometry>()
     }
 
+    /** The train-then-bus sample journey ([JourneyMapSamples]) seen [later] after 07:38. */
+    @Composable
+    private fun JourneySample(later: Long = 0, riding: Boolean = true) {
+        val now = SampleData.NOW_MS + later
+        val state = remember { buildJourneyMapState(JourneyMapSamples.input(SampleData.NOW_MS, now, riding), now) }
+        JourneyMapContent(state, WallClock { now }, JourneyMapActions())
+    }
+
     val shots: List<Shot> = listOf(
+        Shot("map-journey-train-bus", tick = 1) { JourneySample() },
+        Shot("map-journey-train-bus-changing", tick = 1) { JourneySample(later = 12 * MIN, riding = false) },
+        Shot("map-journey-train-bus-day", DayColors, tick = 1) { JourneySample() },
         Shot("map-tracking", tick = 1) { TrackingHook() },
         Shot("map-tracking-app", tick = 1) { TrackingApp(remember { deps() }) },
         Shot("map-tracking-ghost") {

@@ -344,7 +344,15 @@ on and the connection to make (the bus after the train), not the next departure.
   than the route allows), and the next departures underneath as OTHER SERVICES. Multi-leg cards
   that are not followed show the connection as a THEN line.
 - `Route.JourneyMap` draws the whole journey: each ride cut to the stretch ridden, in its line's
-  colour, the walk between rides dashed, each vehicle, and you. `FollowShots` shows both screens.
+  colour with its route badge on it (Sydney's trains and buses are both blue), rides already
+  finished dimmed, the walk between rides dashed, each vehicle under way, and you. Only three
+  kinds of stop get a flag: BOARD (route and time), one CHANGE per interchange (minutes, TIGHT in
+  Caution, and THEN the next route and time) and GET OFF. The stops in between are notches in the
+  line (`SceneStation.minor`), thinned where they crowd and named only when zoomed in to
+  `MINOR_LABEL_MAX_MPD`. A timetabled ride that has not left is not drawn (its ghost would stand
+  on the CHANGE flag). Labels that would run off the edge slide along their side. `FollowShots`
+  shows both screens; `MapShots` has `map-journey-train-bus*` (`JourneyMapSamples`: T2 then a
+  14-stop bus with real stop positions).
 
 ## Rules for feature work (parallel agents)
 

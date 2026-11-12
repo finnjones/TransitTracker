@@ -139,6 +139,22 @@ class MapRulesTest {
         assertNull(blocked["b"]) // right is blocked and left is off screen; above/below hit the obstacle
     }
 
+    @Test
+    fun aLabelOffTheEdgeSlidesAlongItsSideRatherThanBeingDropped() {
+        val bounds = Box(0f, 0f, 200f, 200f)
+        // A flag below a marker 20 px from the right edge: centred it would run 30 px off.
+        val near = LabelRequest("near", Box(170f, 90f, 180f, 100f), 100f, 20f, 0, listOf(LabelSide.BELOW))
+        val b = placeLabels(listOf(near), bounds, gap = 2f).getValue("near")
+        assertEquals(200f, b.right)
+        assertTrue(b.left < 175f) // still under its marker's centre
+        // More than half its width off: no slide reaches, so it is dropped.
+        val far = LabelRequest("far", Box(200f, 90f, 210f, 100f), 20f, 20f, 0, listOf(LabelSide.BELOW))
+        assertNull(slideInside(labelBox(far.anchor, 20f, 20f, LabelSide.BELOW, 2f), LabelSide.BELOW, bounds))
+        // Beside a marker near the top, a label slides down.
+        val top = slideInside(labelBox(Box(50f, 0f, 60f, 4f), 40f, 20f, LabelSide.RIGHT, 2f), LabelSide.RIGHT, bounds)!!
+        assertEquals(0f, top.top)
+    }
+
     private fun sideOf(b: Box, anchor: Box): LabelSide = when {
         b.left >= anchor.right -> LabelSide.RIGHT
         b.right <= anchor.left -> LabelSide.LEFT

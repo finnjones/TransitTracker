@@ -129,7 +129,8 @@ class OnTheWayTest {
 
         assertEquals(listOf("leg-0", "leg-1", "walk-0"), s.scene.lines.map { it.id })
         assertTrue(s.scene.lines.single { it.id == "walk-0" }.walk)
-        assertEquals(2, s.scene.vehicles.size)
+        // The train under way; the bus (timetabled, not left yet) is not drawn standing on its stop.
+        assertEquals(listOf("vehicle-0"), s.scene.vehicles.map { it.id })
         assertNotNull(s.scene.you)
         assertTrue(s.following)
         assertEquals(0, s.currentLeg)

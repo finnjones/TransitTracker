@@ -98,6 +98,25 @@ private fun ends(calls: List<StopCall>, leg: MapLeg): Pair<Int, Int> {
     return b to a
 }
 
+/** The change after ride [k] of [legs]: minutes from its arrival to the next departure; null after the last. */
+private fun changeAt(legs: List<JourneyLegTimes>, k: Int, trip: SavedTrip?): JourneyChange? {
+    val next = legs.getOrNull(k + 1) ?: return null
+    val arr = legs[k].arr
+    val dep = next.dep
+    val minutes = if (arr != null && dep != null) ((dep - arr) / 60_000).toInt() else 0
+    val allowed = trip?.legs?.getOrNull(k + 1)?.minConnectionMinutes
+    val tight = next.cancelled || (allowed != null && minutes < allowed)
+    return JourneyChange(minutes, next.boardName, tight)
+}
+
+/** What [changeAt] needs of a ride. */
+private interface JourneyLegTimes {
+    val dep: Long?
+    val arr: Long?
+    val cancelled: Boolean
+    val boardName: String
+}
+
 /** Everything the journey map draws at [nowMs] (pure). */
 fun buildJourneyMapState(
     i: JourneyMapInput,
@@ -110,10 +129,12 @@ fun buildJourneyMapState(
     val followed = i.follow.match?.takeIf { it.key == firstRef }
 
     // ---- each ride's times and names
-    class Leg(val input: JourneyLegInput, val calls: List<StopCall>, val b: Int, val a: Int) {
-        val dep: Long? get() = calls.getOrNull(b)?.depMs()
-        val arr: Long? get() = calls.getOrNull(a)?.arrMs()
+    class Leg(val input: JourneyLegInput, val calls: List<StopCall>, val b: Int, val a: Int) : JourneyLegTimes {
+        override val dep: Long? get() = calls.getOrNull(b)?.depMs()
+        override val arr: Long? get() = calls.getOrNull(a)?.arrMs()
         val known: Boolean get() = calls.isNotEmpty()
+        override val cancelled: Boolean get() = input.tracking.detail.status == DepartureStatus.CANCELLED
+        override val boardName: String get() = if (known) name(b) else ""
         fun name(k: Int) = shortStopName(calls[k].stopName)
     }
     val legs = i.legs.map { li ->
@@ -158,44 +179,73 @@ fun buildJourneyMapState(
         val from = g.stopDistances[l.b]
         val to = g.stopDistances[l.a]
         val vehicleId = "vehicle-$k"
-        lines += SceneLine("leg-$k", color, listOf(LineSegment("leg-$k", g.path.slice(from, to), offset = from)), travelledBy = vehicleId)
+        lines += SceneLine(
+            "leg-$k", color, listOf(LineSegment("leg-$k", g.path.slice(from, to), offset = from)), travelledBy = vehicleId,
+            badge = route?.shortName?.takeIf { it.isNotEmpty() }, badgeTextColor = parseLineColor(route?.textColor),
+            done = l.arr?.let { nowMs >= it } ?: false,
+        )
         legEnds += g.stopPoints[l.b] to g.stopPoints[l.a]
         val departed = l.dep?.let { nowMs >= it } ?: false
         val finished = l.arr?.let { nowMs >= it } ?: false
+        val last = k == legs.lastIndex
+        val first = k == 0
+        // The next ride, for the CHANGE flag where this one ends.
+        val next = legs.getOrNull(k + 1)
+        val nextName = next?.input?.tracking?.detail?.route?.shortName.orEmpty()
+        val nextDeparted = next?.dep?.let { nowMs >= it } ?: false
+        val change = changeAt(legs, k, i.trip)
         for (c in l.b..l.a) {
             val call = l.calls[c]
+            val board = c == l.b
+            val alight = c == l.a
+            val time = (if (board) l.dep else l.arr)?.let { formatClock(it, zone, clockFormat) }
+            // The stops in between, and where a later ride is boarded (the CHANGE flag where the
+            // ride before ends speaks for it), are notches in the line, named when zoomed in.
+            val minor = !(board && first) && !alight
             val kind = when {
-                c == l.b -> if (departed) StationKind.AHEAD else StationKind.BOARD
-                c == l.a -> if (finished) StationKind.AHEAD else StationKind.ALIGHT
-                call.passed || call.skipped -> StationKind.PASSED
+                board && first && !departed -> StationKind.BOARD
+                alight && last && !finished -> StationKind.ALIGHT
+                alight && !last && !nextDeparted -> StationKind.CHANGE
+                minor && (call.passed || call.skipped) -> StationKind.PASSED
                 else -> StationKind.AHEAD
             }
-            val detail = when (c) {
-                l.b -> l.dep?.let { "DEP " + formatClock(it, zone, clockFormat) }
-                l.a -> l.arr?.let { "ARR " + formatClock(it, zone, clockFormat) }
+            val flag = when (kind) {
+                StationKind.BOARD -> "BOARD ${route?.shortName.orEmpty()}".trim() + (time?.let { " · $it" } ?: "")
+                StationKind.ALIGHT -> "GET OFF" + (time?.let { " · $it" } ?: "")
+                StationKind.CHANGE -> (if (change?.tight == true) "TIGHT CHANGE" else "CHANGE") + (change?.let { " · ${it.minutes.coerceAtLeast(0)} MIN" } ?: "")
                 else -> null
             }
+            val detail = when {
+                kind == StationKind.CHANGE -> listOfNotNull(nextName.takeIf { it.isNotEmpty() }?.let { "THEN $it" }, next?.dep?.let { formatClock(it, zone, clockFormat) }).joinToString(" · ").ifEmpty { null }
+                minor || flag != null -> null // BOARD and GET OFF carry their time in the flag
+                else -> time?.let { (if (board) "DEP " else "ARR ") + it }
+            }
+            val ours = (kind == StationKind.CHANGE && (k == current || k + 1 == current)) || k == current
             stations += SceneStation(
                 id = "leg$k-call$c",
                 name = g.names[c] + if (call.skipped) " · SKIPS" else "",
                 point = g.stopPoints[c],
                 kind = kind,
                 detail = detail,
-                detailRole = if ((delayAt(call) ?: 0) >= 60) ColorRole.CAUTION else ColorRole.SECONDARY,
+                detailRole = if (kind != StationKind.CHANGE && (delayAt(call) ?: 0) >= 60) ColorRole.CAUTION else ColorRole.SECONDARY,
                 priority = when {
-                    c == l.b || c == l.a -> if (k == current) 0 else 1
-                    kind == StationKind.AHEAD -> 6
+                    flag != null -> if (ours) 0 else 1
+                    !minor -> 3
                     else -> 20
                 },
                 stopId = call.stopId,
                 skipped = call.skipped,
+                minor = minor,
+                flag = flag,
+                flagRole = if (kind == StationKind.CHANGE && change?.tight == true) ColorRole.CAUTION else null,
             )
         }
-        // The vehicle: while the ride is still to come (within the hour) or under way.
+        // The vehicle: under way, or (live) on its way to you within the hour. A timetabled ride
+        // not yet left is not drawn: its ghost would only stand on the stop and hide its flag.
         val soon = l.dep?.let { it - nowMs <= 60 * 60_000L } ?: false
-        if (!finished && !cancelled && soon) {
-            val v = l.input.tracking.vehicle
-            val live = d.status != DepartureStatus.TIMETABLED && positionFresh(v, nowMs)
+        val v = l.input.tracking.vehicle
+        val live = d.status != DepartureStatus.TIMETABLED && positionFresh(v, nowMs)
+        if (!finished && !cancelled && soon && (departed || live)) {
             val reck = l.input.reckoning
             val motion = if (live && reck != null) VehicleMotion.Reckoned(g, reck) else VehicleMotion.Timetabled(g, l.calls)
             val look = when {
@@ -207,7 +257,7 @@ fun buildJourneyMapState(
             val caption = when {
                 k == current && stage == FollowStage.RIDING && follow != null -> "YOU · $word"
                 k == current -> "YOUR $word"
-                else -> word + (l.dep?.let { " " + formatClock(it, zone, clockFormat) } ?: "")
+                else -> (route?.shortName?.takeIf { it.isNotEmpty() } ?: word) + (l.dep?.let { " · " + formatClock(it, zone, clockFormat) } ?: "")
             }
             vehicles += SceneVehicle(
                 vehicleId, mode, color, motion, look,
@@ -226,7 +276,7 @@ fun buildJourneyMapState(
         lines += SceneLine("walk-$k", DefaultLineColor, listOf(LineSegment("walk-$k", MapPath(listOf(a, b)))), walk = true)
     }
     val you = i.follow.fix?.let { MapProjection.Sydney.project(it.position) }
-    val scene = MapScene(lines, stations, vehicles, you = you, focus = null, lineWidthDots = 3)
+    val scene = MapScene(lines, stations, vehicles, you = you, focus = null, lineWidthDots = 4)
 
     // ---- footer: the rides and the changes between them
     val rides = legs.mapIndexed { k, l ->
@@ -251,14 +301,7 @@ fun buildJourneyMapState(
             done = l.arr?.let { nowMs >= it } ?: false,
         )
     }
-    val changes = (0 until legs.size - 1).map { k ->
-        val arr = legs[k].arr
-        val dep = legs[k + 1].dep
-        val minutes = if (arr != null && dep != null) ((dep - arr) / 60_000).toInt() else 0
-        val allowed = i.trip?.legs?.getOrNull(k + 1)?.minConnectionMinutes
-        val tight = rides[k + 1].cancelled || (allowed != null && minutes < allowed)
-        JourneyChange(minutes, rides[k + 1].fromName, tight)
-    }
+    val changes = (0 until legs.size - 1).mapNotNull { k -> changeAt(legs, k, i.trip) }
 
     // ---- countdown to the next thing that happens
     val cur = legs[current]

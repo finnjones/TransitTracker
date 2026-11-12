@@ -12,7 +12,6 @@ import app.transittracker.ui.feature.home.alternativeWay
 import app.transittracker.ui.feature.home.onTheWayOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -106,9 +105,9 @@ class SwitchWaysTest {
         assertEquals("way-f", m.wayId)
         assertEquals(1, m.legIndex)
         assertEquals(FollowStage.CHANGING, m.stage)
-        val memory = FollowMemory(pinned = riding, pending = otherTrain.departure.ref, pendingCount = 1).switchTo(m)
+        val memory = FollowMemory(pinned = riding, scores = mapOf(otherTrain.departure.ref to 0.5)).switchTo(m)
         assertEquals(m, memory.pinned)
-        assertNull(memory.pending)
+        assertEquals(FollowTuning().maxScore, memory.scores[m.key])
     }
 
     @Test

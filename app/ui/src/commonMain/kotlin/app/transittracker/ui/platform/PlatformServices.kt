@@ -16,8 +16,18 @@ enum class PermissionState {
     DENIED,
 }
 
-/** One position from the phone, taken at [timeMs] (epoch ms), with its accuracy radius when known. */
-data class LocationFix(val position: LatLng, val timeMs: Long, val accuracyM: Double? = null)
+/**
+ * One position from the phone, taken at [timeMs] (epoch ms), with its accuracy radius when known.
+ * [speedMps] and [bearingDeg] (compass degrees, 0 = north, clockwise) come with GPS fixes taken on
+ * the move; network fixes usually have neither.
+ */
+data class LocationFix(
+    val position: LatLng,
+    val timeMs: Long,
+    val accuracyM: Double? = null,
+    val speedMps: Double? = null,
+    val bearingDeg: Double? = null,
+)
 
 /**
  * What only the platform shell (Android activity, iOS app) can do. Screens use it through

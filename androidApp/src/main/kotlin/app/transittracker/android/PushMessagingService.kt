@@ -59,8 +59,26 @@ internal object Push {
     const val REGISTERED = "Registered: the server has this phone's notification token."
     const val NOT_ACCEPTED = "The server has not accepted this phone's token yet. The app tries again on its next check."
 
-    /** Settings > Notifications shows this ([AndroidPlatformServices.pushRegistration]). */
+    /** Every step of the registration, as a sentence; debug builds show it in Settings > Notifications. */
     val status = MutableStateFlow<String?>(null)
+
+    /**
+     * Why registration failed, or null while it works; release builds show only this in
+     * Settings > Notifications ([AndroidPlatformServices.pushRegistration]).
+     */
+    val problem = MutableStateFlow<String?>(null)
+
+    /** Records a step that worked (clears any earlier problem). */
+    fun step(text: String) {
+        status.value = text
+        problem.value = null
+    }
+
+    /** Records a failure: shown in Settings in every build. */
+    fun fail(text: String) {
+        status.value = text
+        problem.value = text
+    }
 
     /**
      * Registers with FCM; no-op without Firebase. Each call hands the current token (new or
@@ -73,7 +91,7 @@ internal object Push {
             status.value = NOT_IN_BUILD
             return
         }
-        status.value = ASKING
+        step(ASKING)
         try {
             FirebaseMessaging.getInstance().register()
                 .addOnSuccessListener { status.compareAndSet(ASKING, WAITING) }
@@ -85,7 +103,7 @@ internal object Push {
 
     private fun failed(e: Throwable) {
         Log.w(TAG, "FCM registration failed", e)
-        status.value = "Firebase did not give this phone a notification token: ${describe(e)}"
+        fail("Firebase did not give this phone a notification token: ${describe(e)}")
     }
 
     /** The exception and its causes, e.g. "FCM Registration failed!: SERVICE_NOT_AVAILABLE". */

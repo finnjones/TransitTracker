@@ -243,4 +243,76 @@ class PlanStateHoldersTest {
         assertIs<SaveState.Blocked>(h.state.value.save)
         assertEquals(54, h.state.value.timeline.minutes)
     }
+
+    // ------------------------------------------------------------ ways of one route
+
+    @Test
+    fun aJourneyBetweenSavedPlacesCanJoinTheirRouteAsAnotherWay() = runTest {
+        val deps = AppDeps.fake()
+        val it = homeWorkItinerary(deps)
+        val h = JourneyStateHolder(deps.core, deps.places, deps.clock, it, home, work, backgroundScope)
+        val ready = assertIs<SaveState.Ready>(h.state.first { s -> s.save !is SaveState.Checking }.save)
+        assertEquals(FakeSetup.TRIP_HOME_WORK, ready.joinTo?.id)
+        assertEquals("Home to Work", ready.joinTitle)
+        assertTrue(!ready.alreadyThere)
+        h.save(withReturn = false)
+        val saved = assertIs<SaveState.Saved>(h.state.first { s -> s.save is SaveState.Saved }.save)
+        assertEquals(listOf(FakeSetup.TRIP_HOME_WORK), saved.tripIds)
+        val trips = deps.core.trips.first { t -> t.first { r -> r.id == FakeSetup.TRIP_HOME_WORK }.ways.size == 2 }
+        assertEquals(FakeSetup.trips.size, trips.size, "no new route")
+        val route = trips.first { r -> r.id == FakeSetup.TRIP_HOME_WORK }
+        assertEquals(FakeSetup.trips.first().legs, route.legs, "the first way stays first")
+        assertEquals(ready.trip.legs, route.ways[1].legs)
+        // Home finds services of both ways, each tagged.
+        val upcoming = deps.core.upcoming(route.id, 3).first { j -> j.isNotEmpty() }
+        assertTrue(upcoming.all { j -> j.wayId != null })
+    }
+
+    @Test
+    fun aJourneyCanStillBeSavedAsARouteOfItsOwn() = runTest {
+        val deps = AppDeps.fake()
+        val h = JourneyStateHolder(deps.core, deps.places, deps.clock, homeWorkItinerary(deps), home, work, backgroundScope)
+        h.state.first { s -> s.save is SaveState.Ready }
+        h.save(withReturn = false, join = false)
+        val saved = assertIs<SaveState.Saved>(h.state.first { s -> s.save is SaveState.Saved }.save)
+        assertTrue(FakeSetup.TRIP_HOME_WORK !in saved.tripIds)
+        assertEquals(FakeSetup.trips.size + 1, deps.core.trips.first { t -> t.size > FakeSetup.trips.size }.size)
+    }
+
+    @Test
+    fun theJourneysFoundCanBeSavedAsTheWaysOfOneRoute() = runTest {
+        val deps = AppDeps.fake(trips = emptyList())
+        val h = JourneyOptionsStateHolder(
+            deps.planner, deps.core, deps.clock, PlanRequest(home.toPlanEndpoint(), work.toPlanEndpoint()), backgroundScope,
+            from = home, to = work, places = deps.places,
+        )
+        assertTrue(h.state.first { it.phase == OptionsPhase.FOUND }.canSaveWays)
+        h.startSaveWays()
+        val choosing = assertIs<SaveWaysState.Choosing>(h.state.first { it.saveWays is SaveWaysState.Choosing }.saveWays)
+        val savable = choosing.ways.filter { it.trip != null }
+        assertTrue(savable.isNotEmpty())
+        assertEquals(savable.map { it.id }.toSet(), choosing.selected)
+        assertEquals(savable.size, savable.map { it.id }.distinct().size, "the same way at another time is listed once")
+        assertNull(choosing.joinTitle, "no route saved yet")
+        h.confirmSaveWays(withReturn = true, join = true)
+        val saved = assertIs<SaveWaysState.Saved>(h.state.first { it.saveWays is SaveWaysState.Saved }.saveWays)
+        assertEquals(2, saved.tripIds.size)
+        val trips = deps.core.trips.first { t -> t.size == 2 }
+        assertEquals(savable.size, trips.first { it.id == saved.tripIds[0] }.ways.size)
+        assertEquals(savable.size, trips.first { it.id == saved.tripIds[1] }.ways.size)
+        val links = deps.places.tripPlaces.first { l -> saved.tripIds.all { it in l } }
+        assertEquals(FakeSetup.HOME, links.getValue(saved.tripIds[0]).fromPlaceId)
+        assertEquals(FakeSetup.WORK, links.getValue(saved.tripIds[1]).fromPlaceId)
+        // Asked again, every way is already there.
+        val again = JourneyOptionsStateHolder(
+            deps.planner, deps.core, deps.clock, PlanRequest(home.toPlanEndpoint(), work.toPlanEndpoint()), backgroundScope,
+            from = home, to = work, places = deps.places,
+        )
+        again.state.first { it.phase == OptionsPhase.FOUND }
+        again.startSaveWays()
+        val second = assertIs<SaveWaysState.Choosing>(again.state.first { it.saveWays is SaveWaysState.Choosing }.saveWays)
+        assertEquals("Home to Work", second.joinTitle)
+        assertTrue(second.selected.isEmpty())
+        assertTrue(second.ways.filter { it.trip != null }.all { it.alreadySaved })
+    }
 }

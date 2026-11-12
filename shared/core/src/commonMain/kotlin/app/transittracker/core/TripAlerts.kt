@@ -9,8 +9,8 @@ import app.transittracker.model.Timetable
 import app.transittracker.model.TripLeg
 
 /**
- * The alerts among [alerts] that touch [trip], in their original order. An alert touches the trip
- * when it names:
+ * The alerts among [alerts] that touch [trip] (any of its ways), in their original order. An alert
+ * touches the trip when it names:
  * - a route of one of its legs: the leg's [TripLeg.routeIds], or, for a leg that takes any route,
  *   the routes that call at both its origin and its destination station;
  * - one of the legs' origin or destination stops, the parent station of such a stop, or a
@@ -23,7 +23,7 @@ fun alertsForTrip(trip: SavedTrip, alerts: List<Alert>, timetable: Timetable?): 
     if (alerts.isEmpty() || trip.legs.isEmpty()) return emptyList()
     val stops = HashSet<StopId>()
     val routes = HashSet<RouteId>()
-    for (leg in trip.legs) {
+    for (leg in trip.ways.flatMap { it.legs }) {
         for (id in leg.originStopIds + leg.destinationStopIds) stops += relatedStops(id, timetable)
         routes += leg.routeIds ?: timetable?.let { routesServing(it, leg) }.orEmpty()
     }

@@ -7,7 +7,13 @@ import app.transittracker.model.Mode
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.StopId
 import app.transittracker.model.TripLeg
+import app.transittracker.model.RouteOption
 import app.transittracker.model.rides
+import app.transittracker.model.routePattern
+import app.transittracker.model.wayIdFor
+import app.transittracker.ui.feature.places.routeTitleParts
+import app.transittracker.ui.places.SavedPlace
+import app.transittracker.ui.places.TripPlaces
 
 /*
  * SAVE ROUTE (plan 5.6 "Saved routes"): a planned journey becomes a SavedTrip that remembers the
@@ -86,35 +92,96 @@ fun savedTripOf(itinerary: Itinerary, stationOf: Map<StopId, StopId> = emptyMap(
 }
 
 /**
- * The same route the other way: rides in reverse order, each from where it ended to where it
- * started, on the same lines; the walk at each change stays with that change.
+ * The same route the other way: every way reversed (rides in reverse order, each from where it
+ * ended to where it started, on the same lines; the walk at each change stays with that change).
+ * A pinned way stays pinned the other way.
  */
 fun returnTripOf(trip: SavedTrip): SavedTrip {
-    val n = trip.legs.size
-    val legs = (0 until n).map { j ->
-        val forward = trip.legs[n - 1 - j]
-        TripLeg(
-            originStopIds = forward.destinationStopIds,
-            destinationStopIds = forward.originStopIds,
-            routeIds = forward.routeIds,
-            minConnectionMinutes = if (j == 0) NO_WALK_CONNECTION_MINUTES else trip.legs[n - j].minConnectionMinutes,
-        )
-    }
+    val ways = trip.ways.map { w -> reverseLegs(w.legs).let { RouteOption(wayIdFor(it), it, w.label) } }
+    val pinned = trip.ways.indexOfFirst { it.id == trip.pinnedWayId }.takeIf { it >= 0 }?.let { ways[it].id }
+    val legs = ways.first().legs
     return SavedTrip(
         id = tripIdFor(legs),
         originName = trip.destinationName,
         destinationName = trip.originName,
         legs = legs,
-    )
+        pinnedWayId = pinned,
+    ).withWays(ways)
+}
+
+private fun reverseLegs(forward: List<TripLeg>): List<TripLeg> {
+    val n = forward.size
+    return (0 until n).map { j ->
+        val f = forward[n - 1 - j]
+        TripLeg(
+            originStopIds = f.destinationStopIds,
+            destinationStopIds = f.originStopIds,
+            routeIds = f.routeIds,
+            minConnectionMinutes = if (j == 0) NO_WALK_CONNECTION_MINUTES else forward[n - j].minConnectionMinutes,
+        )
+    }
 }
 
 /**
  * A stable id for a route pattern, so saving the same route again replaces it instead of adding
  * a copy: "route-213510.200060.T9".
  */
-fun tripIdFor(legs: List<TripLeg>): String = "route-" + legs.joinToString("_") { l ->
-    listOf(l.originStopIds.sorted().joinToString("+"), l.destinationStopIds.sorted().joinToString("+"), l.routeIds.orEmpty().sorted().joinToString("+"))
-        .joinToString(".")
+fun tripIdFor(legs: List<TripLeg>): String = "route-" + routePattern(legs)
+
+/**
+ * One saved route made of the ways of [trips] (each made by [savedTripOf], in order; duplicates
+ * dropped). Its ends are named after the stations when every way starts (or ends) at the same
+ * one, else after the journey's ends ([fromName], [toName]: "Home", "12 Smith St").
+ */
+fun combineWays(trips: List<SavedTrip>, fromName: String, toName: String): SavedTrip {
+    require(trips.isNotEmpty()) { "no ways" }
+    val first = trips.first()
+    if (trips.size == 1) return first
+    val ways = trips.flatMap { it.ways }
+    val sameStart = ways.map { it.legs.first().originStopIds }.distinct().size == 1
+    val sameEnd = ways.map { it.legs.last().destinationStopIds }.distinct().size == 1
+    return first.copy(
+        originName = if (sameStart) first.originName else fromName,
+        destinationName = if (sameEnd) first.destinationName else toName,
+    ).withWays(ways)
+}
+
+/**
+ * The saved route that [trip] would join as another way, or null: the route with the same id
+ * (the same pattern saved before), else one between the same ends. A saved place at an end must
+ * be the same place; an end that is not a saved place must share a station with one of the
+ * route's ways.
+ */
+fun routeToJoin(
+    trips: List<SavedTrip>,
+    links: Map<String, TripPlaces>,
+    trip: SavedTrip,
+    fromPlaceId: String?,
+    toPlaceId: String?,
+): SavedTrip? {
+    trips.firstOrNull { it.id == trip.id }?.let { return it }
+    val starts = trip.ways.flatMapTo(HashSet()) { it.legs.first().originStopIds }
+    val ends = trip.ways.flatMapTo(HashSet()) { it.legs.last().destinationStopIds }
+    return trips.firstOrNull { t ->
+        val link = links[t.id]
+        val samePlaces = link?.fromPlaceId == fromPlaceId && link?.toPlaceId == toPlaceId
+        samePlaces && t.ways.isNotEmpty() &&
+            (fromPlaceId != null || t.ways.any { w -> w.legs.first().originStopIds.any { it in starts } }) &&
+            (toPlaceId != null || t.ways.any { w -> w.legs.last().destinationStopIds.any { it in ends } })
+    }
+}
+
+/** True when every way of [trip] is already a way of [route]. */
+fun hasAllWays(route: SavedTrip, trip: SavedTrip): Boolean {
+    val ids = route.ways.mapTo(HashSet()) { it.id }
+    return trip.ways.all { it.id in ids }
+}
+
+/** The title of [route] for "Add as another way to Home to Work": place names, else its name or stations. */
+fun joinTitle(route: SavedTrip, link: TripPlaces?, places: List<SavedPlace>): String {
+    val from = link?.fromPlaceId?.let { id -> places.firstOrNull { it.id == id } }
+    val to = link?.toPlaceId?.let { id -> places.firstOrNull { it.id == id } }
+    return routeTitleParts(route, from, to).joinToString(" to ")
 }
 
 /** "Home to Work by T9" / "Strathfield to Central by T9 and T4" for the save dialog. */

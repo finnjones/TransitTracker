@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -30,6 +31,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -94,6 +96,7 @@ import app.transittracker.ui.strip.JourneyStrip
 import app.transittracker.ui.theme.ColorRole
 import app.transittracker.ui.theme.TtTheme
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 /** What the home screen can ask for; the screen maps these to navigation. */
 class HomeActions(
@@ -105,6 +108,10 @@ class HomeActions(
     val openJourneyMap: (tripId: String, journey: Journey) -> Unit = { _, _ -> },
     /** NOT ON THIS: stop following the journey whose first ride is [ServiceRef]. */
     val notOnThis: (ServiceRef) -> Unit = {},
+    /** SWITCH: follow another way of the trip, open from where the user is. */
+    val switchWay: (Journey) -> Unit = {},
+    /** Every way from the next stop, from the planner (look only). */
+    val waysFromNextStop: () -> Unit = {},
 )
 
 /** The Trips tab (plan 5.2, Main mockup). */
@@ -116,6 +123,7 @@ fun HomeScreen() {
         HomeStateHolder(deps.core, deps.places, deps.settings, deps.clock, scope, follower = deps.follower)
     }
     val state by holder.state.collectAsState()
+    val scope = rememberCoroutineScope()
     val actions = remember(nav, holder) {
         HomeActions(
             openService = { d ->
@@ -130,6 +138,10 @@ fun HomeScreen() {
                 nav.push(Route.JourneyMap(id, j.legs.map { MapLeg(it.ref, it.originStopId, it.destinationStopId) }))
             },
             notOnThis = holder::notOnThis,
+            switchWay = holder::switchTo,
+            waysFromNextStop = {
+                scope.launch { holder.replanFromHere()?.let { nav.push(it) } }
+            },
         )
     }
     HomeContent(state, deps.clock, holder::service, actions)
@@ -285,6 +297,7 @@ private fun CardTitle(card: TripCard, first: Departure?) {
         Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             TitleParts(card.titleParts, TtTheme.type.name17)
             if (card.stationsLine != null) Label(card.stationsLine, size = LabelSize.L10, color = c.textSecondary)
+            if (card.waysLabel != null) Label(card.waysLabel, size = LabelSize.L10, color = c.info, bold = true)
         }
         if (first != null) {
             Row(Modifier.padding(start = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -515,7 +528,7 @@ private fun OnTheWayCard(card: TripCard, otw: OnTheWay, nowMs: Long, actions: Ho
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             TitleParts(card.titleParts, TtTheme.type.name17)
-            Label("ON YOUR WAY", color = c.go, bold = true, size = LabelSize.L10)
+            Label(if (otw.oneOff) "ON YOUR WAY · ONE-OFF" else "ON YOUR WAY", color = c.go, bold = true, size = LabelSize.L10)
         }
         // The ride now (or the one being walked to).
         val status = statusPresentation(leg)
@@ -554,6 +567,7 @@ private fun OnTheWayCard(card: TripCard, otw: OnTheWay, nowMs: Long, actions: Ho
             PixelButton("MAP", openMap, Modifier.weight(1f), style = TtTheme.type.label11Bold)
             PixelButton("NOT ON THIS", { actions.notOnThis(otw.journey.departure.ref) }, Modifier.weight(1f), style = TtTheme.type.label11Bold)
         }
+        OtherWays(otw, actions)
         if (card.following.isNotEmpty()) {
             DashedDivider()
             Label("OTHER SERVICES", Modifier.padding(top = 8.dp), size = LabelSize.L10, color = c.textSecondary)
@@ -610,6 +624,56 @@ private fun NextRide(next: Departure, otw: OnTheWay, nowMs: Long, actions: HomeA
     }
 }
 
+/**
+ * OTHER WAYS FROM HERE on the on-the-way card: the trip's other ways still open from the vehicle
+ * the user is on, with live times, each with SWITCH; then every way from the next stop, from the planner.
+ */
+@Composable
+private fun OtherWays(otw: OnTheWay, actions: HomeActions) {
+    val c = TtTheme.colors
+    val tz = TtTheme.time.timeZone
+    val fmt = TtTheme.time.clockFormat
+    DashedDivider()
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Label("OTHER WAYS FROM HERE", size = LabelSize.L10, color = c.textSecondary)
+        for (alt in otw.alternatives) {
+            val arrive = formatClock(alt.arrivalMs, tz, fmt)
+            val delta = when {
+                alt.minutesSooner > 0 -> "${alt.minutesSooner} MIN SOONER"
+                alt.minutesSooner < 0 -> "${-alt.minutesSooner} MIN LATER"
+                else -> "SAME TIME"
+            }
+            val deltaColor = when {
+                alt.minutesSooner > 0 -> c.go
+                alt.minutesSooner < 0 -> c.textSecondary
+                else -> c.text
+            }
+            val spoken = "${alt.words.lowercase()}, arrive $arrive, ${delta.lowercase()}"
+            Row(
+                Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = spoken },
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        for (r in alt.rides) RouteBadge(r.routeName, r.routeColor, null)
+                        PixelText(alt.words, Modifier.weight(1f, fill = false), TtTheme.type.label11Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Label("ARR $arrive", size = LabelSize.L10, color = c.textSecondary)
+                        Label(delta, size = LabelSize.L10, color = deltaColor, bold = alt.minutesSooner > 0)
+                    }
+                }
+                PixelButton("SWITCH", { actions.switchWay(alt.journey) }, kind = if (alt.minutesSooner > 0) ButtonKind.PRIMARY else ButtonKind.SECONDARY, style = TtTheme.type.label11Bold)
+            }
+        }
+        if (otw.alternatives.isEmpty()) {
+            PixelText("No other saved way of this route can be made from here.", style = TtTheme.type.label10, color = c.textSecondary)
+        }
+        PixelButton("ALL WAYS FROM THE NEXT STOP", actions.waysFromNextStop, Modifier.fillMaxWidth(), ButtonKind.FLAT, style = TtTheme.type.label11Bold)
+    }
+}
+
 // ---------------------------------------------------------------- compact card
 
 @Composable
@@ -626,6 +690,7 @@ private fun CompactTripCard(card: TripCard, nowMs: Long, actions: HomeActions, m
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 TitleParts(card.titleParts, TtTheme.type.row15Strong)
+                if (card.waysLabel != null) Label(card.waysLabel, size = LabelSize.L10, color = c.info, bold = true)
                 if (d != null) {
                     val status = statusPresentation(d)
                     val suffix = formatClock(d.expectedDepartureMs, tz, fmt) + (d.originPlatform?.let { " · PLAT $it" } ?: "")

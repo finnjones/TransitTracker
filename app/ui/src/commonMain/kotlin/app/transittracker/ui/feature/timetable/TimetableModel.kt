@@ -14,6 +14,9 @@ import app.transittracker.ui.feature.home.DataChip
 import app.transittracker.ui.feature.home.HomeBanner
 import app.transittracker.ui.feature.home.banners
 import app.transittracker.ui.feature.home.dataChip
+import app.transittracker.ui.feature.home.leaveAtFor
+import app.transittracker.ui.feature.home.wayName
+import app.transittracker.model.bestRuns
 import app.transittracker.ui.places.SavedPlace
 import app.transittracker.ui.places.TripPlaces
 import kotlinx.datetime.DateTimeUnit
@@ -52,6 +55,12 @@ data class TimetableUiState(
     val next: NextService? = null,
     /** True once [next] has been looked for. */
     val nextSearched: Boolean = false,
+    /** A route with several ways: one tab each, after BEST; empty for one way. */
+    val ways: List<WayTab> = emptyList(),
+    /** The way shown; null shows BEST (every way, only the runs no other way beats). */
+    val selectedWay: String? = null,
+    /** The way Home always shows; null lets Home pick the best each time. */
+    val pinnedWay: String? = null,
 ) {
     val isToday: Boolean get() = date == today
     val isEmpty: Boolean get() = rowsLoaded && earlier.isEmpty() && upcoming.isEmpty()
@@ -63,6 +72,9 @@ data class TimetableUiState(
 data class TimetableEntry(val journey: Journey, val durationMinutes: Int) {
     val key: String get() = journey.legs.joinToString("+") { it.ref.tripId + "@" + it.ref.serviceDate }
 }
+
+/** A tab for one way of a route: its id and name ("T9", "333 then T4"). */
+data class WayTab(val id: String, val name: String)
 
 /** The first service of a later day, for "NO SERVICES · NEXT THU 12 NOV 05:00". */
 data class NextService(val date: ServiceDate, val departureMs: Long)
@@ -145,7 +157,7 @@ fun alertsForTrip(
     journeys: List<Journey>,
     date: ServiceDate,
 ): List<TripAlert> {
-    val routes: Set<RouteId> = trip.legs.flatMap { it.routeIds.orEmpty() }.toSet() +
+    val routes: Set<RouteId> = trip.ways.flatMap { w -> w.legs.flatMap { it.routeIds.orEmpty() } }.toSet() +
         journeys.flatMap { j -> j.legs.map { it.routeId } }
     val dayStart = ServiceTime.referenceMillis(date)
     val dayEnd = ServiceTime.referenceMillis(stepDay(date, 1))
@@ -190,7 +202,20 @@ data class TimetableInputs(
     val alerts: List<Alert> = emptyList(),
     /** Next service after the shown day: absent until searched. */
     val next: Map<ServiceDate, NextService?> = emptyMap(),
+    /** The way tab chosen; null shows BEST. */
+    val selectedWay: String? = null,
 )
+
+/**
+ * The day's journeys for the way tab [selectedWay]: that way's; for BEST (null) on a route with
+ * several ways, the runs no other way beats (leaving no earlier and arriving sooner, counting the
+ * walk from [from] to each stop); for a route with one way, all of them.
+ */
+fun journeysForTab(trip: SavedTrip, journeys: List<Journey>, selectedWay: String?, from: SavedPlace?): List<Journey> = when {
+    selectedWay != null && trip.way(selectedWay) != null -> journeys.filter { it.follows(selectedWay) }
+    trip.ways.size > 1 -> bestRuns(journeys, { leaveAtFor(trip, it, from) }, { it.arrival.expectedArrivalMs })
+    else -> journeys
+}
 
 /** Pure: the timetable for [inputs] at [nowMs]. */
 fun buildTimetableState(inputs: TimetableInputs, nowMs: Long): TimetableUiState {
@@ -202,7 +227,9 @@ fun buildTimetableState(inputs: TimetableInputs, nowMs: Long): TimetableUiState 
     val from = link?.fromPlaceId?.let { placesById[it] }
     val to = link?.toPlaceId?.let { placesById[it] }
     val linked = from != null || to != null
-    val journeys = inputs.journeys
+    val selected = inputs.selectedWay?.takeIf { trip.way(it) != null }
+    val all = inputs.journeys
+    val journeys = all?.let { journeysForTab(trip, it, selected, from) }
     val entries = journeys?.let(::entriesOf).orEmpty()
     val (earlier, upcoming) = splitEarlier(entries, inputs.date, today, nowMs)
     val nothingToCome = journeys != null && upcoming.isEmpty()
@@ -226,5 +253,8 @@ fun buildTimetableState(inputs: TimetableInputs, nowMs: Long): TimetableUiState 
         timetableOnly = journeys != null && isTimetableOnly(journeys),
         next = if (nothingToCome) inputs.next[inputs.date] else null,
         nextSearched = nothingToCome && inputs.date in inputs.next,
+        ways = if (trip.ways.size > 1) trip.ways.map { WayTab(it.id, wayName(trip, it, all.orEmpty())) } else emptyList(),
+        selectedWay = selected,
+        pinnedWay = trip.pinnedWay?.id,
     )
 }

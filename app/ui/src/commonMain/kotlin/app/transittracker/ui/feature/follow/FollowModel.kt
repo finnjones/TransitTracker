@@ -43,6 +43,12 @@ data class FollowMatch(
     val stage: FollowStage,
     /** How far the fix was from where the user should be, metres (lower is a better fit). */
     val offMetres: Double,
+    /**
+     * Which way of the saved trip ([app.transittracker.model.SavedTrip.ways]) the user is on. Two
+     * ways can share the vehicle the user is on (stay on the train, or change to a bus), so the
+     * same [key] can be followed on either; null when not known.
+     */
+    val wayId: String? = null,
 )
 
 /** Matching thresholds; the defaults suit Sydney trains, metro, light rail, buses and ferries. */
@@ -118,16 +124,29 @@ fun matchFix(
     candidates: List<FollowCandidate>,
     tuning: FollowTuning = FollowTuning(),
     projection: MapProjection = MapProjection.Sydney,
-): FollowMatch? {
+): FollowMatch? = fitsOf(fix, candidates, tuning, projection).minByOrNull { it.offMetres }
+
+/**
+ * Every candidate [fix] fits, each at its best fit (see [matchFix]), in candidate order. Two ways
+ * sharing the vehicle the user is on both fit, equally.
+ */
+fun fitsOf(
+    fix: LocationFix,
+    candidates: List<FollowCandidate>,
+    tuning: FollowTuning = FollowTuning(),
+    projection: MapProjection = MapProjection.Sydney,
+): List<FollowMatch> {
     val t = fix.timeMs
     val p = projection.project(fix.position)
     val accuracy = (fix.accuracyM ?: 0.0).coerceIn(0.0, 500.0)
-    var best: FollowMatch? = null
-    fun offer(m: FollowMatch) {
-        if (best == null || m.offMetres < best!!.offMetres) best = m
-    }
+    val fits = ArrayList<FollowMatch>()
     for (c in candidates) {
+        var best: FollowMatch? = null
+        fun offer(m: FollowMatch) {
+            if (best == null || m.offMetres < best!!.offMetres) best = m
+        }
         val key = c.journey.departure.ref
+        val way = c.journey.wayId
         val lines = c.legs.map { LegLine.of(it, projection) }
         for ((k, leg) in c.legs.withIndex()) {
             val d = leg.departure
@@ -138,7 +157,7 @@ fun matchFix(
                 val waitingAtStart = k == 0 && p.distanceTo(line.path.points.first()) <= tuning.atFirstStopM
                 val along = abs(snap.distance - line.expectedAlong(t))
                 if (!waitingAtStart && snap.offset <= tuning.corridorM + accuracy && along <= tuning.alongM + accuracy) {
-                    offer(FollowMatch(c.tripId, key, k, FollowStage.RIDING, along + snap.offset))
+                    offer(FollowMatch(c.tripId, key, k, FollowStage.RIDING, along + snap.offset, way))
                 }
             }
             // Changing onto leg k.
@@ -151,12 +170,75 @@ fun matchFix(
                 ) {
                     val walk = MapPath(listOf(projection.project(from), projection.project(to)))
                     val off = walk.snap(p).offset
-                    if (off <= tuning.changeM + accuracy) offer(FollowMatch(c.tripId, key, k, FollowStage.CHANGING, off))
+                    if (off <= tuning.changeM + accuracy) offer(FollowMatch(c.tripId, key, k, FollowStage.CHANGING, off, way))
                 }
             }
         }
+        best?.let { fits += it }
     }
-    return best
+    return fits
+}
+
+/**
+ * The fit to follow: the journey already followed ([held], the same first service and way) when
+ * the fix fits it, so a way the user chose stays chosen while they ride a vehicle another way
+ * shares; else the best fit.
+ */
+fun preferredFit(fits: List<FollowMatch>, held: FollowMatch?): FollowMatch? {
+    if (held != null) {
+        fits.firstOrNull { it.tripId == held.tripId && it.key == held.key && it.wayId == held.wayId }?.let { return it }
+        // A way chosen that boards this same first vehicle further on cannot fit until the vehicle
+        // gets there: while the user still fits riding that first vehicle, the choice stands.
+        if (held.stage == FollowStage.RIDING && held.legIndex == 0) {
+            fits.firstOrNull { it.tripId == held.tripId && it.key == held.key && it.stage == FollowStage.RIDING && it.legIndex == 0 }
+                ?.let { return it.copy(wayId = held.wayId) }
+        }
+    }
+    return fits.minByOrNull { it.offMetres }
+}
+
+/**
+ * The other ways still open from where the user is on [current] ([match]), among the trip's
+ * journeys ([underway]: those under way, and those still to come, which may board the vehicle
+ * the user is on further along; with live data): those that use the vehicle the user is on, or
+ * (while changing) the one they just left at the same stop, and go on differently. Where a way
+ * boards the user's vehicle does not matter, only where it leaves it and what comes after. A way
+ * that gets off this vehicle further on only counts while it has not reached that stop
+ * ([nowMs]); a way with a cancelled ride to come does not count. Soonest arrival first.
+ */
+fun alternativesOf(current: Journey, match: FollowMatch, underway: List<Journey>, nowMs: Long): List<Journey> {
+    val anchor = if (match.stage == FollowStage.RIDING) match.legIndex else match.legIndex - 1
+    val on = current.legs.getOrNull(anchor) ?: return emptyList()
+    fun rest(j: Journey, from: Int) = j.legs.drop(from).mapIndexed { n, it ->
+        Triple(it.ref, if (n == 0) "" else it.originStopId, it.destinationStopId)
+    }
+    val mine = rest(current, anchor)
+    val seen = HashSet<Any>()
+    return underway.mapNotNull { j ->
+        val i = j.legs.indexOfFirst { it.ref == on.ref }
+        if (i < 0) return@mapNotNull null
+        val ride = j.legs[i]
+        val theirs = rest(j, i)
+        val ok = theirs != mine &&
+            j.legs.drop(i).none { it.status == app.transittracker.model.DepartureStatus.CANCELLED } &&
+            when (match.stage) {
+                FollowStage.CHANGING -> ride.destinationStopId == on.destinationStopId
+                FollowStage.RIDING -> ride.expectedArrivalMs > nowMs
+            }
+        if (ok && seen.add(theirs)) j else null
+    }.sortedBy { it.arrival.expectedArrivalMs }
+}
+
+/**
+ * [alternative] as the journey to follow from now on: the same stage, at its leg of the vehicle
+ * the user is on (riding) or the one after it (changing).
+ */
+fun switchedMatch(current: Journey, match: FollowMatch, alternative: Journey): FollowMatch {
+    val anchor = if (match.stage == FollowStage.RIDING) match.legIndex else match.legIndex - 1
+    val ref = current.legs.getOrNull(anchor)?.ref
+    val i = alternative.legs.indexOfFirst { it.ref == ref }.coerceAtLeast(0)
+    val leg = if (match.stage == FollowStage.RIDING) i else (i + 1).coerceAtMost(alternative.legs.lastIndex)
+    return match.copy(key = alternative.departure.ref, legIndex = leg, offMetres = 0.0, wayId = alternative.wayId)
 }
 
 /** What following is doing, for the card and the map. */
@@ -211,6 +293,10 @@ data class FollowMemory(
         return if (count >= pinAfter) copy(pinned = m, pending = null, pendingCount = 0, misses = 0)
         else copy(pinned = keep, pending = m.key, pendingCount = count, misses = keptMisses)
     }
+
+    /** The user switched to another way: follow [match] at once. */
+    fun switchTo(match: FollowMatch): FollowMemory =
+        copy(pinned = match, pending = null, pendingCount = 0, misses = 0, dismissed = dismissed - match.key)
 
     fun dismiss(key: ServiceRef): FollowMemory =
         copy(pinned = pinned?.takeIf { it.key != key }, pending = pending?.takeIf { it != key }, dismissed = dismissed + key)

@@ -28,6 +28,19 @@ data class LegRow(
     val changeMinutes: Int?,
 )
 
+/**
+ * One way of a route with several (plan 5.6): its [label] as typed (blank shows its lines), the
+ * lines of each of its legs, and whether it is [removed] (kept until SAVE ROUTE, so it can be put back).
+ */
+data class WayRow(
+    val id: String,
+    val number: Int,
+    val label: String,
+    val lines: List<List<LineBadge>> = emptyList(),
+    val legCount: Int = 1,
+    val removed: Boolean = false,
+)
+
 /** A saved place to pick as an end of the route. */
 data class PlaceChoice(val id: String, val name: String, val icon: PlaceIcon)
 
@@ -45,6 +58,8 @@ data class EditRouteUiState(
     val fromPlaceId: String? = null,
     val toPlaceId: String? = null,
     val legs: List<LegRow> = emptyList(),
+    /** The ways when the route has more than one; empty otherwise (the legs show instead). */
+    val ways: List<WayRow> = emptyList(),
     /** Home cannot show leave-by from the chosen From place; says why. */
     val warning: String? = null,
     val saving: Boolean = false,
@@ -57,6 +72,7 @@ data class EditRouteUiState(
     val defaultName: String get() = "$origin to $destination"
     val busy: Boolean get() = saving || deleting
     val saveProblem: String? get() = routeSaveProblem(fromPlaceId, toPlaceId)
+        ?: if (ways.isNotEmpty() && ways.all { it.removed }) "A route needs at least one way. Put one back, or delete the route." else null
     val canSave: Boolean get() = !loading && !missing && !busy && saveProblem == null
 
     /** "Home to Work" when linked, else the typed name, else the stations; for dialogs. */
@@ -120,15 +136,33 @@ class EditRouteStateHolder(
             fromPlaceId = from,
             toPlaceId = to,
             legs = legRows(t, emptyMap()),
+            ways = wayRows(t),
             warning = warningFor(from),
         )
         // The names of change stations and the lines come from the timetable; fill them in when known.
         val names = changeStationNames(t)
-        mutable.update { it.copy(legs = legRows(t, names, lines = linesOfLegs(t))) }
+        val wayLines = t.ways.associate { w -> w.id to linesOfLegs(w.legs) }
+        mutable.update { s ->
+            s.copy(
+                legs = legRows(t, names, lines = linesOfLegs(t.legs)),
+                ways = s.ways.map { it.copy(lines = wayLines[it.id].orEmpty()) },
+            )
+        }
     }
 
-    private fun warningFor(fromId: String?): String? =
-        leaveByWarning(saved.firstOrNull { it.id == fromId }, trip?.legs?.firstOrNull(), trip?.originName.orEmpty())
+    private fun wayRows(t: SavedTrip): List<WayRow> =
+        if (t.ways.size < 2) emptyList()
+        else t.ways.mapIndexed { i, w -> WayRow(w.id, i + 1, w.label.orEmpty(), legCount = w.legs.size) }
+
+    /** The leave-by warning, when no way (still kept) starts at a stop of the From place. */
+    private fun warningFor(fromId: String?): String? {
+        val t = trip ?: return null
+        val place = saved.firstOrNull { it.id == fromId }
+        val removed = mutable.value.ways.filter { it.removed }.mapTo(HashSet()) { it.id }
+        val kept = t.ways.filter { it.id !in removed }.ifEmpty { t.ways }
+        val warnings = kept.map { leaveByWarning(place, it.legs.firstOrNull(), t.originName) }
+        return if (warnings.any { it == null }) null else warnings.firstOrNull()
+    }
 
     // ---------------------------------------------------------------- legs
 
@@ -136,7 +170,7 @@ class EditRouteStateHolder(
         runCatching { core.linesAt(stopId) }.getOrElse { if (it is CancellationException) throw it else emptyList() }
     }
 
-    private suspend fun linesOfLegs(t: SavedTrip): List<List<LineBadge>> = t.legs.map { leg ->
+    private suspend fun linesOfLegs(legs: List<app.transittracker.model.TripLeg>): List<List<LineBadge>> = legs.map { leg ->
         lineBadges(legLines(leg, leg.originStopIds.flatMap { routesAt(it) }, leg.destinationStopIds.flatMap { routesAt(it) }))
     }
 
@@ -181,6 +215,17 @@ class EditRouteStateHolder(
 
     fun setTo(placeId: String?) = mutable.update { it.copy(toPlaceId = placeId) }
 
+    /** Names way [id] ("Train via Gordon"); blank shows its lines. */
+    fun setWayLabel(id: String, text: String) = mutable.update { s ->
+        s.copy(ways = s.ways.map { if (it.id == id) it.copy(label = text) else it })
+    }
+
+    /** Removes way [id], or puts it back (it goes when the route is saved). */
+    fun toggleWayRemoved(id: String) {
+        mutable.update { s -> s.copy(ways = s.ways.map { if (it.id == id) it.copy(removed = !it.removed) else it }) }
+        mutable.update { it.copy(warning = warningFor(it.fromPlaceId)) }
+    }
+
     // ---------------------------------------------------------------- save and delete
 
     fun save() {
@@ -192,7 +237,7 @@ class EditRouteStateHolder(
         scope.launch {
             var linked = false
             try {
-                core.saveTrip(t.copy(customName = s.name.trim().takeIf { it.isNotEmpty() }, folder = cleanFolder(s.folder)))
+                core.saveTrip(withEditedWays(t, s.ways).copy(customName = s.name.trim().takeIf { it.isNotEmpty() }, folder = cleanFolder(s.folder)))
                 linked = true
                 places.linkTrip(t.id, s.fromPlaceId, s.toPlaceId)
                 mutable.update { it.copy(saving = false, finished = true) }
@@ -247,4 +292,15 @@ class EditRouteStateHolder(
     private companion object {
         const val CHANGE_STATION = "Change station"
     }
+}
+
+/** [trip] with the ways of [rows] (labels as typed, removed ones gone); unchanged when [rows] is empty. */
+fun withEditedWays(trip: SavedTrip, rows: List<WayRow>): SavedTrip {
+    if (rows.isEmpty()) return trip
+    val byId = rows.associateBy { it.id }
+    val kept = trip.ways.mapNotNull { w ->
+        val row = byId[w.id] ?: return@mapNotNull w
+        if (row.removed) null else w.copy(label = row.label.trim().takeIf { it.isNotEmpty() })
+    }
+    return if (kept.isEmpty()) trip else trip.withWays(kept)
 }

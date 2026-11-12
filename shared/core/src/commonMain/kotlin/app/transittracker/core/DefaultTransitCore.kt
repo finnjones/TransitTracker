@@ -20,6 +20,7 @@ import app.transittracker.model.TestPushResponse
 import app.transittracker.model.Route
 import app.transittracker.model.RouteId
 import app.transittracker.model.SavedTrip
+import app.transittracker.model.bestRuns
 import app.transittracker.model.ServiceDate
 import app.transittracker.model.ServiceDetail
 import app.transittracker.model.ServiceRef
@@ -602,7 +603,7 @@ fun alarmTimes(tt: app.transittracker.model.Timetable, trip: SavedTrip, alarm: A
     var extraDays = 0
     for (offset in -1..days) {
         val date = ServiceTime.formatDate(today.plus(DatePeriod(days = offset)))
-        for (journey in planner.forServiceDay(trip, date)) {
+        for (journey in alarmJourneys(trip, planner.forServiceDay(trip, date))) {
             val departure = journey.departure.scheduledDepartureMs
             val day = ServiceTime.isoDayOfWeek(ServiceTime.localDate(departure))
             if (alarm.daysOfWeek.isNotEmpty() && day !in alarm.daysOfWeek) continue
@@ -616,6 +617,19 @@ fun alarmTimes(tt: app.transittracker.model.Timetable, trip: SavedTrip, alarm: A
         if (result.size >= count && ++extraDays > 1) break
     }
     return result.distinct().sorted().take(count)
+}
+
+/**
+ * The runs an alarm is for: those of the pinned way; else, when the trip has several ways, the
+ * runs no other way beats (see [bestRuns]); else all of them.
+ */
+internal fun alarmJourneys(trip: SavedTrip, journeys: List<Journey>): List<Journey> {
+    val pinned = trip.pinnedWay
+    return when {
+        pinned != null -> journeys.filter { it.follows(pinned.id) }
+        trip.ways.size > 1 -> bestRuns(journeys, { it.departure.scheduledDepartureMs }, { it.arrival.scheduledArrivalMs })
+        else -> journeys
+    }
 }
 
 /** `HH:mm` in Sydney local time. */

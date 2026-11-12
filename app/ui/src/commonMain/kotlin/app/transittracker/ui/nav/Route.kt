@@ -117,6 +117,10 @@ sealed interface Route {
         val timeMs: Long? = null,
         val timeKind: PlanTimeKind = PlanTimeKind.DEPART_AT,
         val fromOnboarding: Boolean = false,
+        /** To look at only (other ways from the next stop, while on the way): nothing is offered to save. */
+        val browseOnly: Boolean = false,
+        /** While on the way: where the user is, so a journey found can be taken (TAKE THIS ONE). */
+        val takeFrom: TakeFrom? = null,
     ) : Route {
         override val title get() = "Journey options"
     }
@@ -128,6 +132,10 @@ sealed interface Route {
         val to: JourneyEnd,
         val itinerary: Itinerary,
         val fromOnboarding: Boolean = false,
+        /** To look at only: no SAVE ROUTE (see [JourneyOptions.browseOnly]). */
+        val browseOnly: Boolean = false,
+        /** While on the way: TAKE THIS ONE follows this journey from where the user is. */
+        val takeFrom: TakeFrom? = null,
     ) : Route {
         override val title get() = "Journey"
     }
@@ -198,6 +206,24 @@ data class JourneyEnd(
 ) {
     fun toPlanEndpoint(): PlanEndpoint = PlanEndpoint(position, plannerPlaceId)
 }
+
+/**
+ * Where the user is on the way, for TAKE THIS ONE: on (or just off, [changing]) ride [ride] of
+ * the journey followed on saved trip [tripId] ([wayId], its [rideIndex]th ride), boarded at
+ * [boardStopId]; [nextStopId] is where they get off it to take a journey found from there (the
+ * next stop, or where they got off).
+ */
+@Serializable
+data class TakeFrom(
+    val tripId: String,
+    val wayId: String?,
+    val rideIndex: Int,
+    val ride: ServiceRef,
+    val boardStopId: StopId,
+    val nextStopId: StopId,
+    val nextStopPosition: LatLng,
+    val changing: Boolean,
+)
 
 /** One ride of a [Route.JourneyMap]: the service and the stops (platforms) it is boarded and left at. */
 @Serializable

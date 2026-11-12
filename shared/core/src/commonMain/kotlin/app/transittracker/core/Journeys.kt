@@ -7,6 +7,7 @@ import app.transittracker.model.Journey
 import app.transittracker.model.RouteId
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.ServiceDate
+import app.transittracker.model.ServiceRef
 import app.transittracker.model.ServiceTime
 import app.transittracker.model.StopId
 import app.transittracker.model.Timetable
@@ -16,18 +17,28 @@ import app.transittracker.model.departuresAfter
 /**
  * Builds [Journey]s for a [SavedTrip] from the timetable plus live data.
  *
+ * Each of the trip's [SavedTrip.ways] is worked out on its own, then the results are merged in
+ * departure order, each tagged with its [Journey.wayId]. Within one way:
  * - Single leg: the leg's departures.
  * - Multi-leg: for each departure of the first leg, each next leg is the first non-cancelled
  *   departure leaving at or after the previous leg's expected arrival + [TripLeg.minConnectionMinutes].
- *   Cancelled first-leg services are only listed for single-leg trips.
+ *   Cancelled first-leg services are only listed for single-leg ways.
+ * The same run reached by two ways (one limited to a line, one not) is listed once, for the first
+ * way, with the others in [Journey.alsoWays].
  */
 class JourneyPlanner(private val timetable: Timetable, private val overlay: Overlay) {
 
-    /** The next [count] journeys whose (expected) first departure is at or after [nowMs]. */
-    fun upcoming(trip: SavedTrip, nowMs: Long, count: Int): List<Journey> {
-        if (trip.legs.isEmpty() || count <= 0) return emptyList()
-        val first = trip.legs.first()
-        val multi = trip.legs.size > 1
+    /**
+     * The next [count] journeys of each way whose (expected) first departure is at or after
+     * [nowMs], merged in departure order (so up to [count] times the number of ways).
+     */
+    fun upcoming(trip: SavedTrip, nowMs: Long, count: Int): List<Journey> =
+        merge(trip.ways.map { w -> upcomingFor(w.legs, nowMs, count).map { it.copy(wayId = w.id) } })
+
+    private fun upcomingFor(legs: List<TripLeg>, nowMs: Long, count: Int): List<Journey> {
+        if (legs.isEmpty() || count <= 0) return emptyList()
+        val first = legs.first()
+        val multi = legs.size > 1
         val result = ArrayList<Journey>(count)
         var limit = count * 2 + 40
         // Widen the search when chaining fails for many candidates (e.g. last connection of the night).
@@ -36,7 +47,7 @@ class JourneyPlanner(private val timetable: Timetable, private val overlay: Over
             val firstLegs = legDepartures(first, nowMs, limit)
             for (dep in firstLegs) {
                 if (multi && dep.status == DepartureStatus.CANCELLED) continue
-                val journey = chain(dep, trip.legs) ?: continue
+                val journey = chain(dep, legs) ?: continue
                 result += journey
                 if (result.size == count) return result
             }
@@ -47,28 +58,33 @@ class JourneyPlanner(private val timetable: Timetable, private val overlay: Over
     }
 
     /**
-     * Journeys already under way at [nowMs]: the first leg has left (expected time) within the
-     * last [lookbackMs], it is not cancelled, and the last leg has not yet arrived, give or take
-     * [arrivedGraceMs]. Each is chained as in [upcoming], with live data, so a late first leg
-     * moves the connection on to the next one that can be made. Earliest first.
+     * Journeys already under way at [nowMs], on any way: the first leg has left (expected time)
+     * within the last [lookbackMs], it is not cancelled, and the last leg has not yet arrived,
+     * give or take [arrivedGraceMs]. Each is chained as in [upcoming], with live data, so a late
+     * first leg moves the connection on to the next one that can be made. Earliest first.
      */
     fun underway(
         trip: SavedTrip,
         nowMs: Long,
         lookbackMs: Long = UNDERWAY_LOOKBACK_MS,
         arrivedGraceMs: Long = ARRIVED_GRACE_MS,
-    ): List<Journey> {
-        if (trip.legs.isEmpty()) return emptyList()
-        return legDepartures(trip.legs.first(), nowMs - lookbackMs, UNDERWAY_LIMIT)
-            .filter { it.status != DepartureStatus.CANCELLED && it.expectedDepartureMs < nowMs }
-            .mapNotNull { chain(it, trip.legs) }
-            .filter { j -> j.arrival.expectedArrivalMs > nowMs - arrivedGraceMs }
-    }
+    ): List<Journey> = merge(
+        trip.ways.map { w ->
+            if (w.legs.isEmpty()) return@map emptyList()
+            legDepartures(w.legs.first(), nowMs - lookbackMs, UNDERWAY_LIMIT)
+                .filter { it.status != DepartureStatus.CANCELLED && it.expectedDepartureMs < nowMs }
+                .mapNotNull { chain(it, w.legs)?.copy(wayId = w.id) }
+                .filter { j -> j.arrival.expectedArrivalMs > nowMs - arrivedGraceMs }
+        },
+    )
 
-    /** Every journey whose first leg leaves on [serviceDate] (a full service day, including after midnight). */
-    fun forServiceDay(trip: SavedTrip, serviceDate: ServiceDate): List<Journey> {
-        if (trip.legs.isEmpty()) return emptyList()
-        val first = trip.legs.first()
+    /** Every journey, on any way, whose first leg leaves on [serviceDate] (a full service day, including after midnight). */
+    fun forServiceDay(trip: SavedTrip, serviceDate: ServiceDate): List<Journey> =
+        merge(trip.ways.map { w -> forServiceDay(w.legs, serviceDate).map { it.copy(wayId = w.id) } })
+
+    private fun forServiceDay(legs: List<TripLeg>, serviceDate: ServiceDate): List<Journey> {
+        if (legs.isEmpty()) return emptyList()
+        val first = legs.first()
         val origins = expand(first.originStopIds)
         val dests = expand(first.destinationStopIds)
         val scheduled = timetable.departures(
@@ -84,16 +100,32 @@ class JourneyPlanner(private val timetable: Timetable, private val overlay: Over
         ).map(overlay::departure)
         val added = overlay.addedDepartures(origins, dests, first.routeIds).filter { it.ref.serviceDate == serviceDate }
         val firstLegs = (scheduled + added).sortedBy { it.scheduledDepartureMs }
-        val multi = trip.legs.size > 1
+        val multi = legs.size > 1
         return firstLegs.mapNotNull { dep ->
-            if (multi && dep.status == DepartureStatus.CANCELLED) null else chain(dep, trip.legs)
+            if (multi && dep.status == DepartureStatus.CANCELLED) null else chain(dep, legs)
         }
     }
 
     /** Route ids involved in a list of journeys (what live polling should watch). */
     fun routesOf(trip: SavedTrip, journeys: List<Journey>): Set<RouteId> =
         journeys.flatMap { j -> j.legs.map { it.routeId } }.toSet() +
-            trip.legs.flatMap { it.routeIds.orEmpty() }
+            trip.ways.flatMap { w -> w.legs.flatMap { it.routeIds.orEmpty() } }
+
+    /**
+     * One list from each way's journeys: the same run (same services) only once, for the way
+     * listed first; in expected departure order, then expected arrival.
+     */
+    private fun merge(perWay: List<List<Journey>>): List<Journey> {
+        if (perWay.size == 1) return perWay[0]
+        val byRun = LinkedHashMap<List<ServiceRef>, Journey>()
+        for (j in perWay.flatten()) {
+            val key = j.legs.map { it.ref }
+            val first = byRun[key]
+            byRun[key] = if (first == null) j else first.copy(alsoWays = first.alsoWays + listOfNotNull(j.wayId))
+        }
+        return byRun.values
+            .sortedWith(compareBy<Journey> { it.departure.expectedDepartureMs }.thenBy { it.arrival.expectedArrivalMs })
+    }
 
     private fun chain(first: Departure, legs: List<TripLeg>): Journey? {
         if (legs.size == 1) return Journey(listOf(first))

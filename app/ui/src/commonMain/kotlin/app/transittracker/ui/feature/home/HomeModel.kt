@@ -7,8 +7,10 @@ import app.transittracker.model.Journey
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.ServiceDate
 import app.transittracker.model.StopId
+import app.transittracker.model.bestRuns
 import app.transittracker.ui.feature.follow.FollowMatch
 import app.transittracker.ui.feature.follow.FollowStage
+import app.transittracker.ui.feature.follow.isOneOff
 import app.transittracker.ui.places.SavedPlace
 import app.transittracker.ui.places.TripPlaces
 import app.transittracker.ui.settings.CardDensity
@@ -81,12 +83,50 @@ data class TripCard(
     val noMoreServices: NoMoreServices?,
     /** Follow my journey: the user is on a journey of this trip (shown first, the rest as other services). */
     val onTheWay: OnTheWay? = null,
+    /** For a route with several ways: "BEST OF 3 WAYS", or "PINNED · T9 FROM GORDON"; null for one way. */
+    val waysLabel: String? = null,
 )
 
 data class NoMoreServices(val firstNextDayMs: Long?)
 
-/** The journey Follow my journey says the user is on, with its live times from the core. */
-data class Followed(val match: FollowMatch, val journey: Journey)
+/**
+ * The journey Follow my journey says the user is on, with its live times from the core, and the
+ * other ways of the trip still open from there ([alternativesOf]).
+ */
+data class Followed(val match: FollowMatch, val journey: Journey, val alternatives: List<Journey> = emptyList())
+
+/**
+ * Another way open to the user on the way: what to do differently ([words]: "STAY ON TO CENTRAL",
+ * "CHANGE AT REDFERN TO 333"), the rides it takes from there, and when it arrives against the
+ * journey followed ([minutesSooner]: positive is sooner, negative later).
+ */
+data class AlternativeWay(
+    val journey: Journey,
+    val words: String,
+    val rides: List<Departure>,
+    val arrivalMs: Long,
+    val minutesSooner: Int,
+)
+
+/** [alternative] described against [current] for the on-the-way card; [stopNames] gives short stop names. */
+fun alternativeWay(current: Journey, match: FollowMatch, alternative: Journey, stopNames: Map<StopId, String>): AlternativeWay {
+    val anchor = if (match.stage == FollowStage.RIDING) match.legIndex else match.legIndex - 1
+    val ref = current.legs.getOrNull(anchor)?.ref
+    val i = alternative.legs.indexOfFirst { it.ref == ref }.coerceAtLeast(0)
+    val rest = alternative.legs.drop(i)
+    fun name(id: StopId) = stopNames[id]?.uppercase()
+    val words = if (rest.size == 1) {
+        "STAY ON" + (name(rest[0].destinationStopId)?.let { " TO $it" } ?: "")
+    } else {
+        // The first ride after this vehicle where the way goes on differently.
+        val mine = current.legs.drop(anchor)
+        val k = (1 until rest.size).firstOrNull { n -> mine.getOrNull(n)?.ref != rest[n].ref } ?: 1
+        val next = rest[k]
+        "CHANGE" + (name(next.originStopId)?.let { " AT $it" } ?: "") + " TO ${next.routeName}"
+    }
+    val sooner = ((current.arrival.expectedArrivalMs - alternative.arrival.expectedArrivalMs) / 60_000L).toInt()
+    return AlternativeWay(alternative, words, rest.drop(1), alternative.arrival.expectedArrivalMs, sooner)
+}
 
 /**
  * The card of a trip the user is on (Follow my journey): the ride they are on and the connection
@@ -109,6 +149,10 @@ data class OnTheWay(
     val legEnd: String?,
     /** Short name of where [leg] is boarded, when known (the change stop while changing). */
     val legStart: String?,
+    /** Other ways of the trip still open from here, soonest arrival first (at most [ALTERNATIVES_SHOWN]). */
+    val alternatives: List<AlternativeWay> = emptyList(),
+    /** A journey taken on the way (TAKE THIS ONE), not one of the route's saved ways. */
+    val oneOff: Boolean = false,
 ) {
     val arrivalMs: Long get() = journey.arrival.expectedArrivalMs
     val isLastLeg: Boolean get() = legIndex == journey.legs.lastIndex
@@ -122,7 +166,9 @@ fun onTheWayOf(trip: SavedTrip, followed: Followed, stopNames: Map<StopId, Strin
     val riding = followed.match.stage == FollowStage.RIDING
     val next = if (riding) legs.getOrNull(k + 1) else null
     val change = next?.let { ((it.expectedDepartureMs - leg.expectedArrivalMs) / 60_000).toInt() }
-    val allowed = trip.legs.getOrNull(k + 1)?.minConnectionMinutes
+    val oneOff = isOneOff(followed.journey.wayId)
+    // A journey taken on the way has no saved change times: only a cancelled connection is tight.
+    val allowed = if (oneOff) null else (trip.way(followed.journey.wayId)?.legs ?: trip.legs).getOrNull(k + 1)?.minConnectionMinutes
     val tight = next != null && (next.status == DepartureStatus.CANCELLED || (change != null && allowed != null && change < allowed))
     return OnTheWay(
         journey = followed.journey,
@@ -134,8 +180,13 @@ fun onTheWayOf(trip: SavedTrip, followed: Followed, stopNames: Map<StopId, Strin
         tight = tight,
         legEnd = stopNames[leg.destinationStopId],
         legStart = stopNames[leg.originStopId],
+        alternatives = followed.alternatives.take(ALTERNATIVES_SHOWN).map { alternativeWay(followed.journey, followed.match, it, stopNames) },
+        oneOff = oneOff,
     )
 }
+
+/** Other ways listed on the on-the-way card. */
+const val ALTERNATIVES_SHOWN = 3
 
 // ---------------------------------------------------------------- rules
 
@@ -146,6 +197,61 @@ fun headlineOf(journeys: List<Journey>): Journey? =
 /** Up to [count] journeys other than [headline], in time order. */
 fun followingOf(journeys: List<Journey>, headline: Journey?, count: Int = 2): List<Journey> =
     journeys.filter { it !== headline }.sortedBy { it.departure.expectedDepartureMs }.take(count)
+
+/**
+ * The journeys of a route with several ways that Home offers: those of the pinned way when one is
+ * pinned, else all of them.
+ */
+fun journeysShown(trip: SavedTrip, journeys: List<Journey>): List<Journey> {
+    val pinned = trip.pinnedWay ?: return journeys
+    return journeys.filter { it.follows(pinned.id) }
+}
+
+/** The origin stops of the way [journey] follows (the trip's first way when not known). */
+fun wayOrigins(trip: SavedTrip, journey: Journey): Set<StopId> =
+    (trip.way(journey.wayId)?.legs ?: trip.legs).firstOrNull()?.originStopIds.orEmpty()
+
+/**
+ * When the user has to leave for [journey]: its departure, less the walk from [from] to the stop
+ * it leaves from when the route starts at a saved place and the walk is known.
+ */
+fun leaveAtFor(trip: SavedTrip, journey: Journey, from: SavedPlace?): Long {
+    val dep = journey.departure
+    val walk = from?.let { walkTo(it, dep.originStopId, wayOrigins(trip, journey))?.first } ?: 0
+    return dep.expectedDepartureMs - walk * 60_000L
+}
+
+/**
+ * The headline of a route with several ways (none pinned): the run that gets there first among
+ * those the user can still make without running (leave-by not yet passed); if there is none,
+ * among those not yet gone. Never a cancelled one. Ties go to the one that leaves later, then the
+ * one with fewer changes, then the earlier way.
+ */
+fun bestHeadline(trip: SavedTrip, journeys: List<Journey>, from: SavedPlace?, nowMs: Long): Journey? {
+    val running = journeys.filter { j -> j.legs.none { it.status == DepartureStatus.CANCELLED } && j.departure.expectedDepartureMs > nowMs }
+    val order = compareBy<Journey> { it.arrival.expectedArrivalMs }
+        .thenByDescending { leaveAtFor(trip, it, from) }
+        .thenBy { it.legs.size }
+    val relaxed = running.filter { leaveAtFor(trip, it, from) >= nowMs }
+    return (relaxed.ifEmpty { running }).minWithOrNull(order) ?: headlineOf(journeys)
+}
+
+/**
+ * The services listed under the headline of a route with several ways: the next [count] in time
+ * order that no other way beats (leaving no earlier and arriving sooner), so a slow way that
+ * leaves first is not offered over a faster one that leaves later.
+ */
+fun bestFollowing(trip: SavedTrip, journeys: List<Journey>, headline: Journey?, from: SavedPlace?, count: Int = 2): List<Journey> {
+    val best = bestRuns(journeys, { leaveAtFor(trip, it, from) }, { it.arrival.expectedArrivalMs })
+    return best.filter { it !== headline && it != headline }.sortedBy { it.departure.expectedDepartureMs }.take(count)
+}
+
+/** "BEST OF 3 WAYS" / "PINNED · T9 FROM GORDON" for a route with several ways; null for one way. */
+fun waysLabel(trip: SavedTrip, wayName: (app.transittracker.model.RouteOption) -> String): String? {
+    if (trip.ways.size < 2) return null
+    val pinned = trip.pinnedWay
+    return if (pinned != null) "PINNED · " + wayName(pinned).uppercase() else "BEST OF ${trip.ways.size} WAYS"
+}
 
 /** Other services listed under a journey the user is on. */
 const val OTHER_SERVICES = 3
@@ -255,10 +361,11 @@ fun buildHomeState(inputs: HomeInputs, nowMs: Long, today: ServiceDate): HomeUiS
 }
 
 private fun card(trip: SavedTrip, full: Boolean, inputs: HomeInputs, places: Map<String, SavedPlace>, nowMs: Long): TripCard {
-    val journeys = inputs.upcoming[trip.id].orEmpty()
-    val headline = headlineOf(journeys)
     val link = inputs.links[trip.id]
     val fromPlace = link?.fromPlaceId?.let { places[it] }
+    val journeys = journeysShown(trip, inputs.upcoming[trip.id].orEmpty())
+    val choosing = trip.ways.size > 1 && trip.pinnedWay == null
+    val headline = if (choosing) bestHeadline(trip, journeys, fromPlace, nowMs) else headlineOf(journeys)
     val toPlace = link?.toPlaceId?.let { places[it] }
     val linked = fromPlace != null || toPlace != null
     val stations = "${trip.originName} to ${trip.destinationName}".uppercase()
@@ -269,7 +376,7 @@ private fun card(trip: SavedTrip, full: Boolean, inputs: HomeInputs, places: Map
     }
     val leaveBy = if (fromPlace != null && headline != null) {
         val dep = headline.departure
-        walkTo(fromPlace, dep.originStopId, trip.legs.firstOrNull()?.originStopIds.orEmpty())?.let { (walk, stopName) ->
+        walkTo(fromPlace, dep.originStopId, wayOrigins(trip, headline))?.let { (walk, stopName) ->
             leaveByState(dep.expectedDepartureMs, walk, nowMs)?.let { (at, state) -> LeaveBy(at, state, walk, stopName) }
         }
     } else null
@@ -284,12 +391,31 @@ private fun card(trip: SavedTrip, full: Boolean, inputs: HomeInputs, places: Map
         stationsLine = if (linked || trip.customName != null) stations else null,
         headline = headline,
         // On the way, the next departures are all "other services": the headline among them.
-        following = if (onTheWay != null) journeys.sortedBy { it.departure.expectedDepartureMs }.take(OTHER_SERVICES) else followingOf(journeys, headline),
+        following = when {
+            onTheWay != null -> journeys.sortedBy { it.departure.expectedDepartureMs }.take(OTHER_SERVICES)
+            choosing -> bestFollowing(trip, journeys, headline, fromPlace)
+            else -> followingOf(journeys, headline)
+        },
         changes = changes,
         leaveBy = leaveBy,
         linkedToPlaces = linked,
         noMoreServices = if (journeys.isEmpty()) NoMoreServices(inputs.firstNextDay[trip.id]) else null,
         onTheWay = onTheWay,
+        waysLabel = waysLabel(trip) { w -> wayName(trip, w, inputs.upcoming[trip.id].orEmpty()) },
     )
 }
 
+/**
+ * What a way is called: its label, else its lines as the services found for it run them
+ * ("T9", "T1/T9", "333 then T4"), else "Way 2".
+ */
+fun wayName(trip: SavedTrip, way: app.transittracker.model.RouteOption, journeys: List<Journey>): String {
+    way.label?.takeIf { it.isNotBlank() }?.let { return it }
+    val runs = journeys.filter { it.wayId == way.id || way.id in it.alsoWays }
+    if (runs.isNotEmpty()) {
+        return way.legs.indices.joinToString(" then ") { i ->
+            runs.mapNotNull { it.legs.getOrNull(i)?.routeName }.distinct().sorted().joinToString("/")
+        }
+    }
+    return "Way ${trip.ways.indexOfFirst { it.id == way.id } + 1}"
+}

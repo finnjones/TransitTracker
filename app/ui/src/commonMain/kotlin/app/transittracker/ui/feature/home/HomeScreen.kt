@@ -528,7 +528,7 @@ private fun OnTheWayCard(card: TripCard, otw: OnTheWay, nowMs: Long, actions: Ho
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             TitleParts(card.titleParts, TtTheme.type.name17)
-            Label("ON YOUR WAY", color = c.go, bold = true, size = LabelSize.L10)
+            Label(if (otw.oneOff) "ON YOUR WAY · ONE-OFF" else "ON YOUR WAY", color = c.go, bold = true, size = LabelSize.L10)
         }
         // The ride now (or the one being walked to).
         val status = statusPresentation(leg)

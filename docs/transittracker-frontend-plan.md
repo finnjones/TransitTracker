@@ -684,9 +684,18 @@ one you just left at that stop), with live times, so a late train shows a
 better bus connection further on. Each says what to do differently ("CHANGE AT
 REDFERN TO 333", "STAY ON TO CENTRAL"), when it arrives and how many minutes
 sooner or later than yours, with SWITCH; the card then follows that way. A way
-that gets off at a stop the vehicle has passed is not offered. ALL WAYS FROM
-THE NEXT STOP asks the planner for every way from the next stop, at the time
-you reach it, to the route's end; it is to look at only, with nothing to save.
+that gets off at a stop the vehicle has passed is not offered; a way that
+boards your vehicle further along (at a later station) is, and stays chosen
+while you ride towards that station. ALL WAYS FROM THE NEXT STOP asks the
+planner for every way from the next stop, at the time you reach it, to the
+route's end. Nothing there is saved as a route of its own; instead a journey
+opened from there has TAKE THIS ONE: Trips follows it from where you are (the
+ride you are on to that stop, then the journey's rides) with live times, for
+this trip only, marked ONE-OFF, until it arrives. The route's saved ways stay
+on offer to switch back to. "Also add it to the route as a way" keeps it,
+from the route's start: the way you were on up to that stop, then the new
+rides. A journey with a ride the phone's timetable does not have cannot be
+taken, and says why.
 
 Device alarms follow the pinned way, else the runs no other way beats. The
 return of a route reverses every way. Data saved before ways existed reads as

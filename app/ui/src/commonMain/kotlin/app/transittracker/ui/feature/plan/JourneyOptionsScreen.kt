@@ -104,7 +104,7 @@ fun JourneyOptionsPage(route: Route.JourneyOptions, holder: JourneyOptionsStateH
             open = { o ->
                 val first = o.itinerary.rides.firstOrNull()
                 nav.push(
-                    Route.JourneyDetail(route.from, route.to, o.itinerary, route.fromOnboarding, route.browseOnly),
+                    Route.JourneyDetail(route.from, route.to, o.itinerary, route.fromOnboarding, route.browseOnly, route.takeFrom),
                     first?.let { PageTransition.vehiclePass(it.mode ?: Mode.OTHER, it.routeColor) },
                 )
             },

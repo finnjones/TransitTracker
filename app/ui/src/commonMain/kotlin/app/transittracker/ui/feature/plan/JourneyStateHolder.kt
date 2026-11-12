@@ -7,7 +7,12 @@ import app.transittracker.model.ServiceRef
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
 import app.transittracker.model.rides
+import app.transittracker.ui.feature.follow.JourneyFollower
+import app.transittracker.ui.feature.follow.OneOffJourney
+import app.transittracker.ui.feature.follow.oneOffOf
+import app.transittracker.ui.feature.follow.takeBlocker
 import app.transittracker.ui.nav.JourneyEnd
+import app.transittracker.ui.nav.TakeFrom
 import app.transittracker.ui.places.PlacesStore
 import app.transittracker.ui.state.StateHolder
 import kotlinx.coroutines.CoroutineScope
@@ -55,11 +60,27 @@ sealed interface SaveState {
     data class Failed(val message: String, val ready: Ready) : SaveState
 }
 
+/** TAKE THIS ONE: following a journey found while on the way (only when the page was opened from there). */
+sealed interface TakeState {
+    data object Checking : TakeState
+
+    /** It can be taken: [journey]; [canAdd] when it can also be added to the route ([routeTitle]) as a way. */
+    data class Ready(val journey: OneOffJourney, val canAdd: Boolean, val routeTitle: String?) : TakeState
+
+    /** It cannot: a plain sentence why. */
+    data class Blocked(val reason: String) : TakeState
+
+    /** Taken; the screen goes back to Trips. */
+    data object Taken : TakeState
+}
+
 /** Everything the One journey page draws (plan 5.6 step 3, Journey mockup). */
 data class JourneyUiState(
     val timeline: Timeline,
     val nowMs: Long,
     val save: SaveState = SaveState.Checking,
+    /** Null unless the page was opened on the way (TAKE THIS ONE instead of SAVE ROUTE). */
+    val take: TakeState? = null,
 )
 
 /**
@@ -76,8 +97,15 @@ class JourneyStateHolder(
     private val to: JourneyEnd,
     scope: CoroutineScope,
     private val tickMs: Long = 1_000,
+    /** Opened on the way: where the user is, for TAKE THIS ONE. */
+    private val takeFrom: TakeFrom? = null,
+    /** Follows the journey taken; without it TAKE THIS ONE is not offered. */
+    private val follower: JourneyFollower? = null,
 ) : StateHolder<JourneyUiState>(scope) {
     private val saveState = MutableStateFlow<SaveState>(SaveState.Checking)
+    private val takeState = MutableStateFlow<TakeState?>(if (takeFrom != null && follower != null) TakeState.Checking else null)
+    private var addLegs: List<app.transittracker.model.TripLeg>? = null
+    private val saver = RouteSaver(core, places)
 
     private val ticker: Flow<Long> = flow {
         while (true) {
@@ -100,14 +128,33 @@ class JourneyStateHolder(
         details.map { journeyTimeline(itinerary, it, from.name, to.name) }.distinctUntilChanged(),
         ticker,
         saveState,
-    ) { t, now, s -> JourneyUiState(t, now, s) }
+        takeState,
+    ) { t, now, s, take -> JourneyUiState(t, now, s, take) }
         .stateIn(scope, SharingStarted.Eagerly, initial)
 
     init {
-        scope.launch { saveState.value = checkSave() }
+        if (takeFrom == null) scope.launch { saveState.value = checkSave() }
+        else if (follower != null) scope.launch { takeState.value = checkTake(takeFrom) }
     }
 
-    private val saver = RouteSaver(core, places)
+    private suspend fun checkTake(from: TakeFrom): TakeState {
+        takeBlocker(itinerary)?.let { return TakeState.Blocked(it) }
+        addLegs = runCatching { saver.wayFromOrigin(from, itinerary) }.getOrNull()
+        return TakeState.Ready(oneOffOf(from, itinerary), addLegs != null, runCatching { saver.titleOf(from.tripId) }.getOrNull())
+    }
+
+    /**
+     * TAKE THIS ONE: follow the journey from where the user is, for this trip; with [addToRoute],
+     * also keep it as another way of the route.
+     */
+    fun take(addToRoute: Boolean) {
+        val ready = takeState.value as? TakeState.Ready ?: return
+        val f = follower ?: return
+        f.take(ready.journey)
+        takeState.value = TakeState.Taken
+        val legs = addLegs
+        if (addToRoute && legs != null) scope.launch { runCatching { saver.addWay(ready.journey.tripId, legs) } }
+    }
 
     /** Works out [SaveState.Ready] or [SaveState.Blocked]: pure checks, then the phone's timetable and saved routes. */
     private suspend fun checkSave(): SaveState = when (val c = saver.check(itinerary)) {

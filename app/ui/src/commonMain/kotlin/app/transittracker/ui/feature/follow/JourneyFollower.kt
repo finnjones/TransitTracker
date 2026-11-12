@@ -1,6 +1,7 @@
 package app.transittracker.ui.feature.follow
 
 import app.transittracker.model.Journey
+import app.transittracker.model.ServiceDetail
 import app.transittracker.model.ServiceRef
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 
@@ -58,10 +60,51 @@ class JourneyFollower(
     }
 
     /** The user switched to another way of the trip (see [switchedMatch]): follow [match] from now on. */
-    fun switchTo(match: FollowMatch) = memory.update { it.switchTo(match) }
+    fun switchTo(match: FollowMatch) {
+        if (!isOneOff(match.wayId)) oneOff.value = null
+        memory.update { it.switchTo(match) }
+    }
+
+    /** TAKE THIS ONE: follow [journey] (found by the planner on the way) for its trip, until it arrives. */
+    fun take(journey: OneOffJourney) {
+        oneOff.value = journey
+        memory.update { it.switchTo(journey.match) }
+    }
+
+    /** The journey taken with TAKE THIS ONE, if any. */
+    private val oneOff = MutableStateFlow<OneOffJourney?>(null)
+
+    /** The way id of the journey taken with TAKE THIS ONE, if any. */
+    val oneOffWayId: String? get() = oneOff.value?.wayId
+
+    /** The journey taken with TAKE THIS ONE, with the phone's live times (null when none). */
+    val oneOffJourney: Flow<Journey?> = oneOff.flatMapLatest { o ->
+        if (o == null) flowOf(null)
+        else {
+            val refs = o.rides.map { it.ref }.distinct()
+            combine(refs.map { ref -> core.service(ref).map<ServiceDetail, ServiceDetail?> { it }.onStart { emit(null) } }) { list ->
+                o.journeyFrom(list.filterNotNull().associateBy { it.ref })
+            }
+        }
+    }
+
+    /** The journey taken, with the latest times, or null; forgotten once it has arrived. */
+    private suspend fun liveOneOff(): Journey? {
+        val o = oneOff.value ?: return null
+        val details = o.rides.map { it.ref }.distinct().mapNotNull { ref -> runCatching { core.service(ref).first() }.getOrNull() }
+        val j = o.journeyFrom(details.associateBy { it.ref }) ?: return null
+        if (j.arrival.expectedArrivalMs + ONE_OFF_GRACE_MS < clock.nowMillis()) {
+            oneOff.compareAndSet(o, null)
+            return null
+        }
+        return j
+    }
 
     /** "Not on this one": stop following the journey whose first leg is [key], and never pick it again. */
-    fun dismiss(key: ServiceRef) = memory.update { it.dismiss(key) }
+    fun dismiss(key: ServiceRef) {
+        if (oneOff.value?.rides?.firstOrNull()?.ref == key) oneOff.value = null
+        memory.update { it.dismiss(key) }
+    }
 
     private data class Gate(val on: Boolean, val permission: PermissionState, val foreground: Boolean)
 
@@ -90,7 +133,8 @@ class JourneyFollower(
 
     private fun polling(): Flow<FollowState> = flow {
         while (true) {
-            val underway = underwayJourneys()
+            val taken = liveOneOff()
+            val underway = underwayJourneys() + listOfNotNull(taken?.let { oneOff.value?.tripId?.to(it) })
             if (underway.isEmpty()) {
                 memory.update { it.next(null, emptySet()) }
                 emit(FollowState(FollowStatus.IDLE))
@@ -123,4 +167,9 @@ class JourneyFollower(
                 RiddenLeg(d, riddenCalls(calls, d.originStopId, d.destinationStopId))
             },
         )
+
+    private companion object {
+        /** A journey taken is forgotten this long after it arrives. */
+        const val ONE_OFF_GRACE_MS = 2 * 60_000L
+    }
 }

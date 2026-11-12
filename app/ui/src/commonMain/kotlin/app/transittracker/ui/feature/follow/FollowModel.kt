@@ -185,21 +185,33 @@ fun fitsOf(
  * shares; else the best fit.
  */
 fun preferredFit(fits: List<FollowMatch>, held: FollowMatch?): FollowMatch? {
-    if (held != null) fits.firstOrNull { it.tripId == held.tripId && it.key == held.key && it.wayId == held.wayId }?.let { return it }
+    if (held != null) {
+        fits.firstOrNull { it.tripId == held.tripId && it.key == held.key && it.wayId == held.wayId }?.let { return it }
+        // A way chosen that boards this same first vehicle further on cannot fit until the vehicle
+        // gets there: while the user still fits riding that first vehicle, the choice stands.
+        if (held.stage == FollowStage.RIDING && held.legIndex == 0) {
+            fits.firstOrNull { it.tripId == held.tripId && it.key == held.key && it.stage == FollowStage.RIDING && it.legIndex == 0 }
+                ?.let { return it.copy(wayId = held.wayId) }
+        }
+    }
     return fits.minByOrNull { it.offMetres }
 }
 
 /**
  * The other ways still open from where the user is on [current] ([match]), among the trip's
- * journeys under way ([underway], with live data): those that use the vehicle the user is on, or
- * (while changing) the one they just left at the same stop, and go on differently. A way that
- * gets off this vehicle further on only counts while it has not reached that stop ([nowMs]); a
- * way with a cancelled ride to come does not count. Soonest arrival first.
+ * journeys ([underway]: those under way, and those still to come, which may board the vehicle
+ * the user is on further along; with live data): those that use the vehicle the user is on, or
+ * (while changing) the one they just left at the same stop, and go on differently. Where a way
+ * boards the user's vehicle does not matter, only where it leaves it and what comes after. A way
+ * that gets off this vehicle further on only counts while it has not reached that stop
+ * ([nowMs]); a way with a cancelled ride to come does not count. Soonest arrival first.
  */
 fun alternativesOf(current: Journey, match: FollowMatch, underway: List<Journey>, nowMs: Long): List<Journey> {
     val anchor = if (match.stage == FollowStage.RIDING) match.legIndex else match.legIndex - 1
     val on = current.legs.getOrNull(anchor) ?: return emptyList()
-    fun rest(j: Journey, from: Int) = j.legs.drop(from).map { Triple(it.ref, it.originStopId, it.destinationStopId) }
+    fun rest(j: Journey, from: Int) = j.legs.drop(from).mapIndexed { n, it ->
+        Triple(it.ref, if (n == 0) "" else it.originStopId, it.destinationStopId)
+    }
     val mine = rest(current, anchor)
     val seen = HashSet<Any>()
     return underway.mapNotNull { j ->

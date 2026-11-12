@@ -10,6 +10,7 @@ import app.transittracker.model.StopId
 import app.transittracker.model.bestRuns
 import app.transittracker.ui.feature.follow.FollowMatch
 import app.transittracker.ui.feature.follow.FollowStage
+import app.transittracker.ui.feature.follow.isOneOff
 import app.transittracker.ui.places.SavedPlace
 import app.transittracker.ui.places.TripPlaces
 import app.transittracker.ui.settings.CardDensity
@@ -150,6 +151,8 @@ data class OnTheWay(
     val legStart: String?,
     /** Other ways of the trip still open from here, soonest arrival first (at most [ALTERNATIVES_SHOWN]). */
     val alternatives: List<AlternativeWay> = emptyList(),
+    /** A journey taken on the way (TAKE THIS ONE), not one of the route's saved ways. */
+    val oneOff: Boolean = false,
 ) {
     val arrivalMs: Long get() = journey.arrival.expectedArrivalMs
     val isLastLeg: Boolean get() = legIndex == journey.legs.lastIndex
@@ -163,7 +166,9 @@ fun onTheWayOf(trip: SavedTrip, followed: Followed, stopNames: Map<StopId, Strin
     val riding = followed.match.stage == FollowStage.RIDING
     val next = if (riding) legs.getOrNull(k + 1) else null
     val change = next?.let { ((it.expectedDepartureMs - leg.expectedArrivalMs) / 60_000).toInt() }
-    val allowed = (trip.way(followed.journey.wayId)?.legs ?: trip.legs).getOrNull(k + 1)?.minConnectionMinutes
+    val oneOff = isOneOff(followed.journey.wayId)
+    // A journey taken on the way has no saved change times: only a cancelled connection is tight.
+    val allowed = if (oneOff) null else (trip.way(followed.journey.wayId)?.legs ?: trip.legs).getOrNull(k + 1)?.minConnectionMinutes
     val tight = next != null && (next.status == DepartureStatus.CANCELLED || (change != null && allowed != null && change < allowed))
     return OnTheWay(
         journey = followed.journey,
@@ -176,6 +181,7 @@ fun onTheWayOf(trip: SavedTrip, followed: Followed, stopNames: Map<StopId, Strin
         legEnd = stopNames[leg.destinationStopId],
         legStart = stopNames[leg.originStopId],
         alternatives = followed.alternatives.take(ALTERNATIVES_SHOWN).map { alternativeWay(followed.journey, followed.match, it, stopNames) },
+        oneOff = oneOff,
     )
 }
 

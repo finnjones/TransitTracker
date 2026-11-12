@@ -121,4 +121,24 @@ class SwitchWaysTest {
         val walking = changing.copy(wayId = "way-a", offMetres = 30.0)
         assertEquals(walking, preferredFit(listOf(walking), riding.copy(wayId = "way-b")))
     }
+
+    @Test
+    fun aWayThatBoardsThisTrainFurtherAlongIsOpenAndOneThatDoesTheSameIsNot() {
+        // Boards the same T1 at Burwood (+5, still to come), on to Westmead for the 700.
+        val fromBurwood = Journey(listOf(dep("T1-0800", "T1", "BUR", "WES", 5, 26), dep("700-0828", "700", "WES-C", "UNI", 28, 36)), "way-g")
+        // Boards it at Burwood too, but then does just what the user is doing.
+        val sameFromBurwood = Journey(listOf(dep("T1-0800", "T1", "BUR", "PAR", 5, 20), current.legs[1]), "way-h")
+        assertEquals(listOf(fromBurwood), alternativesOf(current, riding, listOf(current, fromBurwood, sameFromBurwood), at(3)))
+    }
+
+    @Test
+    fun aWayChosenThatBoardsThisTrainFurtherAlongStaysChosenWhileTheUserRidesIt() {
+        // Only the way the user was on fits (the chosen one boards at Burwood, not reached yet).
+        val fit = riding.copy(offMetres = 12.0)
+        val chosen = riding.copy(wayId = "way-g")
+        assertEquals(fit.copy(wayId = "way-g"), preferredFit(listOf(fit), chosen))
+        // Changing at Parramatta is something else: the fix wins.
+        val walking = changing.copy(offMetres = 20.0)
+        assertEquals(walking, preferredFit(listOf(walking), chosen))
+    }
 }

@@ -10,9 +10,11 @@ import app.transittracker.model.WallClock
 import app.transittracker.ui.feature.follow.FollowStage
 import app.transittracker.ui.feature.follow.FollowState
 import app.transittracker.ui.feature.follow.alternativesOf
+import app.transittracker.ui.feature.follow.isOneOff
 import app.transittracker.ui.feature.follow.switchedMatch
 import app.transittracker.ui.feature.plan.routeEnds
 import app.transittracker.ui.nav.JourneyEnd
+import app.transittracker.ui.nav.TakeFrom
 import app.transittracker.ui.nav.Route
 import app.transittracker.ui.feature.follow.JourneyFollower
 import app.transittracker.ui.format.shortStopName
@@ -74,9 +76,16 @@ class HomeStateHolder(
         .distinctUntilChanged()
         .flatMapLatest { m ->
             if (m == null) flowOf(null)
-            else core.underway(m.tripId).map { list ->
+            // Under way, and still to come: a way can board the vehicle the user is on further along.
+            else combine(
+                core.underway(m.tripId),
+                core.upcoming(m.tripId, count),
+                follower?.oneOffJourney ?: flowOf(null),
+            ) { a, b, taken ->
+                val list = a + b
                 val way = m.wayId
-                val j = (if (way != null) list.firstOrNull { it.departure.ref == m.key && it.follows(way) } else null)
+                val j = taken?.takeIf { way != null && it.wayId == way }
+                    ?: (if (way != null && !isOneOff(way)) list.firstOrNull { it.departure.ref == m.key && it.follows(way) } else null)
                     ?: list.firstOrNull { it.departure.ref == m.key }
                 j?.let { Followed(m, it, alternativesOf(it, m, list, clock.nowMillis())) }
             }
@@ -104,7 +113,8 @@ class HomeStateHolder(
         val leg = followed.journey.legs.getOrNull(m.legIndex) ?: return null
         val now = clock.nowMillis()
         val calls = runCatching { core.service(leg.ref).first().calls }.getOrDefault(emptyList())
-        val (call, atMs) = if (m.stage == FollowStage.RIDING) {
+        val riding = m.stage == FollowStage.RIDING
+        val (call, atMs) = if (riding) {
             val c = calls.firstOrNull { !it.passed && it.position != null && (it.expectedArrivalMs ?: it.scheduledArrivalMs ?: Long.MAX_VALUE) > now }
                 ?: return null
             c to (c.expectedArrivalMs ?: c.scheduledArrivalMs ?: now)
@@ -112,9 +122,20 @@ class HomeStateHolder(
             (calls.firstOrNull { it.stopId == leg.originStopId && it.position != null } ?: return null) to now
         }
         val to = routeEnds(core, places, m.tripId)?.second ?: return null
+        // TAKE THIS ONE starts from the ride the user is on, to this stop; while changing, from the
+        // ride they just left, to where they got off.
+        val rideIndex = if (riding) m.legIndex else m.legIndex - 1
+        val ride = followed.journey.legs.getOrNull(rideIndex)
+        val takeFrom = ride?.let {
+            TakeFrom(
+                tripId = m.tripId, wayId = m.wayId, rideIndex = rideIndex, ride = it.ref, boardStopId = it.originStopId,
+                nextStopId = if (riding) call.stopId else it.destinationStopId,
+                nextStopPosition = call.position!!, changing = !riding,
+            )
+        }
         return Route.JourneyOptions(
             JourneyEnd(shortStopName(call.stopName), call.position!!), to,
-            timeMs = atMs.coerceAtLeast(now), browseOnly = true,
+            timeMs = atMs.coerceAtLeast(now), browseOnly = true, takeFrom = takeFrom,
         )
     }
 

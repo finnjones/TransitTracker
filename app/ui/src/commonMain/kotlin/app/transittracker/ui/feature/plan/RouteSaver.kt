@@ -1,7 +1,13 @@
 package app.transittracker.ui.feature.plan
 
 import app.transittracker.model.Itinerary
+import app.transittracker.model.LegKind
 import app.transittracker.model.LegPoint
+import app.transittracker.model.RouteOption
+import app.transittracker.model.TripLeg
+import app.transittracker.model.wayIdFor
+import app.transittracker.ui.feature.follow.isOneOff
+import app.transittracker.ui.nav.TakeFrom
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.StopId
 import app.transittracker.model.TransitCore
@@ -93,5 +99,48 @@ class RouteSaver(private val core: TransitCore, private val places: PlacesStore)
         one(trip, from.savedPlaceId, to.savedPlaceId)
         if (withReturn) one(returnTripOf(trip), to.savedPlaceId, from.savedPlaceId)
         return saved
+    }
+
+    /**
+     * [itinerary], found while on the way ([from]), as a way of the route from its start: the way
+     * the user is on up to the ride they are on, that ride to where they leave it, then the
+     * itinerary's rides. Null when it cannot be made (the user is on a journey that is not a
+     * saved way, or a stop is not in the phone's timetable).
+     */
+    suspend fun wayFromOrigin(from: TakeFrom, itinerary: Itinerary): List<TripLeg>? {
+        if (isOneOff(from.wayId)) return null
+        val route = core.trips.first().firstOrNull { it.id == from.tripId } ?: return null
+        val way = route.way(from.wayId) ?: route.ways.singleOrNull() ?: return null
+        val prefix = way.legs.take(from.rideIndex + 1)
+        if (prefix.size != from.rideIndex + 1) return null
+        val found = (check(itinerary) as? Savable.Ready)?.trip?.legs ?: return null
+        val last = prefix.last()
+        val sameRide = itinerary.rides.first().let { it.tripId == from.ride.tripId && it.serviceDate == from.ride.serviceDate }
+        return if (sameRide) {
+            prefix.dropLast(1) + last.copy(destinationStopIds = found.first().destinationStopIds) + found.drop(1)
+        } else {
+            // The station of the stop the user gets off at (so the way works whichever platform it uses).
+            val near = runCatching { core.stopsNear(from.nextStopPosition, 400.0) }.getOrDefault(emptyList())
+            val name = runCatching { core.service(from.ride).first().calls.firstOrNull { it.stopId == from.nextStopId }?.stopName }.getOrNull()
+            val station = near.firstOrNull { it.id == from.nextStopId }?.let { it.parentId ?: it.id }
+                ?: name?.let { n -> near.firstOrNull { shortStopName(it.name).equals(shortStopName(n), ignoreCase = true) }?.id }
+                ?: from.nextStopId
+            val walk = itinerary.legs.takeWhile { it.kind == LegKind.WALK }.sumOf { it.durationS }
+            val change = if (walk == 0) NO_WALK_CONNECTION_MINUTES else (walk + 59) / 60
+            prefix.dropLast(1) + last.copy(destinationStopIds = setOf(station)) +
+                found.mapIndexed { i, l -> if (i == 0) l.copy(minConnectionMinutes = change) else l }
+        }
+    }
+
+    /** Adds [legs] to saved route [tripId] as another way (nothing when it already has that way). */
+    suspend fun addWay(tripId: String, legs: List<TripLeg>) {
+        val route = core.trips.first().firstOrNull { it.id == tripId } ?: return
+        core.saveTrip(route.withWays(route.ways + RouteOption(wayIdFor(legs), legs)))
+    }
+
+    /** The title of saved route [tripId] as Home shows it ("Home to Work"). */
+    suspend fun titleOf(tripId: String): String? {
+        val route = core.trips.first().firstOrNull { it.id == tripId } ?: return null
+        return joinTitle(route, places.tripPlaces.first()[tripId], places.currentPlaces())
     }
 }

@@ -64,6 +64,8 @@ data class SettingsUiState(
     /** Location permission, for Follow my journey. */
     val location: PermissionState = PermissionState.NOT_ASKED,
     val batterySaver: Boolean = false,
+    /** Where this phone's push registration stands (see [PlatformServices.pushRegistration]). */
+    val pushRegistration: String? = null,
     val test: TestState = TestState(),
     val appVersion: String = "",
     val deviceId: String? = null,
@@ -130,7 +132,13 @@ class SettingsStateHolder(
         platform.notificationPermission, platform.batterySaver, platform.systemReduceMotion, platform.deviceId, platform.locationPermission,
     ) { p, b, m, id, loc -> Phone(p, b, m, id, loc) }
 
-    private class Actions(val test: TestState, val checking: Boolean, val update: UpdateState?, val account: AccountWords)
+    private class Actions(
+        val test: TestState,
+        val checking: Boolean,
+        val update: UpdateState?,
+        val account: AccountWords,
+        val push: String?,
+    )
 
     private class AccountWords(val label: String?, val busy: Boolean, val message: String?)
 
@@ -138,7 +146,8 @@ class SettingsStateHolder(
     private val actions = combine(
         test, checking, platform.updater?.state ?: flowOf(null),
         combine(platform.accounts?.account?.map { it?.label } ?: flowOf(null), signingOut, accountMessage) { l, b, m -> AccountWords(l, b, m) },
-    ) { t, chk, u, acc -> Actions(t, chk, u, acc) }
+        platform.pushRegistration,
+    ) { t, chk, u, acc, push -> Actions(t, chk, u, acc, push) }
 
     override val state: StateFlow<SettingsUiState> = combine(dataInputs, settings.settings, phone, actions) { d, ui, ph, a ->
         val t = a.test
@@ -163,6 +172,7 @@ class SettingsStateHolder(
             notifications = ph.permission,
             location = ph.location,
             batterySaver = ph.saver,
+            pushRegistration = a.push,
             test = t,
             appVersion = platform.appVersion,
             deviceId = ph.deviceId,

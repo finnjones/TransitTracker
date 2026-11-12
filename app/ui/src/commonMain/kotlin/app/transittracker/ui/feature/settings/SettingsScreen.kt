@@ -345,6 +345,13 @@ private fun NotificationsGroup(state: SettingsUiState, actions: SettingsActions)
         }
         PixelButton("PHONE SETTINGS", actions.openPhoneSettings, Modifier.weight(1f), style = TtTheme.type.label11Bold)
     }
+    state.pushRegistration?.let { push ->
+        DashedDivider()
+        Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Label("PUSH REGISTRATION", color = c.textSecondary, bold = true, size = LabelSize.L10)
+            PixelText(push, style = TtTheme.type.reading15, color = c.textReading)
+        }
+    }
     DashedDivider()
     Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Label("TIP", color = if (state.batterySaver) c.caution else c.textSecondary, bold = true, size = LabelSize.L10)

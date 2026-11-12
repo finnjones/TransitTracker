@@ -104,6 +104,19 @@ class SettingsStateHolderTest {
     }
 
     @Test
+    fun thePushRegistrationLineFollowsThePhone() = runTest {
+        val platform = FakePlatformServices()
+        val h = holder(AppDeps.fake(platform = platform), backgroundScope)
+        assertEquals(null, h.loaded().pushRegistration)
+        platform.pushRegistrationState.value = "Firebase did not give this phone a notification token: SERVICE_NOT_AVAILABLE"
+        runCurrent()
+        assertEquals(
+            "Firebase did not give this phone a notification token: SERVICE_NOT_AVAILABLE",
+            h.state.value.pushRegistration,
+        )
+    }
+
+    @Test
     fun theNotificationPermissionAndBatterySaverFollowThePhone() = runTest {
         val platform = FakePlatformServices(notificationPermission = PermissionState.NOT_ASKED, reduceMotion = true)
         val h = holder(AppDeps.fake(platform = platform), backgroundScope)

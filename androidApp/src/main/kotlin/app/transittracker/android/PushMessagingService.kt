@@ -7,6 +7,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * Firebase Cloud Messaging. Push is on only when the app was built with
@@ -50,17 +51,45 @@ internal object Push {
 
     private const val TAG = "TransitTrackerPush"
 
+    const val NOT_IN_BUILD = "Push is not set up in this build of the app."
+    const val ASKING = "Asking Firebase for this phone's notification token..."
+    const val WAITING = "Firebase accepted the request; waiting for it to hand over the token..."
+    const val GOT_TOKEN = "Got a token from Firebase; sending it to the server..."
+    const val REGISTERED = "Registered: the server has this phone's notification token."
+    const val NOT_ACCEPTED = "The server has not accepted this phone's token yet. The app tries again on its next check."
+
+    /** Settings > Notifications shows this ([AndroidPlatformServices.pushRegistration]). */
+    val status = MutableStateFlow<String?>(null)
+
     /**
      * Registers with FCM; no-op without Firebase. Each call hands the current token (new or
      * already held) to [PushMessagingService], so every start re-sends it to the server.
-     * Failures are logged.
+     * Failures are logged and shown in [status].
      */
     fun register(context: Context) {
         if (!isAvailable(context)) {
             Log.i(TAG, "Firebase is not configured in this build: push is off")
+            status.value = NOT_IN_BUILD
             return
         }
-        FirebaseMessaging.getInstance().register()
-            .addOnFailureListener { e -> Log.w(TAG, "FCM registration failed", e) }
+        status.value = ASKING
+        try {
+            FirebaseMessaging.getInstance().register()
+                .addOnSuccessListener { status.compareAndSet(ASKING, WAITING) }
+                .addOnFailureListener { e -> failed(e) }
+        } catch (e: Exception) {
+            failed(e)
+        }
     }
+
+    private fun failed(e: Throwable) {
+        Log.w(TAG, "FCM registration failed", e)
+        status.value = "Firebase did not give this phone a notification token: ${describe(e)}"
+    }
+
+    /** The exception and its causes, e.g. "FCM Registration failed!: SERVICE_NOT_AVAILABLE". */
+    private fun describe(e: Throwable): String =
+        generateSequence(e) { it.cause }.take(4)
+            .map { it.message?.takeIf(String::isNotBlank) ?: it.javaClass.simpleName }
+            .distinct().joinToString(": ")
 }

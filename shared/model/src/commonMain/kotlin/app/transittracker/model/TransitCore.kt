@@ -98,6 +98,25 @@ data class TripLeg(
     val minConnectionMinutes: Int = 3,
 )
 
+/**
+ * One way of making a saved trip: its rides, in order ("the T9 from Gordon", "the 333 bus from
+ * Ocean St"). [id] is stable for the same pattern of stops and lines ([wayIdFor]).
+ */
+@Serializable
+data class RouteOption(
+    val id: String,
+    val legs: List<TripLeg>,
+    /** What the user called this way; null shows its lines. */
+    val label: String? = null,
+)
+
+/**
+ * A saved trip from A to B. It has one or more ways of getting there ([ways]); departures of every
+ * way are offered and the front end shows the best one for when the user leaves.
+ *
+ * [legs] is always the first way, so data saved before ways existed (and older app versions
+ * reading newer data) see a one-way trip. Change ways with [withWays], which keeps the two in step.
+ */
 @Serializable
 data class SavedTrip(
     val id: String,
@@ -107,7 +126,48 @@ data class SavedTrip(
     val customName: String? = null,
     val folder: String? = null,
     val order: Int = 0,
-)
+    /** Every way when there is more than one (or the only way has a label); empty means [legs] is the only way. */
+    val options: List<RouteOption> = emptyList(),
+    /** The way the user chose to always see; null lets the app pick the best one each time. */
+    val pinnedWayId: String? = null,
+) {
+    /** Every way of making the trip, the first being [legs]. Never empty for a trip with legs. */
+    val ways: List<RouteOption>
+        get() = options.ifEmpty { if (legs.isEmpty()) emptyList() else listOf(RouteOption(wayIdFor(legs), legs)) }
+
+    /** The way with [id], or null. */
+    fun way(id: String?): RouteOption? = id?.let { w -> ways.firstOrNull { it.id == w } }
+
+    /** The pinned way, when it is still one of [ways]. */
+    val pinnedWay: RouteOption? get() = way(pinnedWayId)
+
+    /**
+     * This trip with [ways] (duplicates by id dropped, first kept): [legs] becomes the first way's,
+     * a pin on a way that is gone is cleared.
+     */
+    fun withWays(ways: List<RouteOption>): SavedTrip {
+        val distinct = ways.distinctBy { it.id }
+        require(distinct.isNotEmpty()) { "a saved trip needs at least one way" }
+        val single = distinct.size == 1 && distinct[0].label == null && distinct[0].id == wayIdFor(distinct[0].legs)
+        return copy(
+            legs = distinct[0].legs,
+            options = if (single) emptyList() else distinct,
+            pinnedWayId = pinnedWayId?.takeIf { p -> distinct.any { it.id == p } },
+        )
+    }
+}
+
+/**
+ * The pattern of [legs] as text, the same for the same stops and lines in any order:
+ * "213510.200060.T9_200060.2000331.T4".
+ */
+fun routePattern(legs: List<TripLeg>): String = legs.joinToString("_") { l ->
+    listOf(l.originStopIds.sorted().joinToString("+"), l.destinationStopIds.sorted().joinToString("+"), l.routeIds.orEmpty().sorted().joinToString("+"))
+        .joinToString(".")
+}
+
+/** The [RouteOption.id] of a way with these legs: "way-" and its [routePattern]. */
+fun wayIdFor(legs: List<TripLeg>): String = "way-" + routePattern(legs)
 
 enum class DepartureStatus {
     /** Live data says on time (within 59 s). */
@@ -146,8 +206,15 @@ data class Departure(
     val stale: Boolean = false,
 )
 
-/** One way of doing a saved trip; single-leg trips have one leg. */
-data class Journey(val legs: List<Departure>) {
+/**
+ * One run of a saved trip: the services taken, one per leg (single-leg trips have one).
+ * [wayId] says which of the trip's [SavedTrip.ways] it follows; null when not known. The same run
+ * can fit more than one way (a way on any line and one on the T9 only): the others are [alsoWays].
+ */
+data class Journey(val legs: List<Departure>, val wayId: String? = null, val alsoWays: Set<String> = emptySet()) {
+    /** True when this run follows way [id] (or its way is not known). */
+    fun follows(id: String): Boolean = wayId == null || wayId == id || id in alsoWays
+
     val departure: Departure get() = legs.first()
     val arrival: Departure get() = legs.last()
 }
@@ -238,4 +305,32 @@ sealed interface JoinResult {
     /** Signed in, but the server does not let this account in ([message] says so, from the server). */
     data class NotAllowed(val message: String) : JoinResult
     data class Failed(val message: String) : JoinResult
+}
+
+/**
+ * The items of [items] that no other beats, in their original order. One run beats another when
+ * it lets you leave no earlier ([leave]) and still arrives no later ([arrive]), and is better in
+ * at least one. Two runs with the same times both stay.
+ */
+fun <T> bestRuns(items: List<T>, leave: (T) -> Long, arrive: (T) -> Long): List<T> {
+    if (items.size < 2) return items
+    // Latest leave first. [laterArrive] is the earliest arrival of the runs leaving later than the current group.
+    val order = items.indices.sortedByDescending { leave(items[it]) }
+    val keep = BooleanArray(items.size)
+    var laterArrive = Long.MAX_VALUE
+    var i = 0
+    while (i < order.size) {
+        val l = leave(items[order[i]])
+        var j = i
+        while (j < order.size && leave(items[order[j]]) == l) j++
+        val group = order.subList(i, j)
+        val groupBest = group.minOf { arrive(items[it]) }
+        for (k in group) {
+            val a = arrive(items[k])
+            keep[k] = a < laterArrive && a == groupBest
+        }
+        laterArrive = minOf(laterArrive, groupBest)
+        i = j
+    }
+    return items.filterIndexed { idx, _ -> keep[idx] }
 }

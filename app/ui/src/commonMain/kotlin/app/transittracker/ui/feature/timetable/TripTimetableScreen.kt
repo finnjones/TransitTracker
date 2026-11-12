@@ -84,6 +84,11 @@ import app.transittracker.ui.settings.ClockFormat
 import app.transittracker.ui.state.rememberStateHolder
 import app.transittracker.ui.theme.TtTheme
 import kotlinx.datetime.TimeZone
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.rememberCoroutineScope
+import app.transittracker.ui.components.ToggleChip
+import kotlinx.coroutines.launch
 
 /** What the timetable can ask for; the screen maps these to navigation and the holder. */
 class TimetableActions(
@@ -97,6 +102,12 @@ class TimetableActions(
     val edit: () -> Unit = {},
     val openAlerts: () -> Unit = {},
     val toggleEarlier: () -> Unit = {},
+    /** Shows one way of the route, or BEST (null). */
+    val selectWay: (String?) -> Unit = {},
+    /** Pins a way for Home, or unpins (null). */
+    val pinWay: (String?) -> Unit = {},
+    /** Plans the route again now, to see and add other ways. */
+    val findMoreWays: () -> Unit = {},
 )
 
 /** All services of one saved trip on a chosen day (plan 5.3). */
@@ -111,6 +122,7 @@ fun TripTimetableScreen(route: Route.TripTimetable) {
         TimetableStateHolder(deps.core, deps.places, deps.clock, route.tripId, savedDate, scope)
     }
     val state by holder.state.collectAsState()
+    val scope = rememberCoroutineScope()
     LaunchedEffect(state.date) { if (state.date.isNotEmpty()) savedDate = state.date }
     val actions = remember(nav, holder, route) {
         TimetableActions(
@@ -126,6 +138,14 @@ fun TripTimetableScreen(route: Route.TripTimetable) {
             edit = { nav.push(Route.EditRoute(route.tripId)) },
             openAlerts = { nav.switchTab(Tab.ALERTS) },
             toggleEarlier = { showEarlier = !showEarlier },
+            selectWay = holder::selectWay,
+            pinWay = holder::pinWay,
+            findMoreWays = {
+                scope.launch {
+                    val ends = holder.ends()
+                    if (ends != null) nav.push(Route.JourneyOptions(ends.first, ends.second)) else nav.push(Route.PlanJourney())
+                }
+            },
         )
     }
     TimetableContent(state, showEarlier, actions)
@@ -180,6 +200,7 @@ fun TimetableContent(
             Header(state, actions)
             if (!state.loading && state.tripFound) {
                 DaySelector(state, actions, Modifier.flapRow(1))
+                WaysBar(state, actions, Modifier.flapRow(1))
                 TimetableList(state, showEarlier, actions, flap, Modifier.weight(1f).fillMaxWidth())
                 ActionBar(actions)
             } else if (!state.loading) {
@@ -561,6 +582,47 @@ private fun EmptyRails(modifier: Modifier) {
         val y = (size.height / dot).toInt() * dot - 3 * dot
         drawRect(c.textSecondary, Offset(0f, y), Size(size.width, dot))
         drawDashes(c.divider, dot, y + dot, on = 1, off = 3, thick = 2)
+    }
+}
+
+// ---------------------------------------------------------------- ways
+
+/**
+ * The ways of the route (BEST and one tab each), pinning the one shown, and FIND MORE WAYS NOW
+ * (plan the route again to add another way; offered for a route with one way too).
+ */
+@Composable
+private fun WaysBar(state: TimetableUiState, actions: TimetableActions, modifier: Modifier = Modifier) {
+    val c = TtTheme.colors
+    Column(modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (state.ways.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ToggleChip("BEST", state.selectedWay == null, { if (it) actions.selectWay(null) })
+                for (w in state.ways) {
+                    val pin = if (w.id == state.pinnedWay) " ★" else ""
+                    ToggleChip(w.name.uppercase() + pin, state.selectedWay == w.id, { if (it) actions.selectWay(w.id) })
+                }
+            }
+            val selected = state.ways.firstOrNull { it.id == state.selectedWay }
+            val pinned = state.ways.firstOrNull { it.id == state.pinnedWay }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                val words = when {
+                    selected == null && pinned == null -> "Trips shows whichever way gets you there first."
+                    selected == null -> "Trips shows only ${pinned!!.name}. Showing the best of every way here."
+                    selected.id == state.pinnedWay -> "Trips always shows this way."
+                    else -> "Pin this way to always see it on Trips."
+                }
+                PixelText(words, Modifier.weight(1f), TtTheme.type.label10, c.textSecondary)
+                when {
+                    selected != null && selected.id != state.pinnedWay -> PixelButton("PIN", { actions.pinWay(selected.id) }, kind = ButtonKind.FLAT)
+                    pinned != null && (selected == null || selected.id == pinned.id) -> PixelButton("UNPIN", { actions.pinWay(null) }, kind = ButtonKind.FLAT)
+                }
+            }
+        }
+        PixelButton(
+            if (state.ways.isEmpty()) "FIND OTHER WAYS NOW" else "FIND MORE WAYS NOW",
+            actions.findMoreWays, Modifier.fillMaxWidth(), ButtonKind.FLAT,
+        )
     }
 }
 

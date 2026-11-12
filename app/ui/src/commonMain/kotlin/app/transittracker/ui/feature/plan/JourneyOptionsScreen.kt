@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -41,6 +45,7 @@ import app.transittracker.ui.components.PixelPanel
 import app.transittracker.ui.components.PixelText
 import app.transittracker.ui.components.SectionLabel
 import app.transittracker.ui.components.StatusLamp
+import app.transittracker.ui.components.SwitchRow
 import app.transittracker.ui.components.ToggleChip
 import app.transittracker.ui.components.pixelFill
 import app.transittracker.ui.format.CountdownText
@@ -53,6 +58,7 @@ import app.transittracker.ui.motion.PageTransition
 import app.transittracker.ui.motion.flapRow
 import app.transittracker.ui.nav.LocalNavigator
 import app.transittracker.ui.nav.Route
+import app.transittracker.ui.nav.Tab
 import app.transittracker.ui.sprites.WalkerPose
 import app.transittracker.ui.sprites.WalkerSprite
 import app.transittracker.ui.state.rememberStateHolder
@@ -67,12 +73,20 @@ class OptionsActions(
     val openRoute: (SavedTrip) -> Unit = {},
 )
 
+/** SAVE THESE WAYS on the options page; the defaults do nothing (screenshots, previews). */
+class SaveWaysActions(
+    val start: () -> Unit = {},
+    val toggle: (String) -> Unit = {},
+    val cancel: () -> Unit = {},
+    val confirm: (withReturn: Boolean, join: Boolean) -> Unit = { _, _ -> },
+)
+
 /** Journey options for one search (plan 5.6 step 2, Options mockup). */
 @Composable
 fun JourneyOptionsScreen(route: Route.JourneyOptions) {
     val deps = LocalAppDeps.current
     val holder = rememberStateHolder(route) { scope ->
-        JourneyOptionsStateHolder(deps.planner, deps.core, deps.clock, planRequestOf(route), scope)
+        JourneyOptionsStateHolder(deps.planner, deps.core, deps.clock, planRequestOf(route), scope, from = route.from, to = route.to, places = deps.places)
     }
     JourneyOptionsPage(route, holder)
 }
@@ -97,7 +111,18 @@ fun JourneyOptionsPage(route: Route.JourneyOptions, holder: JourneyOptionsStateH
             openRoute = { nav.push(Route.TripTimetable(it.id)) },
         )
     }
-    JourneyOptionsContent(route, state, holder::sort, holder::retry, actions)
+    LaunchedEffect(state.saveWays) {
+        if (state.saveWays is SaveWaysState.Saved) {
+            if (route.fromOnboarding) {
+                nav.resetTo(Tab.TRIPS, PageTransition.Doors)
+            } else {
+                nav.popToRoot()
+                if (nav.currentTab != Tab.TRIPS) nav.switchTab(Tab.TRIPS)
+            }
+        }
+    }
+    val ways = remember(holder) { SaveWaysActions(holder::startSaveWays, holder::toggleWay, holder::cancelSaveWays, holder::confirmSaveWays) }
+    JourneyOptionsContent(route, state, holder::sort, holder::retry, actions, ways)
 }
 
 @Composable
@@ -107,6 +132,7 @@ fun JourneyOptionsContent(
     onSort: (OptionSort) -> Unit,
     onRetry: () -> Unit,
     actions: OptionsActions,
+    ways: SaveWaysActions = SaveWaysActions(),
 ) {
     val c = TtTheme.colors
     val tz = TtTheme.time.timeZone
@@ -124,7 +150,7 @@ fun JourneyOptionsContent(
             }
             when (state.phase) {
                 OptionsPhase.LOADING -> Loading()
-                OptionsPhase.FOUND -> OptionsList(state, actions)
+                OptionsPhase.FOUND -> OptionsList(state, actions, ways.start)
                 OptionsPhase.NOTHING_FOUND -> Message {
                     NoticePanel(
                         "The planner found no way from ${route.from.name} to ${route.to.name} at this time. " +
@@ -154,6 +180,7 @@ fun JourneyOptionsContent(
                 OptionsPhase.FAILED -> Unit
             }
         }
+        (state.saveWays as? SaveWaysState.Choosing)?.let { SaveWaysDialog(it, route, ways) }
         if (state.phase == OptionsPhase.FAILED) {
             DialogScrim(onDismiss = null) {
                 DialogBox(
@@ -231,7 +258,7 @@ private fun Loading() {
 // ---------------------------------------------------------------- the list
 
 @Composable
-private fun OptionsList(state: OptionsUiState, actions: OptionsActions) {
+private fun OptionsList(state: OptionsUiState, actions: OptionsActions, onSaveWays: () -> Unit) {
     val c = TtTheme.colors
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -255,6 +282,68 @@ private fun OptionsList(state: OptionsUiState, actions: OptionsActions) {
                     StatusLamp(Lamp.RING, c.info, size = 10.dp)
                     PixelText(note, Modifier.weight(1f), TtTheme.type.label10, c.textSecondary)
                 }
+            }
+        }
+        if (state.canSaveWays && state.options.isNotEmpty()) {
+            item(key = "save-ways") {
+                Column(Modifier.fillMaxWidth().flapRow(3 + state.options.size), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PixelText(
+                        "Save these as the ways of one route. Trips then shows whichever gets you there first when you leave.",
+                        style = TtTheme.type.reading15, color = c.textReading,
+                    )
+                    val s = state.saveWays
+                    if (s is SaveWaysState.Failed) PixelText("Saving did not work (${s.message}). Try again.", style = TtTheme.type.reading15, color = c.stop)
+                    val label = when (s) {
+                        SaveWaysState.Checking -> "CHECKING..."
+                        SaveWaysState.Saving -> "SAVING..."
+                        is SaveWaysState.Saved -> "SAVED"
+                        else -> "SAVE THESE WAYS AS ONE ROUTE"
+                    }
+                    PixelButton(label, onSaveWays, Modifier.fillMaxWidth(), ButtonKind.SECONDARY, enabled = s is SaveWaysState.Idle || s is SaveWaysState.Failed)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaveWaysDialog(s: SaveWaysState.Choosing, route: Route.JourneyOptions, ways: SaveWaysActions) {
+    val c = TtTheme.colors
+    val tz = TtTheme.time.timeZone
+    val fmt = TtTheme.time.clockFormat
+    var withReturn by rememberSaveable { mutableStateOf(false) }
+    var join by rememberSaveable { mutableStateOf(true) }
+    val joinTitle = s.joinTitle
+    val anyNew = s.ways.any { it.trip != null && !it.alreadySaved }
+    DialogScrim(onDismiss = ways.cancel) {
+        DialogBox(
+            "Save the ways",
+            body = if (anyNew) {
+                "Pick the ways from ${route.from.name} to ${route.to.name} to keep. Each is kept as a pattern, so Trips can show its next services at any time."
+            } else {
+                "Every way found is already saved" + (joinTitle?.let { " in $it" } ?: "") + ", or cannot be saved."
+            },
+            actions = {
+                PixelButton(if (anyNew) "CANCEL" else "CLOSE", ways.cancel, Modifier.weight(1f))
+                if (anyNew) {
+                    PixelButton("SAVE", { ways.confirm(withReturn, join) }, Modifier.weight(1f), ButtonKind.PRIMARY, enabled = s.selected.isNotEmpty())
+                }
+            },
+        ) {
+            for (w in s.ways) {
+                val time = formatClock(w.leaveMs, tz, fmt)
+                when {
+                    w.trip == null -> Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        PixelText("${w.title} · $time", style = TtTheme.type.row15, color = c.textSecondary)
+                        PixelText(w.blocked.orEmpty(), style = TtTheme.type.label10, color = c.textSecondary)
+                    }
+                    w.alreadySaved -> SwitchRow("${w.title} · already saved", true, {}, enabled = false)
+                    else -> SwitchRow("${w.title} · $time", w.id in s.selected, { ways.toggle(w.id) })
+                }
+            }
+            if (anyNew) {
+                if (joinTitle != null) SwitchRow("Add to $joinTitle", join, { join = it })
+                SwitchRow("Also save the return", withReturn, { withReturn = it })
             }
         }
     }

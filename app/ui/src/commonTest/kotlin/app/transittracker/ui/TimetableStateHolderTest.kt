@@ -2,7 +2,9 @@ package app.transittracker.ui
 
 import app.transittracker.core.FakeData
 import app.transittracker.model.DepartureStatus
+import app.transittracker.model.RouteOption
 import app.transittracker.model.SavedTrip
+import app.transittracker.model.wayIdFor
 import app.transittracker.model.TripLeg
 import app.transittracker.ui.app.AppDeps
 import app.transittracker.ui.fake.CoreScenario
@@ -144,5 +146,41 @@ class TimetableStateHolderTest {
     fun aMissingTripIsNotFound() = runTest {
         val s = holder(AppDeps.fake(), backgroundScope, tripId = "no-such-trip").state.first { !it.loading }
         assertFalse(s.tripFound)
+    }
+
+    @Test
+    fun aRouteWithTwoWaysHasATabEachAndCanPinOne() = runTest {
+        val t9 = listOf(TripLeg(setOf(FakeData.STRATHFIELD), setOf(FakeData.CENTRAL), routeIds = setOf(FakeData.T9)))
+        val t1 = listOf(TripLeg(setOf(FakeData.STRATHFIELD), setOf(FakeData.CENTRAL), routeIds = setOf(FakeData.T1)))
+        val base = FakeSetup.trips.first()
+        val twoWays = base.withWays(listOf(RouteOption(wayIdFor(t9), t9), RouteOption(wayIdFor(t1), t1)))
+        val deps = AppDeps.fake(trips = listOf(twoWays) + FakeSetup.trips.drop(1))
+        val h = holder(deps, backgroundScope)
+        val best = h.ready { it.ways.size == 2 }
+        assertEquals(listOf("T9", "T1"), best.ways.map { it.name })
+        assertNull(best.selectedWay)
+        h.selectWay(wayIdFor(t1))
+        val t1Only = h.ready { it.selectedWay == wayIdFor(t1) }
+        assertTrue((t1Only.earlier + t1Only.upcoming).all { e -> e.journey.legs.single().routeId == FakeData.T1 })
+        h.pinWay(wayIdFor(t1))
+        assertEquals(wayIdFor(t1), h.ready { it.pinnedWay != null }.pinnedWay)
+        assertEquals(wayIdFor(t1), deps.core.trips.first { l -> l.first().pinnedWayId != null }.first().pinnedWayId)
+        h.pinWay(null)
+        assertNull(h.ready { it.pinnedWay == null }.pinnedWay)
+        // FIND MORE WAYS plans the route again between its saved places.
+        val (from, to) = h.ends()!!
+        assertEquals(FakeSetup.HOME, from.savedPlaceId)
+        assertEquals(FakeSetup.WORK, to.savedPlaceId)
+    }
+
+    @Test
+    fun aRouteBetweenStationsIsPlannedAgainFromItsStations() = runTest {
+        val h = holder(AppDeps.fake(), backgroundScope, FakeSetup.TRIP_CHATSWOOD_TALLAWONG)
+        h.ready()
+        val (from, to) = h.ends()!!
+        assertEquals("Chatswood", from.name)
+        assertEquals("Tallawong", to.name)
+        assertNull(from.savedPlaceId)
+        assertTrue(h.state.value.ways.isEmpty(), "one way: no tabs")
     }
 }

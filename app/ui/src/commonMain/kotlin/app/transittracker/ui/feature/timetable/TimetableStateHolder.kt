@@ -6,8 +6,10 @@ import app.transittracker.model.Journey
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.ServiceDate
 import app.transittracker.model.ServiceTime
+import app.transittracker.model.StopId
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
+import app.transittracker.ui.nav.JourneyEnd
 import app.transittracker.ui.places.PlacesStore
 import app.transittracker.ui.places.SavedPlace
 import app.transittracker.ui.places.TripPlaces
@@ -40,7 +42,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class TimetableStateHolder(
     private val core: TransitCore,
-    places: PlacesStore,
+    private val places: PlacesStore,
     private val clock: WallClock,
     private val tripId: String,
     initialDate: ServiceDate?,
@@ -67,6 +69,42 @@ class TimetableStateHolder(
 
     fun goToToday() {
         dateFlow.value = ServiceTime.localDate(clock.nowMillis())
+    }
+
+    /** The way tab: (chosen by the user, way id or null for BEST). Until chosen, the pinned way shows. */
+    private val tab = MutableStateFlow<Pair<Boolean, String?>>(false to null)
+
+    /** Shows way [id], or BEST when null. */
+    fun selectWay(id: String?) {
+        tab.value = true to id
+    }
+
+    /** Pins way [id] so Home always shows it, or lets Home pick the best again when null. */
+    fun pinWay(id: String?) {
+        scope.launch {
+            val t = core.trips.first().firstOrNull { it.id == tripId } ?: return@launch
+            core.saveTrip(t.copy(pinnedWayId = id?.takeIf { w -> t.way(w) != null }))
+        }
+    }
+
+    /**
+     * The route's two ends, to plan it again now (FIND MORE WAYS): its saved places, else the
+     * stations it starts and ends at, found by name among the phone's stops. Null when an end
+     * cannot be found.
+     */
+    suspend fun ends(): Pair<JourneyEnd, JourneyEnd>? {
+        val t = core.trips.first().firstOrNull { it.id == tripId } ?: return null
+        val link = runCatching { places.tripPlaces.first()[tripId] }.getOrNull()
+        val all = runCatching { places.currentPlaces() }.getOrDefault(emptyList())
+        suspend fun end(placeId: String?, name: String, ids: Set<StopId>): JourneyEnd? {
+            all.firstOrNull { it.id == placeId }?.let { return JourneyEnd(it.name, it.position, savedPlaceId = it.id) }
+            val found = runCatching { core.searchStops(name) }.getOrDefault(emptyList())
+            val stop = found.firstOrNull { it.id in ids || it.parentId in ids } ?: found.firstOrNull() ?: return null
+            return JourneyEnd(name, stop.position)
+        }
+        val from = end(link?.fromPlaceId, t.originName, t.ways.flatMapTo(HashSet()) { it.legs.first().originStopIds }) ?: return null
+        val to = end(link?.toPlaceId, t.destinationName, t.ways.flatMapTo(HashSet()) { it.legs.last().destinationStopIds }) ?: return null
+        return from to to
     }
 
     private val trip: Flow<Pair<Boolean, SavedTrip?>> = core.trips
@@ -103,7 +141,7 @@ class TimetableStateHolder(
         ticker,
     ) { (p, l), (s, a), n, now -> Aux(p, l, s, a, n, now) }
 
-    override val state: StateFlow<TimetableUiState> = combine(trip, rows, aux, dateFlow) { (read, t), (rowsDate, journeys), x, date ->
+    override val state: StateFlow<TimetableUiState> = combine(trip, rows, aux, dateFlow, tab) { (read, t), (rowsDate, journeys), x, date, (chosen, way) ->
         val inputs = TimetableInputs(
             tripsRead = read,
             trip = t,
@@ -114,6 +152,7 @@ class TimetableStateHolder(
             status = x.status,
             alerts = x.alerts,
             next = x.next,
+            selectedWay = if (chosen) way else t?.pinnedWayId,
         )
         val s = buildTimetableState(inputs, x.nowMs)
         if (s.tripFound && s.nothingToCome) lookUpNext(date)

@@ -71,10 +71,10 @@ class ScenarioTransitCore(
     }
 
     override fun upcoming(tripId: String, count: Int): Flow<List<Journey>> =
-        combine(base.upcoming(tripId, count), scenario) { list, s -> list.map { j -> Journey(j.legs.map { relabel(it, s) }) } }
+        combine(base.upcoming(tripId, count), scenario) { list, s -> list.map { j -> j.copy(legs = j.legs.map { relabel(it, s) }) } }
 
     override fun timetable(tripId: String, serviceDate: ServiceDate): Flow<List<Journey>> =
-        combine(base.timetable(tripId, serviceDate), scenario) { list, s -> list.map { j -> Journey(j.legs.map { relabel(it, s) }) } }
+        combine(base.timetable(tripId, serviceDate), scenario) { list, s -> list.map { j -> j.copy(legs = j.legs.map { relabel(it, s) }) } }
 
     override fun service(ref: ServiceRef): Flow<ServiceDetail> =
         combine(base.service(ref), scenario) { d, s ->

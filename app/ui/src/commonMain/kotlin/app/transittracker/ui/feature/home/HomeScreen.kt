@@ -285,6 +285,7 @@ private fun CardTitle(card: TripCard, first: Departure?) {
         Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             TitleParts(card.titleParts, TtTheme.type.name17)
             if (card.stationsLine != null) Label(card.stationsLine, size = LabelSize.L10, color = c.textSecondary)
+            if (card.waysLabel != null) Label(card.waysLabel, size = LabelSize.L10, color = c.info, bold = true)
         }
         if (first != null) {
             Row(Modifier.padding(start = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -626,6 +627,7 @@ private fun CompactTripCard(card: TripCard, nowMs: Long, actions: HomeActions, m
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 TitleParts(card.titleParts, TtTheme.type.row15Strong)
+                if (card.waysLabel != null) Label(card.waysLabel, size = LabelSize.L10, color = c.info, bold = true)
                 if (d != null) {
                     val status = statusPresentation(d)
                     val suffix = formatClock(d.expectedDepartureMs, tz, fmt) + (d.originPlatform?.let { " · PLAT $it" } ?: "")

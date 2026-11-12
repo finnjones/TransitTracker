@@ -116,7 +116,7 @@ fun JourneyContent(
     state: JourneyUiState,
     places: List<SavedPlace>,
     onBack: () -> Unit,
-    onSave: (withReturn: Boolean) -> Unit,
+    onSave: (withReturn: Boolean, join: Boolean) -> Unit,
     showSaveDialog: Boolean = false,
 ) {
     val c = TtTheme.colors
@@ -125,6 +125,7 @@ fun JourneyContent(
     val t = state.timeline
     var dialog by rememberSaveable { mutableStateOf(showSaveDialog) }
     var withReturn by rememberSaveable { mutableStateOf(false) }
+    var join by rememberSaveable { mutableStateOf(true) }
     Box(Modifier.fillMaxSize().background(c.screen)) {
         Column(Modifier.fillMaxSize()) {
             JourneyHeader(
@@ -162,17 +163,32 @@ fun JourneyContent(
         }
         val ready = (state.save as? SaveState.Ready) ?: (state.save as? SaveState.Failed)?.ready
         if (dialog && ready != null) {
+            val joinTitle = ready.joinTitle
             DialogScrim(onDismiss = { dialog = false }) {
-                DialogBox(
-                    "Save this route",
-                    body = routeDescription(route.from.name, route.to.name, route.itinerary) +
-                        ". Trips will show the next time it runs, with its leave-by time.",
-                    actions = {
-                        PixelButton("CANCEL", { dialog = false }, Modifier.weight(1f))
-                        PixelButton("SAVE", { dialog = false; onSave(withReturn) }, Modifier.weight(1f), ButtonKind.PRIMARY)
-                    },
-                ) {
-                    SwitchRow("Also save the return", withReturn, { withReturn = it })
+                if (ready.alreadyThere && joinTitle != null) {
+                    DialogBox(
+                        "Already saved",
+                        body = routeDescription(route.from.name, route.to.name, route.itinerary) +
+                            " is already one of the ways of $joinTitle. Trips shows it whenever it is the best way to go.",
+                        actions = { PixelButton("CLOSE", { dialog = false }, Modifier.weight(1f), ButtonKind.PRIMARY) },
+                    )
+                } else {
+                    DialogBox(
+                        "Save this route",
+                        body = routeDescription(route.from.name, route.to.name, route.itinerary) + ". " +
+                            if (joinTitle != null && join) {
+                                "Trips will show $joinTitle by whichever way gets you there first when you leave."
+                            } else {
+                                "Trips will show the next time it runs, with its leave-by time."
+                            },
+                        actions = {
+                            PixelButton("CANCEL", { dialog = false }, Modifier.weight(1f))
+                            PixelButton("SAVE", { dialog = false; onSave(withReturn, join) }, Modifier.weight(1f), ButtonKind.PRIMARY)
+                        },
+                    ) {
+                        if (joinTitle != null) SwitchRow("Add as another way to $joinTitle", join, { join = it })
+                        SwitchRow("Also save the return", withReturn, { withReturn = it })
+                    }
                 }
             }
         }
@@ -216,6 +232,7 @@ private fun Footer(route: Route.JourneyDetail, state: JourneyUiState, onSave: ()
                     SaveState.Checking -> "SAVE ROUTE"
                     SaveState.Saving -> "SAVING..."
                     is SaveState.Saved -> "SAVED"
+                    is SaveState.Ready -> if (state.save.alreadyThere) "SAVED" else if (state.save.joinTo != null) "ADD AS A WAY" else "SAVE ROUTE"
                     else -> "SAVE ROUTE"
                 }
                 PixelButton(label, onSave, Modifier.padding(bottom = 6.dp), ButtonKind.SECONDARY, enabled = enabled)

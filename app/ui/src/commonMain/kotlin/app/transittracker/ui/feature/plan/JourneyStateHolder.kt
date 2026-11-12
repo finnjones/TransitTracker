@@ -1,15 +1,12 @@
 package app.transittracker.ui.feature.plan
 
 import app.transittracker.model.Itinerary
-import app.transittracker.model.LegPoint
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.ServiceDetail
 import app.transittracker.model.ServiceRef
-import app.transittracker.model.StopId
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
 import app.transittracker.model.rides
-import app.transittracker.ui.format.shortStopName
 import app.transittracker.ui.nav.JourneyEnd
 import app.transittracker.ui.places.PlacesStore
 import app.transittracker.ui.state.StateHolder
@@ -21,7 +18,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -35,8 +31,18 @@ sealed interface SaveState {
     /** Checking that the phone knows every stop. */
     data object Checking : SaveState
 
-    /** It can be saved: [trip], and [returnTrip] for "also save the return". */
-    data class Ready(val trip: SavedTrip, val returnTrip: SavedTrip) : SaveState
+    /**
+     * It can be saved: [trip], and [returnTrip] for "also save the return". [joinTo] is a saved
+     * route between the same ends (titled [joinTitle]) it can be added to as another way;
+     * [alreadyThere] when that route already has this way.
+     */
+    data class Ready(
+        val trip: SavedTrip,
+        val returnTrip: SavedTrip,
+        val joinTo: SavedTrip? = null,
+        val joinTitle: String? = null,
+        val alreadyThere: Boolean = false,
+    ) : SaveState
 
     /** It cannot: a plain sentence why (shown instead of saving something misleading). */
     data class Blocked(val reason: String) : SaveState
@@ -101,30 +107,23 @@ class JourneyStateHolder(
         scope.launch { saveState.value = checkSave() }
     }
 
-    /** Works out [SaveState.Ready] or [SaveState.Blocked]: pure checks, then the phone's timetable. */
-    private suspend fun checkSave(): SaveState {
-        saveBlocker(itinerary)?.let { return SaveState.Blocked(it) }
-        val points: List<LegPoint> = itinerary.rides.flatMap { listOf(it.from, it.to) }
-        val ids = points.mapNotNull { it.stopId }.distinct()
-        val unknown = ids.filter { id -> runCatching { core.linesAt(id).isEmpty() }.getOrDefault(true) }.toSet()
-        unknownStopsReason(itinerary, unknown)?.let { return SaveState.Blocked(it) }
-        val stationOf = mutableMapOf<StopId, StopId>()
-        for (p in points) {
-            val id = p.stopId ?: continue
-            if (id in stationOf) continue
-            val near = runCatching { core.stopsNear(p.position, 400.0) }.getOrDefault(emptyList())
-            val station = near.firstOrNull { it.id == id } ?: near.firstOrNull { shortStopName(it.name).equals(p.name, ignoreCase = true) }
-            if (station != null) stationOf[id] = station.id
+    private val saver = RouteSaver(core, places)
+
+    /** Works out [SaveState.Ready] or [SaveState.Blocked]: pure checks, then the phone's timetable and saved routes. */
+    private suspend fun checkSave(): SaveState = when (val c = saver.check(itinerary)) {
+        is Savable.Blocked -> SaveState.Blocked(c.reason)
+        is Savable.Ready -> {
+            val plan = saver.plan(c.trip, from, to)
+            SaveState.Ready(c.trip, returnTripOf(c.trip), plan.joinTo, plan.joinTitle, plan.alreadyThere)
         }
-        val trip = savedTripOf(itinerary, stationOf)
-        return SaveState.Ready(trip, returnTripOf(trip))
     }
 
     /**
      * Saves the route (and its return when [withReturn]) and links it to the saved places it runs
-     * between. New routes go at the end of Home.
+     * between. With [join] (and a saved route between the same ends) it becomes another way of
+     * that route; otherwise new routes go at the end of Home.
      */
-    fun save(withReturn: Boolean) {
+    fun save(withReturn: Boolean, join: Boolean = true) {
         val ready = when (val s = saveState.value) {
             is SaveState.Ready -> s
             is SaveState.Failed -> s.ready
@@ -133,18 +132,7 @@ class JourneyStateHolder(
         saveState.value = SaveState.Saving
         scope.launch {
             try {
-                val existing = core.trips.first()
-                var order = (existing.maxOfOrNull { it.order } ?: -1) + 1
-                val saved = mutableListOf<String>()
-                core.saveTrip(ready.trip.copy(order = order++))
-                saved += ready.trip.id
-                if (from.savedPlaceId != null || to.savedPlaceId != null) places.linkTrip(ready.trip.id, from.savedPlaceId, to.savedPlaceId)
-                if (withReturn) {
-                    core.saveTrip(ready.returnTrip.copy(order = order))
-                    saved += ready.returnTrip.id
-                    if (from.savedPlaceId != null || to.savedPlaceId != null) places.linkTrip(ready.returnTrip.id, to.savedPlaceId, from.savedPlaceId)
-                }
-                saveState.value = SaveState.Saved(saved)
+                saveState.value = SaveState.Saved(saver.save(ready.trip, from, to, withReturn, join))
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 saveState.update { SaveState.Failed(e.message ?: "The route could not be saved", ready) }

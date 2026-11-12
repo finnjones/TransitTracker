@@ -660,6 +660,26 @@ can be renamed, moved to a folder, limited to certain lines or adjusted by
 hand; routes are reordered by dragging and deleted with a two-button
 confirmation.
 
+**Several ways from A to B.** A saved route can hold more than one way of
+making the journey (the T9 from the station, the 400 bus from the corner).
+Home shows the route's best way for when you leave: of the services you can
+still make without running (leave-by not passed, counting the walk from a
+saved place to each way's own stop), the one that arrives first. The services
+under it are the next ones no other way beats (none leaves no earlier and
+arrives sooner). The card says BEST OF 3 WAYS.
+
+| Where | What it does |
+|---|---|
+| One journey, SAVE ROUTE | When a route between the same ends exists (the same saved places; a station end must share a station), the dialog offers "Add as another way to Home to Work", on by default. A way it already has says so |
+| Journey options, SAVE THESE WAYS AS ONE ROUTE | Every distinct way among the journeys found, ticked, with those that cannot be saved greyed out with the reason. The same way at another time is listed once |
+| The route's timetable | Tabs: BEST (every way, only the runs no other way beats) and one per way. PIN makes Home show only that way; UNPIN gives the choice back. FIND MORE WAYS NOW plans the route again from its two ends, leaving now |
+| Edit route | WAYS: name each way, or remove it (a route keeps at least one) |
+
+Device alarms follow the pinned way, else the runs no other way beats. The
+return of a route reverses every way. Data saved before ways existed reads as
+a route with one way, and `SavedTrip.legs` stays the first way, so an older
+app reading newer data still sees a working route.
+
 Planning needs a connection; Home and saved routes do not.
 
 ### 5.7 Saved places, and trips between them

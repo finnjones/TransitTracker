@@ -58,6 +58,8 @@ class EditRouteActions(
     val confirmDelete: () -> Unit = {},
     val retry: () -> Unit = {},
     val closeProblem: () -> Unit = {},
+    val wayLabel: (String, String) -> Unit = { _, _ -> },
+    val toggleWay: (String) -> Unit = {},
 )
 
 /** Edit one saved route (plan 4.2 "Edit a saved route"). */
@@ -76,6 +78,7 @@ fun EditRouteScreen(route: Route.EditRoute) {
             notify = { nav.push(Route.WatchEditor(fromTripId = route.tripId)) },
             save = holder::save, askDelete = holder::askDelete, cancelDelete = holder::cancelDelete,
             confirmDelete = holder::confirmDelete, retry = holder::retry, closeProblem = holder::dismissProblem,
+            wayLabel = holder::setWayLabel, toggleWay = holder::toggleWayRemoved,
         ),
     )
 }
@@ -169,8 +172,17 @@ private fun Body(state: EditRouteUiState, actions: EditRouteActions, modifier: M
             state.warning?.let { NoteLine(it, Lamp.TRIANGLE, c.caution) }
         }
         Column(Modifier.flapRow(4), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Heading("LEGS")
-            for (leg in state.legs) LegCard(leg)
+            if (state.ways.isEmpty()) {
+                Heading("LEGS")
+                for (leg in state.legs) LegCard(leg)
+            } else {
+                Heading("WAYS")
+                PixelText(
+                    "Trips shows whichever way gets you there first. Add more from the route's timetable with FIND MORE WAYS NOW.",
+                    style = TtTheme.type.reading15, color = c.textSecondary,
+                )
+                for (w in state.ways) WayCard(w, actions)
+            }
         }
         Column(Modifier.flapRow(5), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             PixelButton(actions.notify, Modifier.fillMaxWidth(), kind = ButtonKind.SECONDARY, enabled = !state.busy) { color ->
@@ -196,6 +208,30 @@ private fun PlaceChoices(label: String, state: EditRouteUiState, selected: Strin
             ToggleChip("A STATION", selected == null, { onPick(null) })
             for (p in state.places) ToggleChip(p.name.uppercase(), selected == p.id, { onPick(p.id) })
         }
+    }
+}
+
+/** One way of the route: its lines, a name to type, and REMOVE (or PUT BACK). */
+@Composable
+private fun WayCard(way: WayRow, actions: EditRouteActions) {
+    val c = TtTheme.colors
+    PixelPanel(Modifier.fillMaxWidth(), verticalSpacing = 8.dp) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Label(
+                "WAY ${way.number}" + (if (way.legCount > 1) " · ${way.legCount - 1} CHANGE" + (if (way.legCount > 2) "S" else "") else " · DIRECT"),
+                Modifier.weight(1f), color = c.textSecondary, size = LabelSize.L10,
+            )
+            for ((i, lines) in way.lines.withIndex()) {
+                if (i > 0) PixelIcon(PixelIcons.ChevronRight, tint = c.textSecondary)
+                LineBadges(lines)
+            }
+        }
+        if (way.removed) {
+            PixelText("This way goes when you save the route.", style = TtTheme.type.reading15, color = c.textSecondary)
+        } else {
+            PixelTextField(way.label, { actions.wayLabel(way.id, it) }, "Name of way ${way.number}", Modifier.fillMaxWidth(), placeholder = "Shows its lines", input = FieldInput.NAME)
+        }
+        PixelButton(if (way.removed) "PUT BACK" else "REMOVE THIS WAY", { actions.toggleWay(way.id) }, Modifier.fillMaxWidth(), kind = ButtonKind.FLAT)
     }
 }
 

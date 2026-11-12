@@ -38,6 +38,11 @@ object LoaderTiming {
     const val ROW_TICKS = 14
     /** Added to the tick so that every row of a five-row board is open at tick 0. */
     const val ROW_PHASE = 7
+    /**
+     * A page that reads the phone's own data shows its loader only after waiting this long, so a
+     * read that takes a moment shows nothing (plan 6) and a slow one is not a blank page.
+     */
+    const val SHOW_AFTER_MS = 250L
 }
 
 /**

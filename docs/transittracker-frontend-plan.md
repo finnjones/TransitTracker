@@ -377,6 +377,7 @@ Rules:
 | Pull to refresh | The trip's own vehicle crosses the top of the list |
 | Timetable download | A train fills a track as the progress bar |
 | Finding journeys | A departure board at work: a flap tile turns over through the vehicles (train, bus, ferry, light rail, metro), the words FINDING JOURNEYS spin and settle letter by letter, and the blank rows below flip in turn. The results then arrive by split-flap |
+| Loading a trip's timetable | The same departure board, with the words LOADING TIMETABLE, where the services will appear. Only when the read takes longer than a quarter of a second; a quick read shows nothing |
 | Searching for a place or for stops | A small vehicle runs on the spot beside the words while the ground moves under it; the vehicle changes about once a second, because the mode is not known yet |
 
 Sound is off by default. If enabled later: three short chiptune notification

@@ -269,35 +269,30 @@ data class FollowState(
 /**
  * Keeps following steady between fixes: a journey is followed after [pinAfter] fixes in a row fit
  * it (one stray fix does not switch the card), and dropped after [dropAfter] fixes in a row fit
- * nothing (a tunnel or a bad fix does not either). A journey the user said they are not on
- * ([dismissed]) is never followed.
+ * nothing (a tunnel or a bad fix does not either). Whether the user is on a journey is decided
+ * by location alone: once the fixes stop fitting it, it is dropped.
  */
 data class FollowMemory(
     val pinned: FollowMatch? = null,
     val pending: ServiceRef? = null,
     val pendingCount: Int = 0,
     val misses: Int = 0,
-    val dismissed: Set<ServiceRef> = emptySet(),
 ) {
     fun next(match: FollowMatch?, underway: Set<ServiceRef>, pinAfter: Int = 2, dropAfter: Int = 3): FollowMemory {
         // A followed journey that has arrived (no longer under way) is finished.
         val held = pinned?.takeIf { it.key in underway }
-        val m = match?.takeIf { it.key !in dismissed }
-        if (m != null && held != null && m.key == held.key) return copy(pinned = m, pending = null, pendingCount = 0, misses = 0)
+        if (match != null && held != null && match.key == held.key) return copy(pinned = match, pending = null, pendingCount = 0, misses = 0)
         // Anything else is a miss for the followed journey.
         val missed = if (held != null) misses + 1 else 0
         val keep = held?.takeIf { missed < dropAfter }
         val keptMisses = if (keep != null) missed else 0
-        if (m == null) return copy(pinned = keep, pending = null, pendingCount = 0, misses = keptMisses)
-        val count = if (pending == m.key) pendingCount + 1 else 1
-        return if (count >= pinAfter) copy(pinned = m, pending = null, pendingCount = 0, misses = 0)
-        else copy(pinned = keep, pending = m.key, pendingCount = count, misses = keptMisses)
+        if (match == null) return copy(pinned = keep, pending = null, pendingCount = 0, misses = keptMisses)
+        val count = if (pending == match.key) pendingCount + 1 else 1
+        return if (count >= pinAfter) copy(pinned = match, pending = null, pendingCount = 0, misses = 0)
+        else copy(pinned = keep, pending = match.key, pendingCount = count, misses = keptMisses)
     }
 
     /** The user switched to another way: follow [match] at once. */
     fun switchTo(match: FollowMatch): FollowMemory =
-        copy(pinned = match, pending = null, pendingCount = 0, misses = 0, dismissed = dismissed - match.key)
-
-    fun dismiss(key: ServiceRef): FollowMemory =
-        copy(pinned = pinned?.takeIf { it.key != key }, pending = pending?.takeIf { it != key }, dismissed = dismissed + key)
+        copy(pinned = match, pending = null, pendingCount = 0, misses = 0)
 }

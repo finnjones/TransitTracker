@@ -362,7 +362,8 @@ on and the connection to make (the bus after the train), not the next departure.
   (near its line, and near where the expected times put the vehicle, so the 08:02 is told from the
   08:12), or changing (near the walk between two rides). Standing at the first stop is waiting,
   not riding. `FollowMemory` follows a journey after two fixes in a row and drops it after three
-  misses, or when it arrives, or on NOT ON THIS.
+  misses (about 45 s of fixes off the journey), or when it arrives. There is no manual override:
+  whether you are on a journey is decided by location alone.
 - `JourneyFollower` (one per app) polls `PlatformServices.currentFix` every 15 s only while a
   screen collects `state`, the app is visible, the setting is on (Settings > Places) and location
   was already allowed. It never asks for permission itself and never runs in the background.

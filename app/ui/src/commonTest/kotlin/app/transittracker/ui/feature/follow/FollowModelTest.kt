@@ -136,11 +136,17 @@ class FollowModelTest {
     }
 
     @Test
-    fun arrivedOrDismissedJourneysAreNotFollowed() {
+    fun arrivedJourneysAreNotFollowed() {
         val mem = FollowMemory().next(m(k1), running).next(m(k1), running)
         assertNull(mem.next(null, setOf(k2)).pinned)
-        val dismissed = mem.dismiss(k1)
-        assertNull(dismissed.pinned)
-        assertNull(dismissed.next(m(k1), running).next(m(k1), running).pinned)
+    }
+
+    @Test
+    fun aJourneyTheFixesStopFittingIsDropped() {
+        var mem = FollowMemory().next(m(k1), running).next(m(k1), running)
+        mem = mem.next(null, running).next(null, running)
+        assertEquals(k1, mem.pinned?.key)
+        mem = mem.next(null, running)
+        assertNull(mem.pinned)
     }
 }

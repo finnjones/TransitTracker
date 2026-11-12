@@ -2,7 +2,6 @@ package app.transittracker.ui.feature.follow
 
 import app.transittracker.model.Journey
 import app.transittracker.model.ServiceDetail
-import app.transittracker.model.ServiceRef
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
 import app.transittracker.ui.platform.LocationFix
@@ -100,15 +99,9 @@ class JourneyFollower(
         return j
     }
 
-    /** "Not on this one": stop following the journey whose first leg is [key], and never pick it again. */
-    fun dismiss(key: ServiceRef) {
-        if (oneOff.value?.rides?.firstOrNull()?.ref == key) oneOff.value = null
-        memory.update { it.dismiss(key) }
-    }
-
     private data class Gate(val on: Boolean, val permission: PermissionState, val foreground: Boolean)
 
-    /** What following is doing; re-emits after every fix and on [dismiss]. */
+    /** What following is doing; re-emits after every fix. */
     val state: Flow<FollowState> = combine(
         settings.settings.map { it.followJourney }.distinctUntilChanged(),
         platform.locationPermission,

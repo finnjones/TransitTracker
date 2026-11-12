@@ -75,7 +75,12 @@ interface TransitCore {
     suspend fun saveWatch(watch: WatchDto)
     suspend fun watchService(ref: ServiceRef, rules: WatchRules = WatchRules()): WatchDto
     suspend fun deleteWatch(id: String)
-    suspend fun sendTestNotification(id: String): Boolean
+    /**
+     * Asks the server to push a test notification through watch [id]. When it does not go out,
+     * [TestPushResponse.detail] says why (e.g. the phone has no push token on the server).
+     * Throws when the server cannot be reached.
+     */
+    suspend fun sendTestNotification(id: String): TestPushResponse
     /** Pull to refresh: reloads watches from the server. False when that failed. */
     suspend fun refreshWatches(): Boolean
     /** Maps an FCM data payload (see [PushKeys]) to the service to open, if any. */

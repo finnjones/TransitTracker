@@ -121,6 +121,10 @@ class SettingsRulesTest {
         assertTrue("no watch" in testWords(TestOutcome.NO_WATCH).lowercase())
         assertTrue("Notify tab" in testWords(TestOutcome.NO_WATCH))
         assertEquals("Can't reach the server.", testWords(TestOutcome.UNREACHABLE))
+        assertEquals("The server could not send it. Try again in a moment.", testWords(TestOutcome.REFUSED))
+        assertTrue("reopen the app" in testWords(TestOutcome.REFUSED, "Device has no push token"))
+        assertTrue("reopen the app" in testWords(TestOutcome.REFUSED, "Push token no longer valid; reopen the app"))
+        assertEquals("The server could not send it: HTTP 429", testWords(TestOutcome.REFUSED, "HTTP 429"))
     }
 
     @Test

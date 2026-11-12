@@ -47,8 +47,8 @@ data class DataSectionState(
 )
 
 /** SEND TEST: nothing yet, working, or the result line. */
-data class TestState(val sending: Boolean = false, val outcome: TestOutcome? = null) {
-    val words: String? get() = outcome?.let { testWords(it) }
+data class TestState(val sending: Boolean = false, val outcome: TestOutcome? = null, val detail: String? = null) {
+    val words: String? get() = outcome?.let { testWords(it, detail) }
 }
 
 /** Everything the Settings page draws. */
@@ -299,16 +299,20 @@ class SettingsStateHolder(
         if (test.value.sending) return
         test.value = TestState(sending = true)
         scope.launch {
-            val outcome = try {
+            test.value = try {
                 val watch = pickWatch(core.watches.first())
-                if (watch == null) TestOutcome.NO_WATCH
-                else if (core.sendTestNotification(watch.id)) TestOutcome.SENT else TestOutcome.REFUSED
+                if (watch == null) {
+                    TestState(outcome = TestOutcome.NO_WATCH)
+                } else {
+                    val response = core.sendTestNotification(watch.id)
+                    if (response.sent) TestState(outcome = TestOutcome.SENT)
+                    else TestState(outcome = TestOutcome.REFUSED, detail = response.detail)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                TestOutcome.UNREACHABLE
+                TestState(outcome = TestOutcome.UNREACHABLE)
             }
-            test.value = TestState(outcome = outcome)
         }
     }
 

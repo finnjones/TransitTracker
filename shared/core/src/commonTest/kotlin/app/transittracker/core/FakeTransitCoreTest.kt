@@ -65,7 +65,7 @@ class FakeTransitCoreTest {
 
         val watch = core.watchService(departure.ref)
         assertTrue(core.watches.first().any { it.id == watch.id })
-        assertTrue(core.sendTestNotification(watch.id))
+        assertTrue(core.sendTestNotification(watch.id).sent)
         core.deleteWatch(watch.id)
         assertTrue(core.watches.first().none { it.id == watch.id })
 

@@ -229,6 +229,31 @@ class CoreTest {
     }
 
     @Test
+    fun aTestThatDoesNotGoOutCarriesTheServersReason() = runTest {
+        val h = Harness(this)
+        h.join()
+        var answer: suspend FakeServer.HandlerScope.() -> io.ktor.client.request.HttpResponseData = {
+            with(h.server) { json(TestPushResponse.serializer(), TestPushResponse(sent = false, detail = "Device has no push token")) }
+        }
+        h.server.on("POST", "/v1/watches/*") { answer() }
+        assertEquals(TestPushResponse(sent = false, detail = "Device has no push token"), h.core.sendTestNotification("w1"))
+
+        answer = {
+            respond(
+                """{"code":"watch_not_found","title":"Not found","detail":"No such watch","status":404}""",
+                HttpStatusCode.NotFound, h.server.jsonHeaders(),
+            )
+        }
+        assertEquals(TestPushResponse(sent = false, detail = "No such watch"), h.core.sendTestNotification("w1"))
+
+        answer = { respond("", HttpStatusCode.TooManyRequests, h.server.jsonHeaders()) }
+        assertEquals(TestPushResponse(sent = false, detail = "HTTP 429"), h.core.sendTestNotification("w1"))
+
+        answer = { throw RuntimeException("connection refused") }
+        assertFailsWith<TransitCoreException> { h.core.sendTestNotification("w1") }
+    }
+
+    @Test
     fun watchesCrudAndCache() = runTest {
         val h = Harness(this)
         h.join()
@@ -264,7 +289,7 @@ class CoreTest {
 
         assertEquals(2, h.core.watches.first().size)
         assertTrue(h.kv.get(KvKeys.WATCHES)!!.contains(watch.id), "cached for offline display")
-        assertTrue(h.core.sendTestNotification(watch.id))
+        assertTrue(h.core.sendTestNotification(watch.id).sent)
 
         h.core.deleteWatch(watch.id)
         assertEquals(listOf(partial.id), h.core.watches.first().map { it.id })

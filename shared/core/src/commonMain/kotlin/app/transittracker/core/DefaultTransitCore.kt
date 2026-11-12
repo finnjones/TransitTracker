@@ -16,6 +16,7 @@ import app.transittracker.model.Journey
 import app.transittracker.model.LatLng
 import app.transittracker.model.PackStatus
 import app.transittracker.model.PushKeys
+import app.transittracker.model.TestPushResponse
 import app.transittracker.model.Route
 import app.transittracker.model.RouteId
 import app.transittracker.model.SavedTrip
@@ -536,7 +537,15 @@ class DefaultTransitCore internal constructor(
         setWatches(cachedWatches().filter { it.id != id })
     }
 
-    override suspend fun sendTestNotification(id: String): Boolean = api.testWatch(id).valueOrNull()?.sent ?: false
+    /** @throws TransitCoreException if the server cannot be reached. */
+    override suspend fun sendTestNotification(id: String): TestPushResponse = when (val result = api.testWatch(id)) {
+        is ApiResult.Success -> result.value
+        is ApiResult.HttpFailure ->
+            TestPushResponse(sent = false, detail = result.error?.detail ?: result.error?.title ?: "HTTP ${result.status}")
+        is ApiResult.NetworkFailure ->
+            if (result.reachedServer) TestPushResponse(sent = false, detail = result.message)
+            else throw TransitCoreException("Could not send test: ${result.message}", cause = result.cause)
+    }
 
     override fun openFromNotification(data: Map<String, String>): ServiceRef? = parseNotification(data)
 

@@ -2,6 +2,7 @@ package app.transittracker.ui
 
 import app.transittracker.core.FakeData
 import app.transittracker.core.TransitCoreException
+import app.transittracker.model.TestPushResponse
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WatchDto
 import app.transittracker.model.WatchKind
@@ -50,7 +51,7 @@ class WatchEditorStateHolderTest {
     private fun failing(base: TransitCore, error: Throwable): TransitCore = object : TransitCore by base {
         override suspend fun saveWatch(watch: WatchDto) = throw error
         override suspend fun deleteWatch(id: String) = throw error
-        override suspend fun sendTestNotification(id: String): Boolean = throw error
+        override suspend fun sendTestNotification(id: String): TestPushResponse = throw error
     }
 
     // ---------------------------------------------------------------- starting points

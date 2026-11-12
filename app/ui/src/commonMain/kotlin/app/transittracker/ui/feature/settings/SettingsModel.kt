@@ -139,12 +139,31 @@ const val BATTERY_SAVER_ON = "Battery saver is on, so your phone may hold notifi
 /** What SEND TEST did; [words] is the result line under the button. */
 enum class TestOutcome { SENT, NO_WATCH, REFUSED, UNREACHABLE }
 
-fun testWords(outcome: TestOutcome): String = when (outcome) {
+/** The result line; [detail] is the server's reason when it [TestOutcome.REFUSED]. */
+fun testWords(outcome: TestOutcome, detail: String? = null): String = when (outcome) {
     TestOutcome.SENT -> "Test sent. It should arrive in a moment."
     TestOutcome.NO_WATCH ->
         "There is no watch to send it through. Add one on the Notify tab, then try again."
-    TestOutcome.REFUSED -> "The server could not send it. Try again in a moment."
+    TestOutcome.REFUSED -> refusalWords(detail)
     TestOutcome.UNREACHABLE -> "Can't reach the server."
+}
+
+/**
+ * Why the server did not send a test, in plain words: the reasons a person can act on get a
+ * sentence of their own; anything else is quoted after a general line.
+ */
+fun refusalWords(detail: String?): String {
+    val reason = detail?.trim().orEmpty()
+    return when {
+        reason.isEmpty() -> "The server could not send it. Try again in a moment."
+        reason.contains("no push token", ignoreCase = true) ->
+            "This phone has not registered for notifications with the server yet. Close and reopen the app, then try again."
+        reason.contains("token no longer valid", ignoreCase = true) ->
+            "This phone's notification registration has expired. Close and reopen the app, then try again."
+        reason.contains("disabled on this device", ignoreCase = true) ->
+            "The server has notifications turned off for this phone."
+        else -> "The server could not send it: $reason"
+    }
 }
 
 // ---------------------------------------------------------------- about

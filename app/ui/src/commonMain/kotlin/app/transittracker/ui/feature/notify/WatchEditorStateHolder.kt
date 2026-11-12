@@ -9,6 +9,7 @@ import app.transittracker.model.WallClock
 import app.transittracker.model.WatchDto
 import app.transittracker.model.WatchKind
 import app.transittracker.model.WatchRules
+import app.transittracker.ui.feature.settings.refusalWords
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.format.shortStopName
 import app.transittracker.ui.nav.Route
@@ -279,16 +280,16 @@ class WatchEditorStateHolder(
         }
         mutable.update { it.copy(testing = true, result = null) }
         scope.launch {
-            val sent = try {
-                core.sendTestNotification(id)
+            val result = try {
+                val response = core.sendTestNotification(id)
+                if (response.sent) ResultLine(TEST_SENT_WORDS, ResultKind.OK)
+                else ResultLine(refusalWords(response.detail), ResultKind.ERROR)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                false
+                ResultLine(TEST_FAILED_WORDS, ResultKind.ERROR)
             }
-            mutable.update {
-                it.copy(testing = false, result = if (sent) ResultLine(TEST_SENT_WORDS, ResultKind.OK) else ResultLine(TEST_FAILED_WORDS, ResultKind.ERROR))
-            }
+            mutable.update { it.copy(testing = false, result = result) }
         }
     }
 

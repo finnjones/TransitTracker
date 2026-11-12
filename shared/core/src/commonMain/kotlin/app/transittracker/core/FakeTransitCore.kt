@@ -20,6 +20,7 @@ import app.transittracker.model.ServiceTime
 import app.transittracker.model.ShapeId
 import app.transittracker.model.Stop
 import app.transittracker.model.StopId
+import app.transittracker.model.TestPushResponse
 import app.transittracker.model.TrackingState
 import app.transittracker.model.TransitCore
 import app.transittracker.model.TripLeg
@@ -264,7 +265,9 @@ class FakeTransitCore(
         watchesState.update { list -> list.filter { it.id != id } }
     }
 
-    override suspend fun sendTestNotification(id: String): Boolean = watchesState.value.any { it.id == id }
+    override suspend fun sendTestNotification(id: String): TestPushResponse =
+        if (watchesState.value.any { it.id == id }) TestPushResponse(sent = true)
+        else TestPushResponse(sent = false, detail = "No such watch")
 
     override fun openFromNotification(data: Map<String, String>): ServiceRef? = parseNotification(data)
 

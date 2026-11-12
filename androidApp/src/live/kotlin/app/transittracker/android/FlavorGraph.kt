@@ -17,6 +17,7 @@ import app.transittracker.model.WallClock
 import app.transittracker.ui.app.AppDeps
 import app.transittracker.ui.places.KeyValuePlacesStore
 import app.transittracker.ui.settings.KeyValueSettingsStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -75,11 +76,24 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
     }
 
     override fun onPushToken(token: String) {
+        Push.status.value = Push.GOT_TOKEN
         val c = core
         if (c == null) {
             pendingPushToken = token
         } else {
-            scope.launch { c.updatePushToken(token) }
+            scope.launch { sendPushToken(c, token) }
+        }
+    }
+
+    /** Hands [token] to the core (which sends it to the server) and says whether the server took it. */
+    private suspend fun sendPushToken(c: TransitCore, token: String) {
+        Push.status.value = try {
+            c.updatePushToken(token)
+            if (kv.get(KvKeys.PUSH_TOKEN_PENDING) == null) Push.REGISTERED else Push.NOT_ACCEPTED
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            "Could not send the token to the server: ${e.message ?: e.javaClass.simpleName}"
         }
     }
 
@@ -126,7 +140,7 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
         }
         pendingPushToken?.let { token ->
             pendingPushToken = null
-            scope.launch { created.updatePushToken(token) }
+            scope.launch { sendPushToken(created, token) }
         }
         Push.register(app)
     }

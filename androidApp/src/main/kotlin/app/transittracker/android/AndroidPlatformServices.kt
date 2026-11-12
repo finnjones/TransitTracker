@@ -78,6 +78,7 @@ class AndroidPlatformServices(
     override val notificationPermission: StateFlow<PermissionState> = notificationState.asStateFlow()
     override val systemReduceMotion: StateFlow<Boolean> = reduceMotionState.asStateFlow()
     override val batterySaver: StateFlow<Boolean> = batterySaverState.asStateFlow()
+    override val pushRegistration: StateFlow<String?> = Push.status.asStateFlow()
 
     /** Debug APKs show the Settings "Debug gallery" row; release builds do not. */
     override val isDebugBuild: Boolean get() = BuildConfig.DEBUG

@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+private val NoPushRegistration: StateFlow<String?> = MutableStateFlow(null)
+
 /** A runtime permission as the app sees it. */
 enum class PermissionState {
     GRANTED,
@@ -45,6 +47,13 @@ interface PlatformServices {
 
     /** Opens the system's notification settings for the app (Android channel settings). */
     fun openNotificationSettings()
+
+    /**
+     * Where this phone's push registration stands, as one plain sentence (Settings >
+     * Notifications): asking for a token, the push service's error, or whether the server took
+     * it. Null where the platform does not report it.
+     */
+    val pushRegistration: StateFlow<String?> get() = NoPushRegistration
 
     // ---- Links and about
     /** Opens [url] in the browser (alert MORE INFO, licences). */
@@ -98,6 +107,7 @@ class FakePlatformServices(
     val deviceIdState = MutableStateFlow(deviceId)
     val reduceMotionState = MutableStateFlow(reduceMotion)
     val batterySaverState = MutableStateFlow(batterySaver)
+    val pushRegistrationState = MutableStateFlow<String?>(null)
 
     /** What a permission request turns NOT_ASKED into. */
     var grantOnRequest: Boolean = true
@@ -111,6 +121,7 @@ class FakePlatformServices(
     override val deviceId: StateFlow<String?> = deviceIdState.asStateFlow()
     override val systemReduceMotion: StateFlow<Boolean> = reduceMotionState.asStateFlow()
     override val batterySaver: StateFlow<Boolean> = batterySaverState.asStateFlow()
+    override val pushRegistration: StateFlow<String?> = pushRegistrationState.asStateFlow()
 
     override suspend fun requestLocationPermission(): PermissionState = request(locationPermissionState)
 

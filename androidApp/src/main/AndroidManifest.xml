@@ -63,6 +63,12 @@
             </intent-filter>
         </receiver>
 
+        <!-- firebase-messaging 26: FirebaseMessaging.register() (Push.register) refuses with "API
+             disabled" unless this is on; with it, tokens arrive in PushMessagingService.onRegistered. -->
+        <meta-data
+            android:name="firebase_messaging_installation_id_enabled"
+            android:value="true" />
+
         <!-- What FCM uses for background messages (the server names the channel in each one). -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"

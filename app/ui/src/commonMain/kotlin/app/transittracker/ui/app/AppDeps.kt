@@ -10,6 +10,7 @@ import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
 import app.transittracker.ui.fake.CoreScenario
 import app.transittracker.ui.fake.FakeSetup
+import app.transittracker.ui.feature.follow.JourneyFollower
 import app.transittracker.ui.fake.ScenarioTransitCore
 import app.transittracker.ui.gallery.SampleData
 import app.transittracker.ui.places.KeyValuePlacesStore
@@ -31,6 +32,7 @@ import app.transittracker.ui.settings.UiSettings
  * - [places]: saved places and which places each saved trip runs between (phone only).
  * - [platform]: what only the platform shell can do (location, permissions, links, versions).
  * - [clock]: the time every screen uses ("now"); the core's clock, fixed in previews and tests.
+ * - [follower]: Follow my journey (which saved-trip journey the phone is on), one per app.
  * - [kv]: the phone's small store, for screen-level things that should survive a restart (the
  *   planner's recent searches). Optional: without it they are kept in memory only.
  */
@@ -43,6 +45,8 @@ class AppDeps(
     val clock: WallClock,
     val kv: KeyValueStore? = null,
 ) {
+    val follower: JourneyFollower by lazy { JourneyFollower(core, platform, settings, clock) }
+
     companion object {
         /**
          * Fake dependencies for previews, screenshots, tests and the desktop window:

@@ -7,6 +7,8 @@ import app.transittracker.model.ServiceTime
 import app.transittracker.model.StopId
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
+import app.transittracker.ui.feature.follow.FollowState
+import app.transittracker.ui.feature.follow.JourneyFollower
 import app.transittracker.ui.format.shortStopName
 import app.transittracker.ui.places.PlacesStore
 import app.transittracker.ui.settings.SettingsStore
@@ -48,6 +50,8 @@ class HomeStateHolder(
     private val tickMs: Long = 1_000,
     /** Services fetched per trip (headline, two following, spares for cancellations). */
     private val count: Int = 6,
+    /** Follow my journey; null leaves every card on its next departures. */
+    private val follower: JourneyFollower? = null,
 ) : StateHolder<HomeUiState>(scope) {
     private val stopNames = MutableStateFlow<Map<StopId, String>>(emptyMap())
     private val firstNextDay = MutableStateFlow<Map<String, Long?>>(emptyMap())
@@ -56,6 +60,22 @@ class HomeStateHolder(
     private val upcoming: Flow<Map<String, List<Journey>>> = core.trips.flatMapLatest { trips ->
         if (trips.isEmpty()) flowOf(emptyMap())
         else combine(trips.map { t -> core.upcoming(t.id, count).map { t.id to it } }) { it.toMap() }
+    }
+
+    /** The journey the user is on, with live times (re-read whenever the core recomputes it). */
+    private val followed: Flow<Followed?> = (follower?.state ?: flowOf(FollowState()))
+        .map { it.match }
+        .distinctUntilChanged()
+        .flatMapLatest { m ->
+            if (m == null) flowOf(null)
+            else core.underway(m.tripId).map { list -> list.firstOrNull { it.departure.ref == m.key }?.let { Followed(m, it) } }
+        }
+        .onStart { emit(null) }
+        .distinctUntilChanged()
+
+    /** NOT ON THIS: stop following the journey on the card, and do not pick it again. */
+    fun notOnThis(key: ServiceRef) {
+        follower?.dismiss(key)
     }
 
     private val ticker: Flow<Long> = flow {
@@ -74,9 +94,9 @@ class HomeStateHolder(
     ) { trips, up, status, density, (p, l) -> HomeInputs(trips, up, status, density, p, l) }
 
     override val state: StateFlow<HomeUiState> = combine(
-        inputs, stopNames, firstNextDay, ticker,
-    ) { i, names, first, now ->
-        val full = i.copy(stopNames = names, firstNextDay = first)
+        inputs, stopNames, firstNextDay, ticker, followed,
+    ) { i, names, first, now, f ->
+        val full = i.copy(stopNames = names, firstNextDay = first, follow = f)
         lookUpMissing(full)
         buildHomeState(full, now, ServiceTime.localDate(now))
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, HomeUiState())
@@ -89,12 +109,12 @@ class HomeStateHolder(
         val trips = i.trips ?: return
         for ((_, journeys) in i.upcoming) {
             val j = headlineOf(journeys) ?: continue
-            for (leg in j.legs.drop(1)) {
-                once("name:${leg.originStopId}") {
-                    val call = core.service(leg.ref).first().calls.firstOrNull { it.stopId == leg.originStopId }
-                    if (call != null) stopNames.update { it + (leg.originStopId to shortStopName(call.stopName)) }
-                }
-            }
+            for (leg in j.legs.drop(1)) lookUpName(leg.ref, leg.originStopId)
+        }
+        // The journey the user is on: where each ride starts and ends.
+        i.follow?.journey?.legs?.forEach { leg ->
+            lookUpName(leg.ref, leg.originStopId)
+            lookUpName(leg.ref, leg.destinationStopId)
         }
         for (t in trips) {
             if (i.upcoming[t.id]?.isEmpty() != true) continue
@@ -104,6 +124,11 @@ class HomeStateHolder(
                 firstNextDay.update { it + (t.id to first) }
             }
         }
+    }
+
+    private fun lookUpName(ref: ServiceRef, stopId: StopId) = once("name:$stopId") {
+        val call = core.service(ref).first().calls.firstOrNull { it.stopId == stopId }
+        if (call != null) stopNames.update { it + (stopId to shortStopName(call.stopName)) }
     }
 
     private fun once(key: String, block: suspend () -> Unit) {

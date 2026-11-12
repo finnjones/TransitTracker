@@ -50,7 +50,11 @@ data class LineGeometry(
     val stations: List<LineStation>,
 )
 
-data class LineSegment(val key: String, val path: MapPath)
+/**
+ * A stretch of a line. [offset] is where [path] starts along the service it was cut from, so a
+ * ridden stretch is dimmed behind the vehicle like the whole service would be.
+ */
+data class LineSegment(val key: String, val path: MapPath, val offset: Double = 0.0)
 
 data class LineStation(val name: String, val point: MapPoint, val stop: Stop?, val stopId: StopId)
 

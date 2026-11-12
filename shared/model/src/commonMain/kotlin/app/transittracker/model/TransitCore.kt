@@ -35,6 +35,12 @@ interface TransitCore {
     // ---- Departures: timetable with the live layer applied ----
     fun upcoming(tripId: String, count: Int = 6): Flow<List<Journey>>
     fun timetable(tripId: String, serviceDate: ServiceDate): Flow<List<Journey>>
+    /**
+     * Journeys of [tripId] already under way: the first leg has left, the last has not yet
+     * arrived. Chained with live data like [upcoming] (a late train moves the connection on).
+     * Earliest first. The front end decides, from the phone's location, which one the user is on.
+     */
+    fun underway(tripId: String): Flow<List<Journey>> = kotlinx.coroutines.flow.flowOf(emptyList())
     fun service(ref: ServiceRef): Flow<ServiceDetail>
     /** Fast (tracker interval) updates for one service while a tracking screen is open. */
     fun track(ref: ServiceRef): Flow<TrackingState>

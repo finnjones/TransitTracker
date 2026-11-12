@@ -90,6 +90,7 @@ object FakeSetup {
         KeyValueSettingsStore.KEY_REDUCE_MOTION to settings.reduceMotion.toString(),
         KeyValueSettingsStore.KEY_SOUNDS to settings.sounds.toString(),
         KeyValueSettingsStore.KEY_HAPTICS to settings.haptics.toString(),
+        KeyValueSettingsStore.KEY_FOLLOW to settings.followJourney.toString(),
     )
 
     /**

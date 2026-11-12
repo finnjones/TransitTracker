@@ -116,6 +116,18 @@ class MapPath(val points: List<MapPoint>) {
         return headingOf(points[i + 1] - points[i])
     }
 
+    /** The stretch from [from] to [to] (metres along, clamped), as a path of its own starting at 0. */
+    fun slice(from: Double, to: Double): MapPath {
+        if (points.size < 2) return this
+        val a = from.coerceIn(0.0, length)
+        val b = to.coerceIn(a, length)
+        val pts = ArrayList<MapPoint>()
+        pts += pointAt(a)
+        for (i in points.indices) if (cumulative[i] > a && cumulative[i] < b) pts += points[i]
+        pts += pointAt(b)
+        return MapPath(pts)
+    }
+
     /** Index of the segment containing [distance] (0 until points.size - 1). */
     fun segmentAt(distance: Double): Int {
         if (points.size < 2) return 0

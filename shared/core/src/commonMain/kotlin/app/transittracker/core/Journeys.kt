@@ -46,6 +46,25 @@ class JourneyPlanner(private val timetable: Timetable, private val overlay: Over
         return result
     }
 
+    /**
+     * Journeys already under way at [nowMs]: the first leg has left (expected time) within the
+     * last [lookbackMs], it is not cancelled, and the last leg has not yet arrived, give or take
+     * [arrivedGraceMs]. Each is chained as in [upcoming], with live data, so a late first leg
+     * moves the connection on to the next one that can be made. Earliest first.
+     */
+    fun underway(
+        trip: SavedTrip,
+        nowMs: Long,
+        lookbackMs: Long = UNDERWAY_LOOKBACK_MS,
+        arrivedGraceMs: Long = ARRIVED_GRACE_MS,
+    ): List<Journey> {
+        if (trip.legs.isEmpty()) return emptyList()
+        return legDepartures(trip.legs.first(), nowMs - lookbackMs, UNDERWAY_LIMIT)
+            .filter { it.status != DepartureStatus.CANCELLED && it.expectedDepartureMs < nowMs }
+            .mapNotNull { chain(it, trip.legs) }
+            .filter { j -> j.arrival.expectedArrivalMs > nowMs - arrivedGraceMs }
+    }
+
     /** Every journey whose first leg leaves on [serviceDate] (a full service day, including after midnight). */
     fun forServiceDay(trip: SavedTrip, serviceDate: ServiceDate): List<Journey> {
         if (trip.legs.isEmpty()) return emptyList()
@@ -122,9 +141,14 @@ class JourneyPlanner(private val timetable: Timetable, private val overlay: Over
     private fun expand(ids: Set<StopId>): Set<StopId> =
         ids.flatMapTo(LinkedHashSet()) { id -> timetable.stopsAtStation(id).map { it.id } + id }
 
-    private companion object {
-        const val LATE_LOOKBACK_MS = 90 * 60_000L
-        const val LOOKBACK_EXTRA = 60
-        const val LEG_LOOKAHEAD = 8
+    companion object {
+        /** How far back [underway] looks for a first leg that has left: longer than any saved trip. */
+        const val UNDERWAY_LOOKBACK_MS = 3 * 60 * 60_000L
+        /** A journey still counts as under way this long after its last leg's expected arrival. */
+        const val ARRIVED_GRACE_MS = 2 * 60_000L
+        private const val UNDERWAY_LIMIT = 80
+        private const val LATE_LOOKBACK_MS = 90 * 60_000L
+        private const val LOOKBACK_EXTRA = 60
+        private const val LEG_LOOKAHEAD = 8
     }
 }

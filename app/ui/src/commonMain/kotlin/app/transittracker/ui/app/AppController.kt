@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import app.transittracker.model.TransitCore
+import app.transittracker.ui.feature.follow.JourneyFollower
 import app.transittracker.ui.nav.Navigator
 import app.transittracker.ui.nav.Route
 
@@ -31,6 +32,13 @@ class AppController {
             }
         }
 
+    /** Follow my journey asks for location only while the app is visible. */
+    internal var follower: JourneyFollower? = null
+        set(value) {
+            field = value
+            value?.foreground?.value = foreground
+        }
+
     private var pendingRoute: Route? = null
     private var pendingNotification: Map<String, String>? = null
 
@@ -44,11 +52,13 @@ class AppController {
     fun onForeground() {
         foreground = true
         core?.onForeground()
+        follower?.foreground?.value = true
     }
 
     fun onBackground() {
         foreground = false
         core?.onBackground()
+        follower?.foreground?.value = false
     }
 
     /** Opens the service a notification is about, or Alerts when it names none. */

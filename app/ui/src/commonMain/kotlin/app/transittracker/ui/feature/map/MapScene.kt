@@ -50,6 +50,8 @@ data class SceneLine(
     val color: Color,
     val segments: List<LineSegment>,
     val travelledBy: String? = null,
+    /** A walk between two rides: drawn dashed in the secondary text colour, not [color]. */
+    val walk: Boolean = false,
 )
 
 enum class StationKind {

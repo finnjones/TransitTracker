@@ -93,7 +93,9 @@ private fun AppBody(
     DisposableEffect(controller, navigator, deps) {
         controller.navigator = navigator
         controller.core = deps.core
+        controller.follower = deps.follower
         onDispose {
+            controller.follower = null
             controller.navigator = null
             controller.core = null
         }

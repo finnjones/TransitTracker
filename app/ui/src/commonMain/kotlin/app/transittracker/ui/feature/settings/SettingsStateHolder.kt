@@ -60,6 +60,8 @@ data class SettingsUiState(
     /** The phone's own reduce-motion setting is on (it also stops motion). */
     val systemReduceMotion: Boolean = false,
     val notifications: PermissionState = PermissionState.NOT_ASKED,
+    /** Location permission, for Follow my journey. */
+    val location: PermissionState = PermissionState.NOT_ASKED,
     val batterySaver: Boolean = false,
     val test: TestState = TestState(),
     val appVersion: String = "",
@@ -103,11 +105,17 @@ class SettingsStateHolder(
         core.trips.map { it.size },
     ) { status, now, p, r -> Data(status, now, p, r) }
 
-    private class Phone(val permission: PermissionState, val saver: Boolean, val systemMotion: Boolean, val deviceId: String?)
+    private class Phone(
+        val permission: PermissionState,
+        val saver: Boolean,
+        val systemMotion: Boolean,
+        val deviceId: String?,
+        val location: PermissionState,
+    )
 
     private val phone = combine(
-        platform.notificationPermission, platform.batterySaver, platform.systemReduceMotion, platform.deviceId,
-    ) { p, b, m, id -> Phone(p, b, m, id) }
+        platform.notificationPermission, platform.batterySaver, platform.systemReduceMotion, platform.deviceId, platform.locationPermission,
+    ) { p, b, m, id, loc -> Phone(p, b, m, id, loc) }
 
     private class Actions(val test: TestState, val checking: Boolean, val update: UpdateState?)
 
@@ -135,6 +143,7 @@ class SettingsStateHolder(
             display = ui,
             systemReduceMotion = ph.systemMotion,
             notifications = ph.permission,
+            location = ph.location,
             batterySaver = ph.saver,
             test = t,
             appVersion = platform.appVersion,
@@ -173,6 +182,19 @@ class SettingsStateHolder(
     fun setReduceMotion(on: Boolean) = change { it.copy(reduceMotion = on) }
     fun setSounds(on: Boolean) = change { it.copy(sounds = on) }
     fun setHaptics(on: Boolean) = change { it.copy(haptics = on) }
+
+    /** ALLOW LOCATION: the system prompt (shown only while it can still be asked). */
+    fun allowLocation() {
+        scope.launch { platform.requestLocationPermission() }
+    }
+
+    /** Follow my journey; turning it on asks for location when it has not been asked yet. */
+    fun setFollowJourney(on: Boolean) {
+        change { it.copy(followJourney = on) }
+        if (on && platform.locationPermission.value == PermissionState.NOT_ASKED) {
+            scope.launch { platform.requestLocationPermission() }
+        }
+    }
 
     private fun change(f: (UiSettings) -> UiSettings) {
         scope.launch { settings.update(f) }

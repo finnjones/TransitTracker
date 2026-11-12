@@ -324,6 +324,28 @@ composition. Tests build the holder from `AppDeps.fake()` pieces with `runTest`'
 (see `HomeStateHolderTest`). No Android ViewModel. Example: `feature/home/HomeStateHolder.kt` +
 `HomeModel.kt` (pure rules).
 
+## Follow my journey (`feature/follow`, `AppDeps.follower`)
+
+Which journey of a saved trip the phone is on, from its location, so Home shows the ride you are
+on and the connection to make (the bus after the train), not the next departure.
+
+- The core lists each trip's journeys under way (`TransitCore.underway`: first leg left, last not
+  arrived), chained with live data like `upcoming`, so a late train moves the connection on.
+- `matchFix` (pure, `FollowModel.kt`) places a `LocationFix` against them, leg by leg: on a ride
+  (near its line, and near where the expected times put the vehicle, so the 08:02 is told from the
+  08:12), or changing (near the walk between two rides). Standing at the first stop is waiting,
+  not riding. `FollowMemory` follows a journey after two fixes in a row and drops it after three
+  misses, or when it arrives, or on NOT ON THIS.
+- `JourneyFollower` (one per app) polls `PlatformServices.currentFix` every 15 s only while a
+  screen collects `state`, the app is visible, the setting is on (Settings > Places) and location
+  was already allowed. It never asks for permission itself and never runs in the background.
+- Home puts the followed trip's card first (`OnTheWay`): the ride and its countdown, THEN the
+  connection with its own countdown, stand and status (TIGHT CHANGE when the change is shorter
+  than the route allows), and the next departures underneath as OTHER SERVICES. Multi-leg cards
+  that are not followed show the connection as a THEN line.
+- `Route.JourneyMap` draws the whole journey: each ride cut to the stretch ridden, in its line's
+  colour, the walk between rides dashed, each vehicle, and you. `FollowShots` shows both screens.
+
 ## Rules for feature work (parallel agents)
 
 You own `feature/<your area>/` and nothing else: your screens (keep the placeholder's function

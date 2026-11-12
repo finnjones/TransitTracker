@@ -243,6 +243,11 @@ class DefaultTransitCore internal constructor(
             planner.upcoming(trip, now, count) to true
         }
 
+    override fun underway(tripId: String): Flow<List<Journey>> =
+        journeysFlow(tripId) { planner, trip, now ->
+            planner.underway(trip, now) to true
+        }
+
     override fun timetable(tripId: String, serviceDate: ServiceDate): Flow<List<Journey>> =
         journeysFlow(tripId) { planner, trip, now ->
             planner.forServiceDay(trip, serviceDate) to (serviceDate in ServiceTime.candidateServiceDates(now))

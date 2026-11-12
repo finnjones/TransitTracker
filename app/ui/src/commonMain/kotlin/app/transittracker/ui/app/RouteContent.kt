@@ -3,6 +3,7 @@ package app.transittracker.ui.app
 import androidx.compose.runtime.Composable
 import app.transittracker.ui.feature.alerts.AlertsScreen
 import app.transittracker.ui.feature.home.HomeScreen
+import app.transittracker.ui.feature.map.JourneyMapScreen
 import app.transittracker.ui.feature.map.MapScreen
 import app.transittracker.ui.feature.map.TrackingScreen
 import app.transittracker.ui.feature.notify.NotifyScreen
@@ -37,6 +38,7 @@ fun RouteContent(route: Route) {
         is Route.TripTimetable -> TripTimetableScreen(route)
         is Route.Service -> ServiceScreen(route)
         is Route.Tracking -> TrackingScreen(route)
+        is Route.JourneyMap -> JourneyMapScreen(route)
         is Route.PlanJourney -> PlanJourneyScreen(route)
         is Route.JourneyOptions -> JourneyOptionsScreen(route)
         is Route.JourneyDetail -> JourneyScreen(route)

@@ -51,9 +51,24 @@ object TimetableShots {
         }
     }
 
+    /** The day's services still being read: the board works where the rows will appear. */
+    @Composable
+    private fun StillLoading() {
+        val deps = remember { AppDeps.fake() }
+        PagePreview(deps) {
+            val holder = rememberStateHolder { scope ->
+                TimetableStateHolder(deps.core, deps.places, deps.clock, FakeSetup.TRIP_HOME_WORK, null, scope)
+            }
+            val state by holder.state.collectAsState()
+            val waiting = state.copy(rowsLoaded = false, earlier = emptyList(), upcoming = emptyList(), timetableOnly = false)
+            TimetableContent(waiting, showEarlier = false, actions = TimetableActions(), loaderDelayMs = 0)
+        }
+    }
+
     val shots: List<Shot> = listOf(
         Shot("timetable-today") { Page(homeWork) { AppDeps.fake() } },
         Shot("timetable-earlier") { EarlierOpen() },
+        Shot("timetable-loading") { StillLoading() },
         Shot("timetable-tomorrow") { Page(Route.TripTimetable(FakeSetup.TRIP_HOME_WORK, "20261112")) { AppDeps.fake() } },
         Shot("timetable-empty") { Page(Route.TripTimetable("trip-nowhere")) { AppDeps.fake(trips = listOf(nowhere)) } },
         // Two days on, trackwork on the T9 touches the trip: the alert banner.

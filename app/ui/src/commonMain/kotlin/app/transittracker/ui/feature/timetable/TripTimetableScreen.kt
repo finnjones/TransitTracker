@@ -72,6 +72,9 @@ import app.transittracker.ui.format.Lamp
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.format.formatDayDate
 import app.transittracker.ui.format.statusPresentation
+import app.transittracker.ui.loading.FlapBoardLoader
+import app.transittracker.ui.loading.LoaderTiming
+import app.transittracker.ui.loading.rememberSlowWait
 import app.transittracker.ui.motion.FlapClock
 import app.transittracker.ui.motion.LocalFlapClock
 import app.transittracker.ui.motion.PageTransition
@@ -170,6 +173,8 @@ fun TimetableContent(
     showEarlier: Boolean,
     actions: TimetableActions,
     modifier: Modifier = Modifier,
+    /** How long the services may take before the loader shows; 0 shows it at once (screenshots). */
+    loaderDelayMs: Long = LoaderTiming.SHOW_AFTER_MS,
 ) {
     val outer = LocalFlapClock.current
     val flap = remember(outer) { DayFlap(outer) }
@@ -201,7 +206,8 @@ fun TimetableContent(
             if (!state.loading && state.tripFound) {
                 DaySelector(state, actions, Modifier.flapRow(1))
                 WaysBar(state, actions, Modifier.flapRow(1))
-                TimetableList(state, showEarlier, actions, flap, Modifier.weight(1f).fillMaxWidth())
+                val slow = rememberSlowWait(!state.rowsLoaded, loaderDelayMs)
+                TimetableList(state, showEarlier, slow, actions, flap, Modifier.weight(1f).fillMaxWidth())
                 ActionBar(actions)
             } else if (!state.loading) {
                 Box(Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -210,7 +216,10 @@ fun TimetableContent(
                         style = TtTheme.type.reading15, color = TtTheme.colors.textReading,
                     )
                 }
-            } else Box(Modifier.weight(1f))
+            } else {
+                val slow = rememberSlowWait(true, loaderDelayMs)
+                Box(Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 8.dp)) { if (slow) TimetableLoader() }
+            }
         }
     }
 }
@@ -304,10 +313,22 @@ private fun daysAheadWords(days: Int): String = when {
 
 // ---------------------------------------------------------------- the list
 
+/** The departure board at work while the day's services are read (plan 3.5). */
+@Composable
+private fun TimetableLoader(modifier: Modifier = Modifier) {
+    FlapBoardLoader(
+        "LOADING", "TIMETABLE",
+        modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Loading the timetable" },
+        rows = 4,
+    )
+}
+
 @Composable
 private fun TimetableList(
     state: TimetableUiState,
     showEarlier: Boolean,
+    /** The day's services are taking a while: the board works where they will appear. */
+    loading: Boolean,
     actions: TimetableActions,
     flap: DayFlap,
     modifier: Modifier,
@@ -339,6 +360,7 @@ private fun TimetableList(
                 )
             }
         }
+        if (loading) item(key = "loading") { TimetableLoader(Modifier.padding(top = 4.dp)) }
         if (state.earlier.isNotEmpty()) {
             val r = row++
             item(key = "fold") {

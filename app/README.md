@@ -185,13 +185,17 @@ Treadmill(modifier, fleet = LoaderFleet)            // 96 x 44 dp: a vehicle on 
 FlapBoardLoader(line1, line2, modifier, rows = 5, fleet = LoaderFleet)   // "FINDING" / "JOURNEYS" on a departure board
 ```
 
-- For waits on the network only. Pages that read local data show nothing while they load (plan 6).
+- For waits on the network. A page that reads the phone's own data shows nothing while it loads
+  (plan 6), unless the read can be slow: then gate the loader with
+  `rememberSlowWait(waiting, delayMs = LoaderTiming.SHOW_AFTER_MS)`, which turns true only once the
+  wait has lasted 250 ms, so a quick read never flashes it. The trip timetable does this while the
+  day's services are read (`TimetableContent(..., loaderDelayMs)`; 0 shows it at once for screenshots).
 - `TreadmillLine` is the small one: place search, address lookup, stops near a place. The mode is
   not known yet, so the vehicle changes about once a second through `LoaderFleet` (train, bus,
   ferry, light rail, metro in Sydney's colours). Pass a one-vehicle `fleet` to keep a single vehicle.
 - `FlapBoardLoader` fills a page: a flap tile turns over through the fleet, the letters spin and
   settle from the left on each flip, and the blank rows below flip one after another. The journey
-  options page shows it while the planner works. It is decorative; give its container one
+  options page shows it while the planner works, and the trip timetable while a day's services load. It is decorative; give its container one
   sentence for the screen reader (`clearAndSetSemantics { contentDescription = "Finding journeys" }`).
 - Both run on the shared sprite clock (nothing is recomposed on a tick) and are settled at tick 0,
   so a screenshot shows a clean frame. Under reduce motion they hold that frame and keep the words.

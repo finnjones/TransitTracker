@@ -11,7 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -39,6 +43,7 @@ import app.transittracker.ui.strip.Ground
 import app.transittracker.ui.strip.drawGround
 import app.transittracker.ui.theme.TtColors
 import app.transittracker.ui.theme.TtTheme
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /** A running vehicle's window, in dots: wide enough for the light rail, tall enough for its wire. */
@@ -107,6 +112,22 @@ fun TreadmillLine(text: String, modifier: Modifier = Modifier) {
         Treadmill()
         Label(text, Modifier.padding(bottom = dot * 3), color = TtTheme.colors.textSecondary, bold = true)
     }
+}
+
+/**
+ * True once [waiting] has lasted [delayMs]; false again as soon as the wait ends. Gate a loader
+ * with it where the wait is usually too short to see, so a quick read never flashes one.
+ */
+@Composable
+fun rememberSlowWait(waiting: Boolean, delayMs: Long = LoaderTiming.SHOW_AFTER_MS): Boolean {
+    var slow by remember { mutableStateOf(waiting && delayMs <= 0) }
+    LaunchedEffect(waiting, delayMs) {
+        if (waiting) {
+            delay(delayMs)
+            slow = true
+        } else slow = false
+    }
+    return waiting && slow
 }
 
 /**

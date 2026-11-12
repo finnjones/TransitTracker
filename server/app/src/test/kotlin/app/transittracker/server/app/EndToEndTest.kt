@@ -459,7 +459,7 @@ class EndToEndTest {
             listOf("T1.N.0730"),
             tt.services.watches.coveredTrips(phoneDevice.deviceId, single.id).map { it.tripId },
         )
-        assertTrue(core.sendTestNotification(single.id))
+        assertTrue(core.sendTestNotification(single.id).sent)
         val test = push.next()
         assertEquals("fcm-phone", test.first)
         assertEquals("test", test.second.data[PushKeys.KIND])

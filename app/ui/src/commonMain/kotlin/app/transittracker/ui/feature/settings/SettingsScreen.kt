@@ -365,7 +365,7 @@ private fun NotificationsGroup(state: SettingsUiState, actions: SettingsActions)
         )
         state.test.outcome?.let { outcome ->
             val ok = outcome == TestOutcome.SENT
-            val text = testWords(outcome)
+            val text = testWords(outcome, state.test.detail)
             Row(
                 Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = text },
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top,

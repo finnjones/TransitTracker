@@ -1,6 +1,7 @@
 package app.transittracker.ui
 
 import app.transittracker.core.InMemoryKeyValueStore
+import app.transittracker.model.TestPushResponse
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WatchDto
 import app.transittracker.model.WatchKind
@@ -149,9 +150,9 @@ class SettingsStateHolderTest {
         assertTrue("no watch" in h.state.value.test.words!!.lowercase())
     }
 
-    private class Scripted(val base: TransitCore, val send: suspend (String) -> Boolean) : TransitCore by base {
+    private class Scripted(val base: TransitCore, val send: suspend (String) -> TestPushResponse) : TransitCore by base {
         val tested = mutableListOf<String>()
-        override suspend fun sendTestNotification(id: String): Boolean {
+        override suspend fun sendTestNotification(id: String): TestPushResponse {
             tested += id
             return send(id)
         }
@@ -166,7 +167,7 @@ class SettingsStateHolderTest {
         base.core.deleteWatch("fake-watch-commute")
         base.core.saveWatch(watch("paused", pausedUntil = SampleData.NOW_MS + 1_000_000))
         base.core.saveWatch(watch("active"))
-        val core = Scripted(base.core) { false }
+        val core = Scripted(base.core) { TestPushResponse(sent = false, detail = "Device has no push token") }
         val deps = AppDeps(core, base.planner, base.settings, base.places, base.platform, base.clock)
         val h = holder(deps, backgroundScope)
         h.loaded()
@@ -174,6 +175,10 @@ class SettingsStateHolderTest {
         runCurrent()
         assertEquals(listOf("active"), core.tested)
         assertEquals(TestOutcome.REFUSED, h.state.value.test.outcome)
+        assertEquals(
+            "This phone has not registered for notifications with the server yet. Close and reopen the app, then try again.",
+            h.state.value.test.words,
+        )
 
         val failing = Scripted(base.core) { error("network down") }
         val h2 = holder(AppDeps(failing, base.planner, base.settings, base.places, base.platform, base.clock), backgroundScope)

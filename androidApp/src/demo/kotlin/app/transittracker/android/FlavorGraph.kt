@@ -21,7 +21,5 @@ private class DemoGraph(app: TransitTrackerApplication) : AppGraph {
         Startup.Ready(AppDeps.fake(clock = WallClock { System.currentTimeMillis() }, platform = platform)),
     )
 
-    override fun setServerAddress(url: String) = Unit
-
     override fun onPushToken(token: String) = Unit
 }

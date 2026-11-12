@@ -59,7 +59,7 @@ class OnboardingActions(
 )
 
 /**
- * Onboarding: invite, timetable download, notifications, first journey (plan 5.1). Shown by the
+ * Onboarding: sign-in (or invite), timetable download, notifications, first journey (plan 5.1). Shown by the
  * shell until the device has joined; it ends with the doors onto Home, which is how the shell
  * lets go of it (README "Navigation": `resetTo(Tab.TRIPS, PageTransition.Doors)`).
  */
@@ -70,7 +70,7 @@ fun OnboardingScreen() {
     // The step survives the planner covering this page; the holder starts from it.
     var savedStep by rememberSaveable { mutableStateOf(OnboardingStep.INVITE.name) }
     val holder = rememberStateHolder { scope ->
-        OnboardingStateHolder(deps.core, deps.platform, scope, OnboardingStep.valueOf(savedStep))
+        OnboardingStateHolder(deps.core, deps.platform, scope, OnboardingStep.valueOf(savedStep), onRestored = deps::reloadSaved)
     }
     val state by holder.state.collectAsState()
     LaunchedEffect(state.step) { savedStep = state.step.name }
@@ -103,7 +103,7 @@ fun OnboardingContent(state: OnboardingUiState, actions: OnboardingActions, modi
             }
             Column(Modifier.flapRow(1), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 when (state.step) {
-                    OnboardingStep.INVITE -> InviteStep(state, actions)
+                    OnboardingStep.INVITE -> if (state.signIn) SignInStep(state, actions) else InviteStep(state, actions)
                     OnboardingStep.DOWNLOAD -> DownloadStep(state.download, actions)
                     OnboardingStep.NOTIFICATIONS -> NotificationsStep(state, actions)
                     OnboardingStep.JOURNEY -> JourneyStep(actions)
@@ -121,7 +121,43 @@ private fun StepTitle(title: String, sentence: String) {
     }
 }
 
-// ---------------------------------------------------------------- 1. invite
+// ---------------------------------------------------------------- 1. sign in
+
+@Composable
+private fun SignInStep(state: OnboardingUiState, actions: OnboardingActions) {
+    val c = TtTheme.colors
+    StepTitle(
+        "Sign in",
+        "TransitTracker is private. Sign in with your Google account; the server lets in the people it knows.",
+    )
+    InviteTicket {
+        SectionLabel("YOUR ACCOUNT")
+        PixelText(
+            "Your saved trips, places and settings are kept with your account, so they come back on a new phone.",
+            style = TtTheme.type.reading15, color = c.textReading,
+        )
+        when (state.join) {
+            JoinStatus.NOT_ALLOWED -> {
+                ResultLine(state.joinMessage ?: "This account is not allowed on this server", error = true)
+                PixelText(NOT_ALLOWED_HINT, style = TtTheme.type.reading15, color = c.textReading)
+            }
+            JoinStatus.FAILED -> ResultLine(state.joinMessage ?: SIGN_IN_FAILED_WORDS, error = true)
+            JoinStatus.UNREACHABLE -> ResultLine(UNREACHABLE_WORDS, error = true)
+            else -> {}
+        }
+        PixelButton(
+            when (state.join) {
+                JoinStatus.WORKING -> "SIGNING IN..."
+                JoinStatus.UNREACHABLE -> "RETRY"
+                JoinStatus.NOT_ALLOWED -> "USE ANOTHER ACCOUNT"
+                else -> "SIGN IN WITH GOOGLE"
+            },
+            actions.join, Modifier.fillMaxWidth(), kind = ButtonKind.PRIMARY, enabled = state.canJoin,
+        )
+    }
+}
+
+// ---------------------------------------------------------------- 1. invite (builds without sign-in)
 
 @Composable
 private fun InviteStep(state: OnboardingUiState, actions: OnboardingActions) {

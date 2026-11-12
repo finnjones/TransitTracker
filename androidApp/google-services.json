@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "763529417265",
+    "project_id": "transittracker-633f552b",
+    "storage_bucket": "transittracker-633f552b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:763529417265:android:e4123f459f6b1628a7fb10",
+        "android_client_info": {
+          "package_name": "app.transittracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCkuK9vTpeEHgZSf7mLQDY9ffrSYk9K_cI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

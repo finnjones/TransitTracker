@@ -45,8 +45,13 @@ fun impossibleCharactersHint(bad: List<Char>): String? {
 
 const val INVALID_CODE_WORDS = "That code isn't valid or has been used"
 const val UNREACHABLE_WORDS = "Can't reach the server"
+const val NOT_ALLOWED_HINT = "Ask the person who runs the server to add your email address, then try again."
+const val SIGN_IN_FAILED_WORDS = "Sign-in didn't work. Try again."
 
-/** The four steps, in order (plan 5.1). */
+/**
+ * The four steps, in order (plan 5.1). The first is signing in with an account when the build has
+ * sign-in, otherwise the invite code; it keeps the name INVITE for saved state.
+ */
 enum class OnboardingStep {
     INVITE, DOWNLOAD, NOTIFICATIONS, JOURNEY;
 
@@ -62,7 +67,20 @@ fun nextStep(from: OnboardingStep, notificationsAllowed: Boolean): OnboardingSte
     OnboardingStep.JOURNEY -> null
 }
 
-enum class JoinStatus { IDLE, WORKING, INVALID, UNREACHABLE }
+enum class JoinStatus {
+    IDLE,
+    WORKING,
+
+    /** Invite code refused. */
+    INVALID,
+    UNREACHABLE,
+
+    /** Signed in, but the server does not let this account in. */
+    NOT_ALLOWED,
+
+    /** The sign-in itself failed (no network for Google, a refused token...). */
+    FAILED,
+}
 
 // ---------------------------------------------------------------- the download
 

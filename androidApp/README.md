@@ -49,15 +49,58 @@ phone); permissions, location, links and system motion settings are real in both
 
 ## Server address (live)
 
-The address is never committed. It is read at build time, first match wins:
+The live app uses **https://tt.finnjones.me**. A build can point at another server with, first
+match wins:
 
-1. Gradle property: `./gradlew :androidApp:assembleLiveDebug -Ptt.baseUrl=https://tt.example.ts.net`
+1. Gradle property: `./gradlew :androidApp:assembleLiveDebug -Ptt.baseUrl=https://tt.example.com`
 2. Environment variable `TT_BASE_URL`
 3. `tt.baseUrl=https://…` in `local.properties`
 
-When none is set (CI builds, for instance), the app asks for the address once on first start,
-on a small screen of its own. It must start with `https://`; it is stored on the phone (in the
-app's no-backup storage) and used to create the core. To change it later, clear the app's data.
+It must start with `https://`. There is no longer a first-start screen asking for it.
+
+## Sign-in and saved data
+
+Instead of an invite code, the app signs in with Google (Firebase Authentication):
+
+1. Onboarding's first step is **SIGN IN WITH GOOGLE**: Android's Google account sheet (Credential
+   Manager), then Firebase sign-in with that Google account.
+2. The app sends Firebase's ID token to tt-server (`POST /v1/join` with `idToken`). The server
+   checks the token and that the account is on its allow list (`tt-admin allow sam@gmail.com`;
+   see deploy/README.md), then gives the phone its device token as before. An account that is
+   not on the list sees "… is not allowed on this server" and can try another account.
+3. While signed in, the user's own data is also kept in Cloud Firestore at
+   `users/{uid}/prefs/{key}`: display settings (`ui.*`), saved places and their trip links
+   (`places.*`), saved trips (`trips`) and the planner's recent searches (`plan.recent`). Writes
+   go to the phone first, then to Firestore (which queues them while offline). On sign-in, and
+   at each start while signed in, the account's copy is brought down (it wins for keys it has;
+   keys only the phone has are uploaded) and the screens read it again. The device token, push
+   token, caches and timetable packs never leave the phone.
+
+Settings > About shows the account. **SIGN OUT** signs out and forgets the phone's join, so
+onboarding shows again; saved data stays on the phone and in the account. A phone that joined
+with an invite code before this change keeps working, and **SIGN IN WITH GOOGLE** there links
+its saved data to the account without joining again.
+
+Builds without `google-services.json` have no sign-in and fall back to the invite code.
+
+### Firebase console, once
+
+The project is `transittracker-633f552b`; its `google-services.json` is committed here (it
+identifies the project and is not a secret).
+
+1. **Authentication > Sign-in method**: enable **Google**.
+2. **Project settings > Your apps > app.transittracker**: add the **SHA-1** (and SHA-256) of every
+   key that signs an APK you install: the release key (`keytool -list -v -keystore
+   transittracker-release.jks -alias transittracker`) and your debug key
+   (`./gradlew :androidApp:signingReport`). Google sign-in fails with "Google sign-in didn't work"
+   for an APK signed with a key that is not listed. CI debug APKs are signed with a different
+   key each run, so use a release (or a local build) to sign in.
+3. **Download `google-services.json` again** and replace `androidApp/google-services.json` (and the
+   `GOOGLE_SERVICES_JSON` secret, if you set one). After step 1 it carries an `oauth_client` of
+   type 3, the web client id the sign-in sheet needs; with the old file the app says "Google
+   sign-in is not set up for this build of the app yet."
+4. **Firestore Database**: create the database (production mode, a nearby region such as
+   `australia-southeast1`), then publish the rules in [firebase/firestore.rules](../firebase/firestore.rules).
 
 ## Updates
 
@@ -67,7 +110,7 @@ progress), checks it (size, SHA-256, package name and version code) and hands it
 installer. Android asks to confirm the first time; on Android 12 and later, once the app has
 installed itself, later updates go in without a prompt. The app closes while Android replaces
 it; with notifications on, a "TransitTracker updated" notification opens it again. Settings, saved trips, the
-server address and the device's join all stay, as with any app update.
+sign-in and the device's join all stay, as with any app update.
 
 Android only installs an update signed with the same key as the installed app, so releases are
 signed with one long-lived key that CI keeps as secrets:
@@ -92,13 +135,12 @@ signed with one long-lived key that CI keeps as secrets:
 3. Each push to `main` then publishes a release `android-<run number>` ("TransitTracker 0.1.<n>")
    with the signed live APK and the commits since the last one as notes. Without the secrets
    the job only warns.
-4. On the phone, once: uninstall any debug build (it has a different key; you will need a new
-   invite code, `tt-admin invite`), open the repository's Releases page, install the APK and
-   allow your browser or file manager to install apps. From then on, use CHECK FOR UPDATES.
+4. On the phone, once: uninstall any debug build (it has a different key; you will sign in
+   again), open the repository's Releases page, install the APK and allow your browser or file
+   manager to install apps. From then on, use CHECK FOR UPDATES.
 
-The release APK has no server address or secrets in it (the app asks for the address on first
-start); releases of a public repository can be downloaded by anyone, but are no use without your
-server and an invite code.
+The release APK has no secrets in it; releases of a public repository can be downloaded by
+anyone, but the server only lets in the accounts on its allow list.
 
 Settings: `tt.updateRepo` / `TT_UPDATE_REPO` names the repository the app checks (`owner/name`;
 in GitHub Actions it defaults to the repository being built; blank turns the button off). A local
@@ -107,17 +149,13 @@ build can be signed with the same key through `tt.signing.storeFile`, `tt.signin
 environment variables); `tt.versionCode` / `TT_VERSION_CODE` sets the build number. The demo
 flavour does not update itself.
 
-## Push notifications (optional)
+## Push notifications
 
-Push needs a Firebase project (backend plan section 7.1). Without `androidApp/google-services.json`
-the app builds and runs normally with push off.
-
-1. In the Firebase console, add an Android app with package name `app.transittracker`.
-2. Download `google-services.json` into `androidApp/` (it identifies the project; it is not a
-   secret, so committing it is fine, but you may keep it local).
-3. Build again. The build applies the Google services plugin when the file is there (for the live
-   flavour; the demo flavour skips it). The app then registers its FCM token with the server
-   (`TransitCore.updatePushToken`) at start and whenever Firebase issues a new one.
+Push uses the same Firebase project as sign-in (`androidApp/google-services.json`, above). The
+build applies the Google services plugin when the file is there (for the live flavour; the demo
+flavour skips it). The app then registers its FCM token with the server
+(`TransitCore.updatePushToken`) at start and whenever Firebase issues a new one. Without the
+file the app builds and runs with push and sign-in off.
 
 Notification channels are created at start with the ids the server uses: `delays`,
 `cancellations`, `alerts`, `general`. Messages that arrive while the app is open are posted on
@@ -135,11 +173,14 @@ src/main/kotlin/app/transittracker/android/
                                 reduce motion (animator scale 0), battery saver
   Notifications.kt              channels and in-app posting
   PushMessagingService.kt       FCM token and messages
-  ServerAddressScreen.kt        first-start server address (live, when not built in)
+  ServerAddress.kt              checks the build's server address
+  FirebaseAccounts.kt           sign-in with Google (Credential Manager + Firebase Auth) and
+                                CloudKeyValueStore (the user's saved data in Firestore)
   AppUpdates.kt                 in-app updates: GitHub releases, download and checks,
                                 PackageInstaller session, installer and "updated" receivers
   NotificationData.kt           tap extras -> data map
-src/live/…/FlavorGraph.kt       real core (TransitCoreFactory) + stores; the journey planner is
+src/live/…/FlavorGraph.kt       real core (TransitCoreFactory) + stores (through CloudKeyValueStore
+                                with Firebase) + sign-in; the journey planner is
                                 the core's own client (`core.planner`: tt-server's /v1/places
                                 and /v1/plan)
 src/demo/…/FlavorGraph.kt       AppDeps.fake on the real clock
@@ -151,8 +192,9 @@ key-value store, file store with atomic rename, zstd, network status) and for pa
 `OPEN_READONLY` and never modified). Their Robolectric tests are in `src/androidHostTest`.
 
 **Backup.** Auto backup includes only `files/kv/backup.properties` (display settings, saved
-trips and places). The device token and id, push token, server address, caches and timetable
-packs are in `noBackupFilesDir` and are never backed up; a restored phone joins again.
+trips and places). The device token and id, push token, caches and timetable packs are in
+`noBackupFilesDir` and are never backed up; a restored phone signs in and joins again (and its
+saved data also comes back from the account).
 
 ## Not built yet
 

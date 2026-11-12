@@ -1,0 +1,17 @@
+rules_version = '2';
+
+// TransitTracker keeps each signed-in user's saved trips, places, display settings and recent
+// searches at users/{uid}/prefs/{key} (androidApp: CloudKeyValueStore). Only that user can read
+// or write them; nothing else in the database is reachable from the app.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/prefs/{key} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['value', 'updatedMs'])
+        && (request.resource.data.value == null
+            || (request.resource.data.value is string && request.resource.data.value.size() < 500000))
+        && request.resource.data.updatedMs is int;
+    }
+  }
+}

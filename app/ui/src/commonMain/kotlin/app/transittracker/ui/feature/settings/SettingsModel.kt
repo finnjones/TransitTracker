@@ -252,7 +252,10 @@ private fun problemWords(state: UpdateState.Failed): UpdateWords {
 }
 
 const val DEVICE_ID_NOTE =
-    "This is how the server knows your phone. If you lose it, give this ID to the person who invited you so they can remove it."
+    "This is how the server knows your phone. If you lose it, give this ID to the person who runs the server so they can remove it."
+
+const val ACCOUNT_NOTE =
+    "Your saved trips, places and settings are kept with this account, so they come back when you sign in on another phone."
 
 /** One font in the licences list. */
 data class FontLicence(

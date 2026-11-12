@@ -52,6 +52,7 @@ import app.transittracker.ui.components.ToggleChip
 import app.transittracker.ui.components.pixelFill
 import app.transittracker.ui.format.Lamp
 import app.transittracker.ui.format.formatClock
+import app.transittracker.ui.loading.TreadmillLine
 import app.transittracker.ui.motion.flapRow
 import app.transittracker.ui.nav.LocalNavigator
 import app.transittracker.ui.nav.OnBack
@@ -330,7 +331,7 @@ private fun SearchPage(state: PlanFormUiState, field: Field, holder: PlanJourney
                 SectionLabel("SAVED PLACES", Modifier.padding(bottom = 4.dp))
                 for (p in state.places) PlaceRow(choiceOf(p)) { holder.choosePlace(p) }
             }
-            SearchState.Searching -> Label("SEARCHING...", color = c.textSecondary)
+            SearchState.Searching -> TreadmillLine("SEARCHING...")
             is SearchState.Found -> {
                 SectionLabel("RESULTS", Modifier.padding(bottom = 4.dp))
                 for (p in s.places) ResultRow(p) { holder.chooseResult(p) }

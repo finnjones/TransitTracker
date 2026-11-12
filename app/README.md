@@ -14,6 +14,7 @@ app/ui                      :app:ui, package app.transittracker.ui (KMP; JVM tar
     format/      pure status mapping, time and countdown formatting, line-colour contrast
     sprites/     sprite sheets, the shared frame clock, VehicleSprite, WalkerSprite
     strip/       JourneyStrip (+ its pure maths), LegStrip, grounds
+    loading/     Treadmill, TreadmillLine, FlapBoardLoader (+ their pure timing): waits on the network
     settings/    UiSettings, SettingsStore, KeyValueSettingsStore
     gallery/     galleries, sample data, the screenshot catalogue, AppShots (transitions), debug screen
     nav/         Route (every screen), Tab, Navigator (+ rememberNavigator, LocalNavigator)
@@ -175,6 +176,28 @@ LegStrip(legs: List<Leg>, modifier, sprites = false)   // Leg.Walk(min), Leg.Rid
 - The maths are pure and tested: `vehicleProgress(calls, nowMs)`, `journeyStripModel(...)`,
   `legSpans(...)`, `legSentence(...)`.
 - `LegStrip` is 62 dp high with sprites, 32 dp without.
+
+## Loaders (`app.transittracker.ui.loading`)
+
+```kotlin
+TreadmillLine(text, modifier)                       // "SEARCHING...": the treadmill with the words beside it
+Treadmill(modifier, fleet = LoaderFleet)            // 96 x 44 dp: a vehicle on the spot, the ground running under it
+FlapBoardLoader(line1, line2, modifier, rows = 5, fleet = LoaderFleet)   // "FINDING" / "JOURNEYS" on a departure board
+```
+
+- For waits on the network only. Pages that read local data show nothing while they load (plan 6).
+- `TreadmillLine` is the small one: place search, address lookup, stops near a place. The mode is
+  not known yet, so the vehicle changes about once a second through `LoaderFleet` (train, bus,
+  ferry, light rail, metro in Sydney's colours). Pass a one-vehicle `fleet` to keep a single vehicle.
+- `FlapBoardLoader` fills a page: a flap tile turns over through the fleet, the letters spin and
+  settle from the left on each flip, and the blank rows below flip one after another. The journey
+  options page shows it while the planner works. It is decorative; give its container one
+  sentence for the screen reader (`clearAndSetSemantics { contentDescription = "Finding journeys" }`).
+- Both run on the shared sprite clock (nothing is recomposed on a tick) and are settled at tick 0,
+  so a screenshot shows a clean frame. Under reduce motion they hold that frame and keep the words.
+- The timing is pure and tested (`LoadingModelTest`): `treadmillFrame`, `flapTileFrame`,
+  `boardLetter`, `boardRowOpen`, with the constants in `LoaderTiming`.
+- `drawGround(..., scrollDots)` in `strip/Ground.kt` is what makes the ground run.
 
 ## Settings (`app.transittracker.ui.settings`)
 

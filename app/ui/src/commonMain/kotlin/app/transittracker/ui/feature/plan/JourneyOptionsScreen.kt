@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -54,13 +53,12 @@ import app.transittracker.ui.format.Lamp
 import app.transittracker.ui.format.countdown
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.format.parseLineColor
+import app.transittracker.ui.loading.FlapBoardLoader
 import app.transittracker.ui.motion.PageTransition
 import app.transittracker.ui.motion.flapRow
 import app.transittracker.ui.nav.LocalNavigator
 import app.transittracker.ui.nav.Route
 import app.transittracker.ui.nav.Tab
-import app.transittracker.ui.sprites.WalkerPose
-import app.transittracker.ui.sprites.WalkerSprite
 import app.transittracker.ui.state.rememberStateHolder
 import app.transittracker.ui.strip.Leg
 import app.transittracker.ui.strip.LegStrip
@@ -236,23 +234,11 @@ private fun RouteRow(t: SavedTrip, onClick: () -> Unit) {
 
 @Composable
 private fun Loading() {
-    val c = TtTheme.colors
-    Column(
+    FlapBoardLoader(
+        "FINDING", "JOURNEYS",
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 18.dp)
             .clearAndSetSemantics { contentDescription = "Finding journeys" },
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-            WalkerSprite(WalkerPose.WALK)
-            Label("FINDING JOURNEYS...", color = c.textSecondary, bold = true)
-        }
-        for (h in listOf(196, 112, 112)) {
-            PixelPanel(Modifier.fillMaxWidth().height(h.dp), background = c.screen) {
-                Box(Modifier.fillMaxWidth(0.4f).height(12.dp).pixelFill(c.raised, dots = 0))
-                Box(Modifier.fillMaxWidth(0.7f).height(12.dp).pixelFill(c.raised, dots = 0))
-            }
-        }
-    }
+    )
 }
 
 // ---------------------------------------------------------------- the list

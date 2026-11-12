@@ -75,6 +75,11 @@ object Screenshots {
         Shot("card-night") { SampleCardPage() },
         Shot("card-day", DayColors) { SampleCardPage() },
         Shot("legs-day", DayColors) { LegStripGallery() },
+        Shot("loading-night", heightDp = 520) { LoadingGallery() },
+        Shot("loading-flip-night", tick = 5, heightDp = 520) { LoadingGallery() },
+        Shot("loading-settling-night", tick = 6, heightDp = 520) { LoadingGallery() },
+        Shot("loading-day", DayColors, tick = 9, heightDp = 520) { LoadingGallery() },
+        Shot("loading-still-night", tick = 5, reduceMotion = true, heightDp = 520) { LoadingGallery() },
     )
 
     /** Every shot: the design system, the shell and transitions, then each feature's. */

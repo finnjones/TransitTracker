@@ -11,6 +11,7 @@ import app.transittracker.ui.feature.follow.FollowState
 import app.transittracker.ui.format.DefaultLineColor
 import app.transittracker.ui.format.StatusPresentation
 import app.transittracker.ui.format.formatClock
+import app.transittracker.ui.format.mapStopName
 import app.transittracker.ui.format.parseLineColor
 import app.transittracker.ui.format.shortStopName
 import app.transittracker.ui.format.statusPresentation
@@ -109,12 +110,62 @@ private fun changeAt(legs: List<JourneyLegTimes>, k: Int, trip: SavedTrip?): Jou
     return JourneyChange(minutes, next.boardName, tight)
 }
 
+/** A later ride boarded further than this from where the ride before ends gets its own BOARD flag. */
+private const val SEPARATE_BOARD_M = 150.0
+
 /** What [changeAt] needs of a ride. */
 private interface JourneyLegTimes {
     val dep: Long?
     val arr: Long?
     val cancelled: Boolean
     val boardName: String
+}
+
+/**
+ * What RECENTRE (and opening the map) shows: what is happening now, not the whole journey.
+ * Riding ride k: the rest of it, from the stop before the next one to where you get off, and the
+ * start of the ride after (the change). Waiting for ride k, or changing onto it: where the ride
+ * before ends, the walk, and the start of ride k. Arrived: the last stop. You are always in it.
+ * [legs] are each ride's geometry with its board and alight call indices; [drawn] says which are
+ * on the map; [nextStop] is ride k's next call index. Null when nothing is placed.
+ */
+internal fun nowFocus(
+    legs: List<Triple<ServiceGeometry, Int, Int>>,
+    drawn: List<Boolean>,
+    current: Int,
+    stage: FollowStage,
+    arrived: Boolean,
+    you: MapPoint?,
+    nextStop: (Int) -> Int,
+): MapBox? {
+    val pts = ArrayList<MapPoint>()
+    fun stretch(k: Int, from: Int, to: Int) {
+        if (drawn.getOrNull(k) != true) return
+        val (g, b, a) = legs[k]
+        val f = from.coerceIn(b, a)
+        val t = to.coerceIn(f, a)
+        pts += g.path.slice(g.stopDistances[f], g.stopDistances[t]).points
+        // The stops' own markers too: a platform can sit a little off its line's shape.
+        pts += g.stopPoints[f]
+        pts += g.stopPoints[t]
+    }
+    // The start of a ride: its first two stretches, enough to show which way it goes.
+    fun start(k: Int) = legs.getOrNull(k)?.let { (_, b, _) -> stretch(k, b, b + 2) }
+    when {
+        arrived -> legs.lastIndex.let { k -> legs.getOrNull(k)?.let { (_, _, a) -> stretch(k, a, a) } }
+        stage == FollowStage.RIDING -> {
+            val (_, _, a) = legs[current]
+            stretch(current, nextStop(current) - 1, a)
+            start(current + 1)
+        }
+        else -> {
+            if (current > 0) legs[current - 1].let { (_, _, a) -> stretch(current - 1, a, a) }
+            start(current)
+        }
+    }
+    if (you != null) pts += you
+    // Room for the vehicles' sprites and the flags around the edge.
+    return MapBox.around(pts)?.grow(150.0)
 }
 
 /** Everything the journey map draws at [nowMs] (pure). */
@@ -194,16 +245,20 @@ fun buildJourneyMapState(
         val nextName = next?.input?.tracking?.detail?.route?.shortName.orEmpty()
         val nextDeparted = next?.dep?.let { nowMs >= it } ?: false
         val change = changeAt(legs, k, i.trip)
+        val boardsApart = legEnds.getOrNull(k - 1)?.second?.let { it.distanceTo(g.stopPoints[l.b]) > SEPARATE_BOARD_M } ?: false
         for (c in l.b..l.a) {
             val call = l.calls[c]
             val board = c == l.b
             val alight = c == l.a
             val time = (if (board) l.dep else l.arr)?.let { formatClock(it, zone, clockFormat) }
-            // The stops in between, and where a later ride is boarded (the CHANGE flag where the
-            // ride before ends speaks for it), are notches in the line, named when zoomed in.
-            val minor = !(board && first) && !alight
+            // The stops in between, and where a later ride is boarded next to where the ride
+            // before ends (its CHANGE flag speaks for both), are notches in the line, named when
+            // zoomed in. A later ride boarded further away (a walk to another street) gets its own
+            // BOARD flag: it is where you are walking to.
+            val ownBoard = board && (first || boardsApart)
+            val minor = !ownBoard && !alight
             val kind = when {
-                board && first && !departed -> StationKind.BOARD
+                ownBoard && !departed -> StationKind.BOARD
                 alight && last && !finished -> StationKind.ALIGHT
                 alight && !last && !nextDeparted -> StationKind.CHANGE
                 minor && (call.passed || call.skipped) -> StationKind.PASSED
@@ -223,7 +278,7 @@ fun buildJourneyMapState(
             val ours = (kind == StationKind.CHANGE && (k == current || k + 1 == current)) || k == current
             stations += SceneStation(
                 id = "leg$k-call$c",
-                name = g.names[c] + if (call.skipped) " · SKIPS" else "",
+                name = mapStopName(g.names[c]) + if (call.skipped) " · SKIPS" else "",
                 point = g.stopPoints[c],
                 kind = kind,
                 detail = detail,
@@ -276,7 +331,10 @@ fun buildJourneyMapState(
         lines += SceneLine("walk-$k", DefaultLineColor, listOf(LineSegment("walk-$k", MapPath(listOf(a, b)))), walk = true)
     }
     val you = i.follow.fix?.let { MapProjection.Sydney.project(it.position) }
-    val scene = MapScene(lines, stations, vehicles, you = you, focus = null, lineWidthDots = 4)
+    val focus = nowFocus(legs.map { Triple(it.input.geometry, it.b, it.a) }, legEnds.map { it.first != null }, current, stage, arrived, you) { k ->
+        legs[k].calls.withIndex().firstOrNull { (c, call) -> c > legs[k].b && c <= legs[k].a && !call.passed }?.index ?: legs[k].a
+    }
+    val scene = MapScene(lines, stations, vehicles, you = you, focus = focus, lineWidthDots = 4)
 
     // ---- footer: the rides and the changes between them
     val rides = legs.mapIndexed { k, l ->
@@ -355,7 +413,8 @@ fun buildJourneyMapState(
         loading = false,
         title = title,
         scene = scene,
-        fitKey = i.legs.map { it.leg.ref } + i.legs.map { it.geometry.schematic },
+        // A new stage of the journey (on to the next ride, off to change) recentres the map.
+        fitKey = i.legs.map { it.leg.ref } + i.legs.map { it.geometry.schematic } + listOf(current, stage, arrived),
         rides = rides,
         changes = changes,
         countdown = countdown,

@@ -167,6 +167,35 @@ class MapPath(val points: List<MapPoint>) {
     }
 }
 
+/**
+ * Snaps a stop to where a vehicle running along [this] path first reaches it, at or after
+ * [from]: the earliest point whose distance from [p] is within [slack] metres of the closest.
+ * The plain closest point goes wrong where a line passes a place twice (the City Circle passes
+ * Town Hall and Central twice, a bus loop doubles back): a stop caught on the second pass puts
+ * every stop after it behind the snap, off the line.
+ */
+fun MapPath.snapAhead(p: MapPoint, from: Double = 0.0, slack: Double = 50.0): PathSnap {
+    if (points.size < 2) return snap(p, from)
+    var bestOffset = Double.MAX_VALUE
+    val offsets = DoubleArray(points.size - 1) { Double.MAX_VALUE }
+    val alongs = DoubleArray(points.size - 1)
+    for (i in 0 until points.size - 1) {
+        if (cumulative[i + 1] < from) continue
+        val a = points[i]
+        val ab = points[i + 1] - a
+        val len2 = ab.x * ab.x + ab.y * ab.y
+        val tMin = if (cumulative[i] >= from || len2 == 0.0) 0.0 else (from - cumulative[i]) / (cumulative[i + 1] - cumulative[i])
+        val t = if (len2 == 0.0) 0.0 else (((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / len2).coerceIn(tMin, 1.0)
+        offsets[i] = (a + ab * t).distanceTo(p)
+        alongs[i] = cumulative[i] + (cumulative[i + 1] - cumulative[i]) * t
+        if (offsets[i] < bestOffset) bestOffset = offsets[i]
+    }
+    if (bestOffset == Double.MAX_VALUE) return PathSnap(length, points.last(), points.last().distanceTo(p))
+    // Segments come in path order, so the first one near enough is the earliest pass.
+    val i = offsets.indices.first { offsets[it] <= bestOffset + slack }
+    return PathSnap(alongs[i], pointAt(alongs[i]), offsets[i])
+}
+
 /** Heading of a direction vector, as in [MapPath.headingAt]. */
 fun headingOf(v: MapPoint): Double {
     if (v.x == 0.0 && v.y == 0.0) return 0.0
@@ -214,7 +243,7 @@ data class MapCamera(val center: MapPoint, val metresPerDot: Double) {
     companion object {
         /**
          * The camera that shows [box] in a view of [viewW] x [viewH] dots with [marginDots] free on
-         * every side ([marginTop] / [marginBottom] for overlays), within [limits].
+         * every side ([marginTop] / [marginBottom] / [marginRight] for overlays), within [limits].
          */
         fun fit(
             box: MapBox,
@@ -224,12 +253,13 @@ data class MapCamera(val center: MapPoint, val metresPerDot: Double) {
             marginDots: Int = 16,
             marginTop: Int = marginDots,
             marginBottom: Int = marginDots,
+            marginRight: Int = marginDots,
         ): MapCamera {
-            val w = max(1, viewW - 2 * marginDots)
+            val w = max(1, viewW - marginDots - marginRight)
             val h = max(1, viewH - marginTop - marginBottom)
             val mpd = limits.clamp(max(box.width / w, box.height / h))
             // Centre the box in the area between the margins.
-            val cx = box.center.x
+            val cx = box.center.x + (marginRight - marginDots) / 2.0 * mpd
             val cy = box.center.y - (marginTop - marginBottom) / 2.0 * mpd
             return MapCamera(MapPoint(cx, cy), mpd)
         }

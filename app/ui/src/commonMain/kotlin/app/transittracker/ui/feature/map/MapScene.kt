@@ -50,7 +50,7 @@ data class SceneLine(
     val color: Color,
     val segments: List<LineSegment>,
     val travelledBy: String? = null,
-    /** A walk between two rides: drawn dashed in the secondary text colour, not [color]. */
+    /** A walk between two rides: drawn dashed in the text colour, not [color]. */
     val walk: Boolean = false,
     /**
      * The route's name ("T2", "333") drawn as a badge on the line, so rides of the same colour

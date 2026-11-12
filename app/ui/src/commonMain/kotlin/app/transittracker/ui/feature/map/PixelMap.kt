@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -39,6 +42,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,6 +66,9 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.roundToInt
 
+/** The WHOLE JOURNEY icon: four corners of a frame on the 7 x 7 grid. */
+internal val FitAllIcon = PixelIconData(7, 7, "M0 0h3v1h-3z M0 1h1v2h-1z M4 0h3v1h-3z M6 1h1v2h-1z M0 4h1v2h-1z M0 6h3v1h-3z M6 4h1v2h-1z M4 6h3v1h-3z")
+
 /** The RECENTRE icon: a crosshair on the 7 x 7 grid. */
 internal val RecentreIcon = PixelIconData(7, 7, "M3 0h1v2h-1z M0 3h2v1h-2z M5 3h2v1h-2z M3 5h1v2h-1z M3 3h1v1h-1z")
 
@@ -75,7 +82,12 @@ private const val GRID_DOTS = 13
  * on the shared sprite clock so vehicles creep between reports.
  *
  * Pan with a drag, zoom with a pinch or the +/- buttons (within [ZoomLimits]); RECENTRE goes back
- * to [MapScene.focus]. [fitKey] changing also recentres (a new service, NEAR ME). [topInsetDp] /
+ * to [MapScene.focus]. [fitKey] changing also recentres (a new service, NEAR ME). With
+ * [showAllLabel] a fourth button fits everything on the map ([MapScene.bounds]), for a scene whose
+ * focus is only part of it (the journey map's focus is the ride you are on).
+ *
+ * Under everything is the base map ([BasemapStore]: water, roads, railways) unless [showBasemap]
+ * is false or the scene is schematic; the plain grid is drawn instead, and until it has loaded. [topInsetDp] /
  * [bottomInsetDp] are covered by overlays: fitting keeps content out from under them.
  *
  * Taps: [onStationTap], [onVehicleTap] (with a 48 dp target), else [onEmptyTap]. For the screen
@@ -94,6 +106,8 @@ fun PixelMap(
     onVehicleTap: ((SceneVehicle) -> Unit)? = null,
     onEmptyTap: (() -> Unit)? = null,
     actions: List<Pair<String, () -> Unit>> = emptyList(),
+    showAllLabel: String? = null,
+    showBasemap: Boolean = true,
 ) {
     val c = TtTheme.colors
     val type = TtTheme.type
@@ -114,21 +128,32 @@ fun PixelMap(
         scene.vehicles.mapNotNull { v -> v.caption?.let { v.id to measurer.measure(it, type.label10Bold.copy(letterSpacing = 1.sp)) } }.toMap()
     }
     val rasters = remember { RasterCache() }
+    // The base map (water, roads, railways) loads once per process; the grid shows until then.
+    val basemap by BasemapStore.state.collectAsState()
+    LaunchedEffect(Unit) { BasemapStore.load() }
+    val baseRaster = remember { BaseRasterCache() }
+    val baseOn = showBasemap && !scene.schematic && basemap != null
     val density = androidx.compose.ui.platform.LocalDensity.current
     val topInsetDots = with(density) { (topInsetDp.toPx() / dot.px).roundToInt() }
     val bottomInsetDots = with(density) { (bottomInsetDp.toPx() / dot.px).roundToInt() }
     val controlsWidthPx = with(density) { (48.dp + 16.dp + 8.dp).toPx() }
-    val controlsHeightPx = with(density) { (topInsetDp + 16.dp + 52.dp * 3 + 8.dp * 2).toPx() }
+    val buttons = if (showAllLabel != null) 4 else 3
+    val controlsHeightPx = with(density) { (topInsetDp + 16.dp + 52.dp * buttons + 8.dp * (buttons - 1)).toPx() }
 
     fun viewDots(): Pair<Int, Int> = max(1, viewPx.width / dot.px) to max(1, viewPx.height / dot.px)
 
-    fun fitCamera(s: MapScene): MapCamera {
+    fun fitCamera(s: MapScene, all: Boolean = false): MapCamera {
         val (w, h) = viewDots()
-        val box = (s.focus ?: s.bounds ?: MapBox(-500.0, -500.0, 500.0, 500.0)).let {
+        val box = ((if (all) null else s.focus) ?: s.bounds ?: MapBox(-500.0, -500.0, 500.0, 500.0)).let {
             if (it.width < 400 && it.height < 400) it.grow(400.0) else it
         }
         val margin = 24
-        return MapCamera.fit(box, w, h, limitsFor(s, w, h), marginDots = margin, marginTop = margin + topInsetDots, marginBottom = margin + bottomInsetDots)
+        // The zoom buttons cover a column on the right: keep what is fitted out from under them.
+        val controlsDots = (controlsWidthPx / dot.px).roundToInt()
+        return MapCamera.fit(
+            box, w, h, limitsFor(s, w, h), marginDots = margin, marginTop = margin + topInsetDots, marginBottom = margin + bottomInsetDots,
+            marginRight = controlsDots + margin / 2,
+        )
     }
 
     fun cameraNow(): MapCamera = camera ?: fitCamera(currentScene)
@@ -171,7 +196,8 @@ fun PixelMap(
             val nowMs = clock.nowMillis()
             // blinkOn / frame read the sprite clock's tick, so the map redraws on every tick
             // (8 a second) and vehicles creep between reports.
-            drawGround(c, cam, w, h, dotPx)
+            val base = basemap?.takeIf { baseOn }
+            if (base != null) drawBasemap(base, cam, w, h, dotPx, c, baseRaster) else drawGround(c, cam, w, h, dotPx)
             val spots = scene.vehicles.associate { it.id to it.spotAt(nowMs, reduce) }
             drawLines(scene, cam, w, h, dotPx, rasters, spots, c)
             scene.you?.let { drawYou(cam.toDots(it, w, h), dotPx, c) }
@@ -193,6 +219,14 @@ fun PixelMap(
             PixelIconButton(PixelIcons.Plus, "Zoom in", { zoomBy(1.6) })
             PixelIconButton(PixelIcons.Minus, "Zoom out", { zoomBy(1 / 1.6) })
             PixelIconButton(RecentreIcon, "Recentre", { camera = null })
+            if (showAllLabel != null) PixelIconButton(FitAllIcon, showAllLabel, { camera = fitCamera(currentScene, all = true) })
+        }
+        if (baseOn) {
+            // OpenStreetMap's credit (ODbL), small, in the corner the controls leave free.
+            Box(
+                Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 8.dp + bottomInsetDp)
+                    .pixelFill(c.screen.copy(alpha = 0.8f)).padding(horizontal = 4.dp, vertical = 2.dp),
+            ) { Label("© OPENSTREETMAP", color = c.textSecondary, size = LabelSize.L10) }
         }
         if (scene.schematic) {
             Box(
@@ -229,6 +263,46 @@ private fun DrawScope.drawGround(c: TtColors, cam: MapCamera, w: Int, h: Int, do
         drawRect(grid, Offset(0f, y * dotPx), Size(size.width, dotPx))
         y += GRID_DOTS
     }
+}
+
+/** The base map drawn for one camera (rebuilt only when the camera, view or theme changes). */
+private class BaseRasterCache {
+    var key: Any? = null
+    var image: ImageBitmap? = null
+}
+
+/** The base map's colours: the water and the streets a step off the ground, never as loud as a line. */
+private fun basemapColors(c: TtColors): BasemapColors = if (c.isDay) {
+    BasemapColors(
+        water = lerp(c.water, c.screen, 0.25f),
+        local = c.panel,
+        secondary = c.panel,
+        main = lerp(c.panel, c.divider, 0.45f),
+        rail = lerp(c.textSecondary, c.screen, 0.55f),
+    )
+} else {
+    BasemapColors(
+        water = lerp(c.water, c.screen, 0.35f),
+        local = c.panel,
+        secondary = c.raised,
+        main = c.divider,
+        rail = lerp(c.textSecondary, c.screen, 0.5f),
+    )
+}
+
+private fun DrawScope.drawBasemap(map: Basemap, cam: MapCamera, w: Int, h: Int, dotPx: Float, c: TtColors, cache: BaseRasterCache) {
+    drawRect(c.screen)
+    val key = listOf(map, cam, w, h, c)
+    val image = cache.image?.takeIf { cache.key == key } ?: rasteriseBasemap(map, cam, w, h, basemapColors(c)).also {
+        cache.key = key
+        cache.image = it
+    }
+    // One bitmap pixel a dot, scaled up without smoothing: whole dots, like the rest of the map.
+    drawImage(
+        image, srcOffset = IntOffset.Zero, srcSize = IntSize(image.width, image.height),
+        dstOffset = IntOffset.Zero, dstSize = IntSize((image.width * dotPx).roundToInt(), (image.height * dotPx).roundToInt()),
+        filterQuality = FilterQuality.None,
+    )
 }
 
 /** Rasterised lines for one camera (rebuilt only when the camera, view or scene changes). */
@@ -268,12 +342,12 @@ private fun DrawScope.drawLines(
         val travelled = line.travelledBy?.let { spots[it]?.distance }
         val dim = lerp(line.color, c.screen, if (c.isDay) 0.55f else 0.5f)
         for ((i, cell) in cells.withIndex()) {
-            // A walk: dashes of two line widths, in the secondary text colour.
+            // A walk: dashes of two line widths, in the text colour (the streets under it are grey).
             if (line.walk) {
                 if ((i / (lw * 2)) % 2 == 1) continue
                 val x = (cell.x - half) * dotPx
                 val y = (cell.y - half) * dotPx
-                drawRect(c.textSecondary, Offset(x, y), Size(dotPx * maxOf(1, lw / 2), dotPx * maxOf(1, lw / 2)))
+                drawRect(c.text, Offset(x, y), Size(dotPx * maxOf(1, lw / 2), dotPx * maxOf(1, lw / 2)))
                 continue
             }
             val x = (cell.x - half) * dotPx

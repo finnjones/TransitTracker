@@ -271,6 +271,11 @@ val FONT_LICENCES: List<FontLicence> = listOf(
 
 const val LICENCE_NAME = "SIL Open Font License 1.1"
 
+/** The base map's data (feature/map/Basemap.kt): its credit, licence and bundled notice. */
+const val MAP_DATA_CREDIT = "Map data © OpenStreetMap contributors."
+const val MAP_DATA_LICENCE = "Open Database License 1.0"
+const val MAP_DATA_FILE = "files/licenses/ODbL-OpenStreetMap.txt"
+
 /** The copyright notice of a licence file: its first line starting with "Copyright"; blank if none. */
 fun copyrightLine(licenceText: String): String =
     licenceText.lineSequence().map { it.trim() }.firstOrNull { it.startsWith("Copyright", ignoreCase = true) }.orEmpty()

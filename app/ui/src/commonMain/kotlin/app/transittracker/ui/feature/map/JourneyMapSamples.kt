@@ -1,5 +1,6 @@
 package app.transittracker.ui.feature.map
 
+import app.transittracker.core.decodePolyline
 import app.transittracker.model.DepartureStatus
 import app.transittracker.model.LatLng
 import app.transittracker.model.Mode
@@ -18,46 +19,60 @@ import app.transittracker.ui.nav.MapLeg
 import app.transittracker.ui.platform.LocationFix
 
 /**
- * A train-then-bus journey with real stop positions, for the journey map's shots and tests: the
- * T2 all stops from Strathfield to Central (12 stations), a short walk to Eddy Avenue, then a bus
- * down Oxford Street to Bondi Beach (14 stops). The sample core has no buses, and a long bus ride
+ * A train-then-bus journey on real stops and line shapes, for the journey map's shots and tests:
+ * the T2 all stops from Strathfield to Central (12 stations), a walk up to Museum, then the 333
+ * along Oxford Street and Bondi Road to Bondi Beach (20 stops). The sample core has no buses, and a long bus ride
  * with many stops is where the map has to work hardest. Both lines are blue, as they are in
  * Sydney, so the map cannot rely on colour alone to tell the rides apart.
  */
 object JourneyMapSamples {
     private const val MIN = 60_000L
 
+    // Real stops and line shapes from TfNSW's timetable (shapes IWL_2a and 161318, simplified to
+    // 8 m and polyline-encoded).
     private val trainStops = listOf(
-        "Strathfield" to LatLng(-33.8718, 151.0942),
-        "Burwood" to LatLng(-33.8771, 151.1035),
-        "Croydon" to LatLng(-33.8829, 151.1157),
-        "Ashfield" to LatLng(-33.8877, 151.1253),
-        "Summer Hill" to LatLng(-33.8916, 151.1385),
-        "Lewisham" to LatLng(-33.8935, 151.1475),
-        "Petersham" to LatLng(-33.8946, 151.1550),
-        "Stanmore" to LatLng(-33.8935, 151.1641),
-        "Newtown" to LatLng(-33.8979, 151.1793),
-        "Macdonaldtown" to LatLng(-33.8966, 151.1868),
-        "Redfern" to LatLng(-33.8916, 151.1984),
-        "Central" to LatLng(-33.8832, 151.2063),
+        "Strathfield Station Platform 7" to LatLng(-33.87163, 151.09379),
+        "Burwood Station Platform 5" to LatLng(-33.877291, 151.104183),
+        "Croydon Station Platform 4" to LatLng(-33.883202, 151.115367),
+        "Ashfield Station Platform 3" to LatLng(-33.887643, 151.125733),
+        "Summer Hill Station Platform 2" to LatLng(-33.890377, 151.138954),
+        "Lewisham Station Platform 1" to LatLng(-33.893278, 151.147459),
+        "Petersham Station Platform 1" to LatLng(-33.893874, 151.155342),
+        "Stanmore Station Platform 2" to LatLng(-33.89453, 151.164053),
+        "Newtown Station Platform 1" to LatLng(-33.897899, 151.179853),
+        "Macdonaldtown Station Platform 1" to LatLng(-33.896907, 151.185808),
+        "Redfern Station Platform 5" to LatLng(-33.891954, 151.198592),
+        "Central Station Platform 17" to LatLng(-33.884098, 151.206823),
     )
 
     private val busStops = listOf(
-        "Central Station, Eddy Av" to LatLng(-33.8826, 151.2085),
-        "Elizabeth St, Albion St" to LatLng(-33.8812, 151.2110),
-        "Taylor Square" to LatLng(-33.8805, 151.2172),
-        "Oxford St, Barcom Av" to LatLng(-33.8818, 151.2215),
-        "Paddington Town Hall" to LatLng(-33.8843, 151.2262),
-        "Oxford St, Glenmore Rd" to LatLng(-33.8858, 151.2297),
-        "Oxford St, Centennial Sq" to LatLng(-33.8878, 151.2335),
-        "Oxford St, Ocean St" to LatLng(-33.8895, 151.2398),
-        "Bondi Junction" to LatLng(-33.8916, 151.2481),
-        "Bondi Rd, Denison St" to LatLng(-33.8920, 151.2525),
-        "Bondi Rd, Flood St" to LatLng(-33.8936, 151.2580),
-        "Bondi Rd, Wellington St" to LatLng(-33.8938, 151.2640),
-        "Bondi Rd, Campbell Pde" to LatLng(-33.8930, 151.2700),
-        "Bondi Beach" to LatLng(-33.8913, 151.2748),
+        "Museum Station, Elizabeth St, Stand B" to LatLng(-33.876079, 151.209638),
+        "Oxford St opp Brisbane St" to LatLng(-33.877483, 151.213254),
+        "Oxford St at Palmer St" to LatLng(-33.879418, 151.215605),
+        "Taylor Square, Oxford St, Stand D" to LatLng(-33.880766, 151.217555),
+        "Oxford St at Glenmore Rd" to LatLng(-33.883629, 151.221947),
+        "Oxford St opp Paddington Town Hall" to LatLng(-33.884878, 151.225943),
+        "Oxford St after William St" to LatLng(-33.886316, 151.229351),
+        "The Light Brigade Hotel, Oxford St" to LatLng(-33.888699, 151.232315),
+        "Oxford St at Nelson St" to LatLng(-33.890415, 151.243024),
+        "Oxford St at Newland St" to LatLng(-33.891648, 151.247137),
+        "Bondi Junction Station, Stand G" to LatLng(-33.891214, 151.247729),
+        "Bondi Junction Station, Stand A" to LatLng(-33.891415, 151.249576),
+        "Westfield Bondi Junction, Oxford St, Stand B" to LatLng(-33.8917, 151.251621),
+        "Bondi Rd opp Waverley Council Chambers" to LatLng(-33.892787, 151.256216),
+        "Bondi Rd at Penkivil St" to LatLng(-33.89352, 151.261499),
+        "Bondi Rd at Wellington St" to LatLng(-33.893976, 151.264456),
+        "Bondi Rd at Castlefield St" to LatLng(-33.89439, 151.26727),
+        "Bondi Rd opp Dudley St" to LatLng(-33.89524, 151.271631),
+        "Campbell Pde opp South Bondi Beach" to LatLng(-33.894413, 151.273097),
+        "Bondi Beach, Campbell Pde, Stand C" to LatLng(-33.890613, 151.27466),
     )
+
+    /** The T2's line from Parramatta to Central. */
+    private const val TRAIN_SHAPE = """nblmEsjtx[bIoGfFoA`GC~MlBpETrDQrDg@zKwDlHoEnLoQlHyMh[ko@vK_N`PiNt^k`@xg@c^d_@kUdH}FtEgHjDaL`@eEp@ux@C{AsBaN_@}V^{PrFsf@BaHcBySO}Hx@eKbIk`@fEuKtOa[fQkWbLyKfFcKx@_EbD_\lCgMpFgMbVg^zN}\jHe\tJy_@dBcMtA}a@pTo}@nBqLXeGEsH_B_VZyDxCuQV{GMiIsAaNDsHh@eFdEiPhB}FbEsHdC_K^cPEoT_DkRcW}aAsBoE{DaH}M{Mm@}BoMoPwPuPyDiBwHaB_OiBmCn@eEnCiDfE_B|@{AFgNwAyOxCyMv@eEOeUtBcCQkC}AyAiCk@mDxAc_@p@mFl@wAfCaBjB?lAX|CfC~EzFlB~@tf@tEpGfA~GbCvHtDza@nGpEtAr@x@"""
+
+    /** The 333's line from Circular Quay to North Bondi. */
+    private const val BUS_SHAPE = """jrtmEoq|y[Bm@hTlBfDzArAnAr`A`GNqQ|Um[lGsP|GuFrGqVbBuQ`LkQ`KmLh@_BlEwQd@wD{@uJuBgHYoE`B{@`Iia@}BQVKn@wKa@UpCQq@aIiBgEy@_EnHwHv@eCrLu}AlB}GHuAk@yAkAc@kIz@cF[uDiD_LuMq@wCDiEn@sDrBkFUyH`AiCQu@}A_BRS"""
 
     const val TRIP_ID = "sample-strathfield-bondi"
 
@@ -65,7 +80,7 @@ object JourneyMapSamples {
         TRIP_ID, "Strathfield", "Bondi Beach",
         legs = listOf(
             TripLeg(setOf("T-0"), setOf("T-11")),
-            TripLeg(setOf("B-0"), setOf("B-13"), minConnectionMinutes = 4),
+            TripLeg(setOf("B-0"), setOf("B-19"), minConnectionMinutes = 8),
         ),
     )
 
@@ -83,27 +98,34 @@ object JourneyMapSamples {
             )
         }
 
-    private fun leg(ref: ServiceRef, route: Route, headsign: String, calls: List<StopCall>, nowMs: Long): JourneyLegInput {
+    private fun leg(ref: ServiceRef, route: Route, headsign: String, calls: List<StopCall>, shape: String?, nowMs: Long): JourneyLegInput {
         val detail = ServiceDetail(ref, route, headsign, DepartureStatus.ON_TIME, calls, dataAgeMs = 20_000)
         val tracking = TrackingState(detail, vehicle = null, nextCall = calls.firstOrNull { !it.passed }, updatedMs = nowMs)
         return JourneyLegInput(
             MapLeg(ref, calls.first().stopId, calls.last().stopId), tracking,
-            geometryFromStops(calls, calls.map { it.position }), reckoning = null,
+            geometry(calls, shape), reckoning = null,
         )
+    }
+
+    /** The stops' geometry, along [shape] (encoded) when given; straight stop to stop otherwise. */
+    private fun geometry(calls: List<StopCall>, shape: String?): ServiceGeometry {
+        val straight = geometryFromStops(calls, calls.map { it.position })
+        val line = shape ?: return straight
+        return followShape(straight, MapPath(decodePolyline(line).map(MapProjection.Sydney::project)))
     }
 
     /**
      * The journey seen at [nowMs], timed relative to [startMs]: the train leaves Strathfield 12
-     * minutes before it and reaches Central
-     * 10 after; the bus leaves 16 after and reaches Bondi Beach 42 after. [riding] puts the phone
-     * on the train near Petersham (followed); otherwise nothing is followed.
+     * minutes before it and reaches Central 10 after; the bus leaves 20 after and reaches Bondi
+     * Beach 58 after. [riding] puts the phone on the train near Petersham (followed). [shapes]
+     * false draws the rides straight from stop to stop, as without the timetable's shapes.
      */
-    fun input(startMs: Long, nowMs: Long = startMs, riding: Boolean = true): JourneyMapInput {
+    fun input(startMs: Long, nowMs: Long = startMs, riding: Boolean = true, shapes: Boolean = true): JourneyMapInput {
         val train = calls("T", trainStops, startMs - 12 * MIN, 2, nowMs)
-        val bus = calls("B", busStops, startMs + 16 * MIN, 2, nowMs)
+        val bus = calls("B", busStops, startMs + 20 * MIN, 2, nowMs)
         val legs = listOf(
-            leg(trainRef, Route("T2", "T2", "Inner West & Leppington Line", Mode.TRAIN, "0098CD"), "City Circle", train, nowMs),
-            leg(busRef, Route("333", "333", "Circular Quay to North Bondi", Mode.BUS, "00B5EF"), "North Bondi", bus, nowMs),
+            leg(trainRef, Route("T2", "T2", "Inner West & Leppington Line", Mode.TRAIN, "0098CD"), "City Circle", train, TRAIN_SHAPE.takeIf { shapes }, nowMs),
+            leg(busRef, Route("333", "333", "Circular Quay to North Bondi", Mode.BUS, "00B5EF"), "North Bondi", bus, BUS_SHAPE.takeIf { shapes }, nowMs),
         )
         val follow = if (riding) {
             FollowState(

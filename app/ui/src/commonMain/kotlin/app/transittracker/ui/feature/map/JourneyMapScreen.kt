@@ -105,6 +105,7 @@ fun JourneyMapContent(state: JourneyMapUiState, clock: WallClock, actions: Journ
                     Modifier.fillMaxSize(),
                     fitKey = state.fitKey,
                     topInsetDp = if (state.notice != null) 64.dp else 0.dp,
+                    showAllLabel = "Whole journey",
                 )
             } else {
                 Box(Modifier.fillMaxSize().background(c.screen))

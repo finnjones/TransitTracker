@@ -155,6 +155,31 @@ class MapRulesTest {
         assertEquals(0f, top.top)
     }
 
+    @Test
+    fun aStopOnALoopIsSnappedWhereTheLineFirstReachesIt() {
+        // Out east along y = 0, up, back west along y = 100, down, and east again along y = 0:
+        // the stop at x = 500 is passed at 500 m and again on the second lap.
+        val loop = MapPath(listOf(MapPoint(0.0, 0.0), MapPoint(1000.0, 0.0), MapPoint(1000.0, 100.0), MapPoint(0.0, 100.0), MapPoint(0.0, 0.0), MapPoint(1000.0, 0.0)))
+        val stop = MapPoint(500.0, 3.0)
+        assertEquals(500.0, loop.snapAhead(stop).distance, 1e-6)
+        // After the first lap it is caught on the second.
+        assertEquals(2700.0, loop.snapAhead(stop, from = 1000.0).distance, 1e-6)
+    }
+
+    @Test
+    fun oneStopOffTheShapeOnlyStraightensTheStretchesAroundIt() {
+        val shape = MapPath(listOf(MapPoint(0.0, 0.0), MapPoint(500.0, 200.0), MapPoint(1000.0, 0.0), MapPoint(1500.0, 200.0), MapPoint(2000.0, 0.0)))
+        val stops = listOf(MapPoint(0.0, 0.0), MapPoint(1000.0, 0.0), MapPoint(1500.0, -900.0), MapPoint(2000.0, 0.0))
+        val straight = ServiceGeometry(MapPath(stops), stops, MapPath(stops).cumulative.toList(), stops.map { null }, listOf("A", "B", "C", "D"), listOf("a", "b", "c", "d"), schematic = false)
+        val g = followShape(straight, shape)
+        // A to B follows the shape's bend; B to C to D runs straight to the stop 900 m off it.
+        assertEquals(listOf(MapPoint(0.0, 0.0), MapPoint(500.0, 200.0), MapPoint(1000.0, 0.0), MapPoint(1500.0, -900.0), MapPoint(2000.0, 0.0)), g.path.points)
+        assertEquals(listOf(0, 2, 3, 4).map { g.path.cumulative[it] }, g.stopDistances)
+        // With no stop near it, the shape is not used at all.
+        val far = followShape(straight, MapPath(listOf(MapPoint(0.0, 5000.0), MapPoint(2000.0, 5000.0))))
+        assertEquals(straight, far)
+    }
+
     private fun sideOf(b: Box, anchor: Box): LabelSide = when {
         b.left >= anchor.right -> LabelSide.RIGHT
         b.right <= anchor.left -> LabelSide.LEFT

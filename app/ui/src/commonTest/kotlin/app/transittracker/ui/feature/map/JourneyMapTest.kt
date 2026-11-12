@@ -25,18 +25,20 @@ class JourneyMapTest {
     fun onlyTheEndsAndTheChangeAreMarkedTheStopsBetweenAreNotches() {
         val st = state().scene.stations
         val major = st.filter { !it.minor }
-        // Strathfield (left already), the change at Central, and Bondi Beach.
-        assertEquals(listOf("Strathfield", "Central", "Bondi Beach"), major.map { it.name })
-        assertEquals(listOf(StationKind.AHEAD, StationKind.CHANGE, StationKind.ALIGHT), major.map { it.kind })
-        // Ten stations between on the train, twelve stops on the bus, and where the bus is boarded.
-        assertEquals(10 + 12 + 1, st.count { it.minor })
+        // Strathfield (left already), the change at Central, the bus stop at Museum (a walk
+        // away, so it has its own flag) and Bondi Beach.
+        assertEquals(listOf("Strathfield", "Central", "Museum Station", "Bondi Beach"), major.map { it.name })
+        assertEquals(listOf(StationKind.AHEAD, StationKind.CHANGE, StationKind.BOARD, StationKind.ALIGHT), major.map { it.kind })
+        assertTrue(major[2].flag!!.startsWith("BOARD 333 · "))
+        // Ten stations between on the train and eighteen stops on the bus.
+        assertEquals(10 + 18, st.count { it.minor })
         assertTrue(st.filter { it.minor }.all { it.priority > 1 && it.flag == null })
     }
 
     @Test
     fun theChangeIsOneFlagThatSaysHowLongAndWhatComesNext() {
         val change = state().scene.stations.single { it.kind == StationKind.CHANGE }
-        assertEquals("CHANGE · 6 MIN", change.flag)
+        assertEquals("CHANGE · 10 MIN", change.flag)
         assertTrue(change.detail!!.startsWith("THEN 333 · "))
         assertNull(change.flagRole)
         assertEquals(0, change.priority)
@@ -46,14 +48,59 @@ class JourneyMapTest {
     }
 
     @Test
+    fun aBusBoardedWhereTheTrainEndsIsOneChangeFlag() {
+        // Move the bus's first stop next to Central's platform: no separate BOARD flag.
+        val i = JourneyMapSamples.input(t0)
+        val train = i.legs[0].geometry
+        val bus = i.legs[1].geometry
+        val near = bus.copy(stopPoints = listOf(train.stopPoints.last()) + bus.stopPoints.drop(1))
+        val s = buildJourneyMapState(i.copy(legs = listOf(i.legs[0], i.legs[1].copy(geometry = near))), t0)
+        assertEquals(listOf(StationKind.AHEAD, StationKind.CHANGE, StationKind.ALIGHT), s.scene.stations.filter { !it.minor }.map { it.kind })
+    }
+
+    @Test
     fun aTightChangeIsFlaggedInCaution() {
-        // Allow eight minutes to change: six is tight.
+        // Allow twelve minutes to change: ten is tight.
         val input = JourneyMapSamples.input(t0).let { i ->
-            i.copy(trip = i.trip!!.copy(legs = i.trip!!.legs.mapIndexed { k, l -> if (k == 1) l.copy(minConnectionMinutes = 8) else l }))
+            i.copy(trip = i.trip!!.copy(legs = i.trip!!.legs.mapIndexed { k, l -> if (k == 1) l.copy(minConnectionMinutes = 12) else l }))
         }
         val change = buildJourneyMapState(input, t0).scene.stations.single { it.kind == StationKind.CHANGE }
-        assertEquals("TIGHT CHANGE · 6 MIN", change.flag)
+        assertEquals("TIGHT CHANGE · 10 MIN", change.flag)
         assertEquals(ColorRole.CAUTION, change.flagRole)
+    }
+
+    @Test
+    fun ridesFollowTheirLineShapesNotStraightLinesBetweenStops() {
+        val shaped = state().scene.lines.single { it.id == "leg-1" }.segments.single().path
+        val straight = buildJourneyMapState(JourneyMapSamples.input(t0, shapes = false), t0).scene.lines.single { it.id == "leg-1" }.segments.single().path
+        // The 333 bends along Oxford St and Bondi Rd: many more points than its 20 stops, and longer.
+        assertTrue(shaped.points.size > straight.points.size + 10, "${shaped.points.size} vs ${straight.points.size}")
+        assertTrue(shaped.length > straight.length)
+    }
+
+    private fun MapBox.has(p: MapPoint) = p.x in minX..maxX && p.y in minY..maxY
+    private fun JourneyMapUiState.at(name: String) = scene.stations.first { it.name == name }.point
+
+    @Test
+    fun recentreShowsWhatIsHappeningNowNotTheWholeJourney() {
+        // On the train near Petersham: the rest of the train ride, the change and the start of
+        // the bus; not Strathfield (behind you) nor Bondi Beach (the far end).
+        val riding = state()
+        val focus = riding.scene.focus!!
+        assertTrue(focus.has(riding.at("Central")))
+        assertTrue(focus.has(riding.scene.you!!))
+        assertFalse(focus.has(riding.at("Strathfield")))
+        assertFalse(focus.has(riding.at("Bondi Beach")))
+        assertTrue(focus.width < riding.scene.bounds!!.width / 2)
+        // Changing at Central: only the walk and the start of the bus.
+        val changing = state(12, riding = false)
+        assertTrue(changing.scene.focus!!.has(changing.at("Central")))
+        assertTrue(changing.scene.focus!!.width < 2_500)
+        // Each stage recentres: the fit key moves on.
+        assertTrue(riding.fitKey != changing.fitKey)
+        // Arrived: the last stop.
+        val done = state(70, riding = false)
+        assertTrue(done.scene.focus!!.has(done.at("Bondi Beach")))
     }
 
     @Test
@@ -64,7 +111,7 @@ class JourneyMapTest {
         assertTrue(waiting.scene.vehicles.isEmpty())
         assertTrue(waiting.scene.stations.any { it.kind == StationKind.CHANGE })
         // On the bus: its ghost is drawn and Central is a plain name now.
-        val onBus = state(20, riding = false)
+        val onBus = state(24, riding = false)
         assertEquals(listOf("vehicle-1"), onBus.scene.vehicles.map { it.id })
         assertFalse(onBus.scene.stations.any { it.kind == StationKind.CHANGE })
         assertEquals(StationKind.AHEAD, onBus.scene.stations.single { it.name == "Central" }.kind)

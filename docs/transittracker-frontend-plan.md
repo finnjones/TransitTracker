@@ -616,7 +616,8 @@ Up to about five journeys, best first. Each shows:
 - its live state, including whether a late service still makes its
   connection.
 
-Three buttons re-sort the same results: FASTEST, FEWER CHANGES, LESS WALKING.
+Three buttons re-sort the same results: ARRIVE FIRST (the default: earliest
+arrival, then the shorter journey), FEWER CHANGES, LESS WALKING.
 
 **3. One journey, step by step**
 

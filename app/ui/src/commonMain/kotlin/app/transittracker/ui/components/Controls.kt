@@ -245,7 +245,7 @@ fun DayToggleRow(
     }
 }
 
-/** A filter chip (FASTEST / FEWER CHANGES on the options screen): Silkscreen Bold 10, inverted when selected. */
+/** A filter chip (ARRIVE FIRST / FEWER CHANGES on the options screen): Silkscreen Bold 10, inverted when selected. */
 @Composable
 fun ToggleChip(
     text: String,

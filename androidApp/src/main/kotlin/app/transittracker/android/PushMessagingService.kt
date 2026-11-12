@@ -15,21 +15,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
  * otherwise [Push.isAvailable] is false and nothing here runs.
  *
  * - Tokens go to the core (`TransitCore.updatePushToken`): [Push.register] runs on every start
- *   and FCM hands back the current token (and any refreshed one). firebase-messaging 26 delivers
- *   it to [onRegistered] only when the manifest sets `firebase_messaging_installation_id_enabled`;
- *   otherwise (this app) it goes to [onNewToken]. Both are handled.
+ *   and FCM hands back the current token (and any refreshed one) in [onRegistered].
+ *   firebase-messaging 26's `register()` needs `firebase_messaging_installation_id_enabled` in
+ *   the manifest (without it, it fails with "API disabled"). [onNewToken], the older path, is
+ *   handled too in case a token arrives that way.
  * - A message that arrives while the app is open is shown as a notification on its channel;
  *   background messages are shown by FCM itself. Either way a tap opens the app with the
  *   message's data, which `MainActivity` hands to `AppController.openFromNotification`.
  */
 class PushMessagingService : FirebaseMessagingService() {
-    /** The registration token on FCM's default path (no installation-id meta-data in the manifest). */
-    @Deprecated("Deprecated in firebase-messaging 26, but still how it delivers tokens by default")
+    /** A token on FCM's older path (used without the installation-id meta-data). */
+    @Deprecated("Deprecated in firebase-messaging 26; kept in case a token arrives this way")
     override fun onNewToken(token: String) {
         (application as TransitTrackerApplication).graph.onPushToken(token)
     }
 
-    /** A new registration token, when installation-id registration is switched on in the manifest. */
+    /** The registration token (installation-id registration, switched on in the manifest). */
     override fun onRegistered(token: String) {
         (application as TransitTrackerApplication).graph.onPushToken(token)
     }

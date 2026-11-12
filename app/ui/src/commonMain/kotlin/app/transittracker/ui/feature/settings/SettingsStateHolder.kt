@@ -7,6 +7,7 @@ import app.transittracker.model.WatchDto
 import app.transittracker.ui.places.PlacesStore
 import app.transittracker.ui.platform.PermissionState
 import app.transittracker.ui.platform.PlatformServices
+import app.transittracker.ui.platform.SignInResult
 import app.transittracker.ui.platform.UpdateState
 import app.transittracker.ui.settings.CardDensity
 import app.transittracker.ui.settings.ClockFormat
@@ -66,6 +67,14 @@ data class SettingsUiState(
     val test: TestState = TestState(),
     val appVersion: String = "",
     val deviceId: String? = null,
+    /** The build signs in with accounts (About shows the account and SIGN OUT). */
+    val accountsAvailable: Boolean = false,
+    /** The signed-in account ("rider@example.com"), or null. */
+    val account: String? = null,
+    /** SIGN IN or SIGN OUT is running. */
+    val signingOut: Boolean = false,
+    /** Why the last SIGN IN did not work. */
+    val accountMessage: String? = null,
     /** The app-update rows of About. */
     val update: UpdateWords = updateWords(null),
     /** A developer build: the debug gallery row is shown. */
@@ -88,6 +97,10 @@ class SettingsStateHolder(
 ) : StateHolder<SettingsUiState>(scope) {
     private val test = MutableStateFlow(TestState())
     private val checking = MutableStateFlow(false)
+    private val signingOut = MutableStateFlow(false)
+
+    /** Why the last SIGN IN in Settings did not work. */
+    private val accountMessage = MutableStateFlow<String?>(null)
 
     private val ticker: Flow<Long> = flow {
         while (true) {
@@ -117,10 +130,15 @@ class SettingsStateHolder(
         platform.notificationPermission, platform.batterySaver, platform.systemReduceMotion, platform.deviceId, platform.locationPermission,
     ) { p, b, m, id, loc -> Phone(p, b, m, id, loc) }
 
-    private class Actions(val test: TestState, val checking: Boolean, val update: UpdateState?)
+    private class Actions(val test: TestState, val checking: Boolean, val update: UpdateState?, val account: AccountWords)
 
-    /** What the page's own buttons have started: SEND TEST, CHECK NOW and the app update. */
-    private val actions = combine(test, checking, platform.updater?.state ?: flowOf(null)) { t, chk, u -> Actions(t, chk, u) }
+    private class AccountWords(val label: String?, val busy: Boolean, val message: String?)
+
+    /** What the page's own buttons have started (SEND TEST, CHECK NOW, the app update, SIGN OUT) and the account. */
+    private val actions = combine(
+        test, checking, platform.updater?.state ?: flowOf(null),
+        combine(platform.accounts?.account?.map { it?.label } ?: flowOf(null), signingOut, accountMessage) { l, b, m -> AccountWords(l, b, m) },
+    ) { t, chk, u, acc -> Actions(t, chk, u, acc) }
 
     override val state: StateFlow<SettingsUiState> = combine(dataInputs, settings.settings, phone, actions) { d, ui, ph, a ->
         val t = a.test
@@ -148,6 +166,10 @@ class SettingsStateHolder(
             test = t,
             appVersion = platform.appVersion,
             deviceId = ph.deviceId,
+            accountsAvailable = platform.accounts != null,
+            account = a.account.label,
+            signingOut = a.account.busy,
+            accountMessage = a.account.message,
             update = updateWords(u),
             debugBuild = platform.isDebugBuild,
         )
@@ -156,6 +178,8 @@ class SettingsStateHolder(
         SharingStarted.Eagerly,
         SettingsUiState(
             appVersion = platform.appVersion,
+            accountsAvailable = platform.accounts != null,
+            account = platform.accounts?.account?.value?.label,
             update = updateWords(platform.updater?.state?.value),
             debugBuild = platform.isDebugBuild,
         ),
@@ -198,6 +222,53 @@ class SettingsStateHolder(
 
     private fun change(f: (UiSettings) -> UiSettings) {
         scope.launch { settings.update(f) }
+    }
+
+    // ---- account
+
+    /**
+     * SIGN IN on a phone that joined with an invite code: signs in so its saved data is also kept
+     * in the account (and brought down from it). The phone stays joined to the server as it is.
+     */
+    fun signIn() {
+        val accounts = platform.accounts ?: return
+        if (signingOut.value) return
+        signingOut.value = true
+        scope.launch {
+            try {
+                when (val result = accounts.signIn()) {
+                    is SignInResult.Success -> {
+                        accountMessage.value = null
+                        if (result.restored) {
+                            core.reloadTrips()
+                            places.reload()
+                            settings.reload()
+                        }
+                    }
+                    is SignInResult.Failed -> accountMessage.value = result.message
+                    SignInResult.Cancelled -> Unit
+                }
+            } finally {
+                signingOut.value = false
+            }
+        }
+    }
+
+    /**
+     * SIGN OUT: signs out of the account and forgets this phone's join, so onboarding shows again.
+     * Saved trips, places and settings stay on the phone and in the account.
+     */
+    fun signOut() {
+        if (signingOut.value) return
+        signingOut.value = true
+        scope.launch {
+            try {
+                runCatching { platform.accounts?.signOut() }
+                core.signOut()
+            } finally {
+                signingOut.value = false
+            }
+        }
     }
 
     // ---- app updates

@@ -64,6 +64,36 @@ class CoreTest {
     }
 
     @Test
+    fun signInSendsTheIdTokenAndSignOutForgetsTheJoin() = runTest {
+        val h = Harness(this)
+        var answer = """{"code":"not_allowed","title":"Not allowed","detail":"sam@example.com is not allowed on this server.","status":403}"""
+        var status = HttpStatusCode.Forbidden
+        h.server.on("POST", "/v1/join") { req ->
+            val body = ApiJson.decodeFromString(JoinRequest.serializer(), req.body!!)
+            assertEquals("id-token-1", body.idToken)
+            assertEquals("", body.inviteCode)
+            if (status == HttpStatusCode.OK) with(h.server) { json(JoinResponse.serializer(), JoinResponse("dev-9", "tok-9")) }
+            else respond(answer, status, h.server.jsonHeaders())
+        }
+        h.serveConfig(h.packInfo("v1"))
+        assertEquals(JoinResult.NotAllowed("sam@example.com is not allowed on this server."), h.core.signIn("id-token-1"))
+        answer = """{"code":"sign_in_invalid","title":"Sign-in refused","status":401}"""
+        status = HttpStatusCode.Unauthorized
+        assertEquals(JoinResult.InvalidCode, h.core.signIn("id-token-1"))
+        assertFalse(h.core.joined.first())
+
+        status = HttpStatusCode.OK
+        assertEquals(JoinResult.Joined("dev-9"), h.core.signIn("id-token-1"))
+        assertTrue(h.core.joined.first())
+        assertEquals("tok-9", h.kv.get(KvKeys.DEVICE_TOKEN))
+
+        h.core.signOut()
+        assertFalse(h.core.joined.first())
+        assertNull(h.kv.get(KvKeys.DEVICE_TOKEN))
+        assertNull(h.kv.get(KvKeys.DEVICE_ID))
+    }
+
+    @Test
     fun joinInvalidCodeAndServerFailure() = runTest {
         val h = Harness(this)
         var status = HttpStatusCode.BadRequest

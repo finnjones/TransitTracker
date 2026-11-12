@@ -25,6 +25,8 @@ dependencies {
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.compression)
     implementation(libs.sqlite.jdbc)
+    // Firebase Authentication ID tokens are checked with google-auth's TokenVerifier (SignIn.kt).
+    implementation(libs.google.auth)
     implementation(libs.logback)
     testImplementation(kotlin("test"))
     testImplementation(libs.ktor.server.test.host)

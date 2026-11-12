@@ -26,12 +26,19 @@ data class CreatedInvite(val code: String, val createdMs: Long, val expiresMs: L
 /** Summary of a stored invite (without the code, which is not recoverable). */
 data class InviteSummary(val note: String?, val createdMs: Long, val expiresMs: Long?, val usedMs: Long?, val usedByDevice: String?)
 
+/** One entry of the sign-in allow list ([AllowedUsers]). */
+data class AllowedUser(val pattern: String, val note: String?, val createdMs: Long)
+
+/** What [SqliteDeviceStore.disallowUser] did: whether [pattern] was listed, and the devices it cut off. */
+data class DisallowResult(val removed: Boolean, val revokedDevices: List<String>)
+
 /** Counts of rows removed by [SqliteDeviceStore.prune]. */
 data class PruneResult(val devices: Int, val notifications: Int, val invites: Int)
 
 /**
- * Devices, device tokens and invite codes in SQLite. Implements [DeviceRepository] for the other
- * modules and adds the join / authenticate / revoke operations used by the HTTP API and tt-admin.
+ * Devices, device tokens, invite codes and the sign-in allow list in SQLite. Implements
+ * [DeviceRepository] for the other modules and adds the join / authenticate / revoke operations
+ * used by the HTTP API and tt-admin.
  */
 class SqliteDeviceStore(
     private val db: Database,
@@ -109,6 +116,74 @@ class SqliteDeviceStore(
             )
             if (claimed != 1) throw ApiException(403, "invite_used", "This invite code has already been used")
             log.info("Device {} joined ({})", deviceId, platform.take(MAX_SHORT))
+            JoinResponse(deviceId = deviceId, deviceToken = token)
+        }
+    }
+
+    // ---- sign-in (Firebase Authentication) ----
+
+    /** Lets accounts matching [pattern] ([AllowedUsers]) sign in. False when it was already listed. */
+    fun allowUser(pattern: String, note: String? = null): Boolean {
+        val p = AllowedUsers.normalize(pattern) ?: throw IllegalArgumentException("Not an email, *@domain or *: $pattern")
+        val cleanNote = note?.trim()?.take(MAX_NOTE)?.takeIf { it.isNotEmpty() }
+        val added = db.read { c ->
+            c.update("INSERT OR IGNORE INTO allowed_users(pattern, note, created_ms) VALUES (?, ?, ?)", p, cleanNote, clock.nowMillis())
+        } == 1
+        if (added) log.info("Sign-in allowed for {}", p)
+        return added
+    }
+
+    /**
+     * Removes [pattern] from the allow list, then revokes every signed-in device whose account no
+     * remaining entry lets in (invite-code devices are left alone).
+     */
+    fun disallowUser(pattern: String): DisallowResult {
+        val p = AllowedUsers.normalize(pattern) ?: pattern.trim().lowercase()
+        val (removed, orphans) = db.transaction { c ->
+            val removed = c.update("DELETE FROM allowed_users WHERE pattern = ?", p) > 0
+            val patterns = c.query("SELECT pattern FROM allowed_users") { it.getString(1) }
+            val orphans = c.query("SELECT device_id, user_email FROM devices WHERE revoked = 0 AND user_id IS NOT NULL") {
+                it.getString(1) to it.getString(2)
+            }.filter { (_, email) -> patterns.none { pat -> AllowedUsers.matches(pat, email, emailVerified = true) } }
+                .map { it.first }
+            removed to orphans
+        }
+        orphans.forEach { revoke(it) }
+        return DisallowResult(removed, orphans)
+    }
+
+    /** The allow list, oldest first. */
+    fun allowedUsers(): List<AllowedUser> = db.read { c ->
+        c.query("SELECT * FROM allowed_users ORDER BY created_ms, pattern") { rs ->
+            AllowedUser(rs.getString("pattern"), rs.getString("note"), rs.getLong("created_ms"))
+        }
+    }
+
+    /**
+     * Registers a new device for [user], who signed in and whose ID token checked out.
+     * @throws ApiException 403 `not_allowed` when no allow-list entry lets them in.
+     */
+    fun joinUser(user: VerifiedUser, platform: String, appVersion: String): JoinResponse {
+        val now = clock.nowMillis()
+        return db.transaction { c ->
+            val patterns = c.query("SELECT pattern FROM allowed_users") { it.getString(1) }
+            if (patterns.none { AllowedUsers.matches(it, user) }) {
+                log.info("Sign-in refused for {}: not on the allow list", user.email ?: user.uid)
+                throw ApiException(
+                    403,
+                    "not_allowed",
+                    "${user.email ?: "This account"} is not allowed on this server. Ask the person who runs it to add you.",
+                )
+            }
+            val deviceId = UUID.randomUUID().toString()
+            val token = Secrets.newDeviceToken()
+            c.update(
+                """INSERT INTO devices(device_id, token_hash, platform, app_version, created_ms, last_seen_ms, user_id, user_email)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                deviceId, Secrets.sha256Hex(token), platform.take(MAX_SHORT).ifBlank { "unknown" },
+                appVersion.take(MAX_SHORT), now, now, user.uid, user.email?.take(MAX_EMAIL),
+            )
+            log.info("Device {} joined by signing in ({})", deviceId, platform.take(MAX_SHORT))
             JoinResponse(deviceId = deviceId, deviceToken = token)
         }
     }
@@ -202,6 +277,7 @@ class SqliteDeviceStore(
         createdMs = rs.getLong("created_ms"),
         lastSeenMs = rs.getLong("last_seen_ms"),
         revoked = rs.getInt("revoked") != 0,
+        userEmail = rs.getString("user_email"),
     )
 
     companion object {
@@ -211,6 +287,7 @@ class SqliteDeviceStore(
         private const val MAX_SHORT = 64
         private const val MAX_NOTE = 200
         private const val MAX_PUSH_TOKEN = 4096
+        private const val MAX_EMAIL = 320
     }
 }
 

@@ -77,6 +77,8 @@ class SettingsActions(
     val openLicences: () -> Unit = {},
     val closeLicences: () -> Unit = {},
     val openDebugGallery: () -> Unit = {},
+    val signOut: () -> Unit = {},
+    val signIn: () -> Unit = {},
 )
 
 /** The Settings tab (plan 5.11): five groups on one scrolling page, and the licences page. */
@@ -110,6 +112,8 @@ fun SettingsScreen() {
             openLicences = { licences = true },
             closeLicences = { licences = false },
             openDebugGallery = { nav.push(Route.DebugGallery) },
+            signOut = holder::signOut,
+            signIn = holder::signIn,
         )
     }
     // Back closes the licences page before it leaves the tab.
@@ -392,6 +396,28 @@ private fun AboutGroup(state: SettingsUiState, actions: SettingsActions) {
     }
     UpdateRows(state.update, actions.updateApp)
     DashedDivider()
+    if (state.accountsAvailable) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Label("ACCOUNT", color = c.textSecondary, bold = true, size = LabelSize.L10)
+            PixelText(state.account ?: "Not signed in", style = TtTheme.type.name17)
+            PixelText(ACCOUNT_NOTE, style = TtTheme.type.reading15, color = c.textSecondary)
+            state.accountMessage?.let { PixelText(it, style = TtTheme.type.reading15, color = c.stop) }
+            if (state.account != null) {
+                PixelButton(
+                    if (state.signingOut) "SIGNING OUT..." else "SIGN OUT",
+                    actions.signOut, Modifier.fillMaxWidth().padding(top = 4.dp),
+                    kind = ButtonKind.SECONDARY, enabled = !state.signingOut,
+                )
+            } else {
+                PixelButton(
+                    if (state.signingOut) "SIGNING IN..." else "SIGN IN WITH GOOGLE",
+                    actions.signIn, Modifier.fillMaxWidth().padding(top = 4.dp),
+                    kind = ButtonKind.SECONDARY, enabled = !state.signingOut,
+                )
+            }
+        }
+        DashedDivider()
+    }
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Label("DEVICE ID", color = c.textSecondary, bold = true, size = LabelSize.L10)
         PixelText(state.deviceId ?: "Not joined yet", style = TtTheme.type.name17)

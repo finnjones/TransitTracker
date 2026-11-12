@@ -15,7 +15,7 @@ and [docs/transittracker-frontend-plan.md](docs/transittracker-frontend-plan.md)
 | `server:pipeline` | Nightly GTFS fetch/validate and timetable pack builder |
 | `server:live` | Fetch-on-demand GTFS-Realtime cache, decoding and matching |
 | `server:watch` | Push watch engine and FCM sender |
-| `server:app` | Ktor HTTP API, SQLite state, invite codes, `tt-admin`, wiring |
+| `server:app` | Ktor HTTP API, SQLite state, sign-in checks and allow list (invite codes as a fallback), `tt-admin`, wiring |
 
 Shared modules are Kotlin Multiplatform with a JVM target today; Android and iOS targets are added with the front end.
 
@@ -27,10 +27,20 @@ Shared modules are Kotlin Multiplatform with a JVM target today; Android and iOS
 
 Requires JDK 21. Secrets (TfNSW API key, Firebase service account) are read from the environment on the server only; never commit them.
 
+## Accounts
+
+The app signs in with Google (Firebase Authentication, project `transittracker-633f552b`) and
+uses `https://tt.finnjones.me` unless a build names another server. tt-server checks each
+sign-in and lets in the accounts on its allow list (`tt-admin allow <email>`). Each user's saved
+trips, places, display settings and recent searches are also kept in Cloud Firestore, so they
+come back on a new phone. Setup: [androidApp/README.md](androidApp/README.md) ("Sign-in and saved
+data"), [deploy/README.md](deploy/README.md) (step 5 and 10) and [firebase/](firebase/).
+
 ## Run it locally
 
 No TfNSW key or Firebase project needed: import the synthetic fixture as the `syd-rail` pack,
-create an invite and start the server (push messages are only logged without Firebase).
+create an invite and start the server (push messages are only logged without Firebase, and
+without `FIREBASE_PROJECT_ID` sign-in is off, so invite codes are the way in).
 
 ```bash
 ./gradlew :server:app:installDist

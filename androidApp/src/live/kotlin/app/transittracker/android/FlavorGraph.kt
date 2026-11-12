@@ -6,6 +6,7 @@ import app.transittracker.core.AndroidTimetableOpener
 import app.transittracker.core.AndroidZstdDecompressor
 import app.transittracker.core.CoreConfig
 import app.transittracker.core.CoreDependencies
+import app.transittracker.core.KeyValueStore
 import app.transittracker.core.KvKeys
 import app.transittracker.core.PropertiesKeyValueStore
 import app.transittracker.core.SplitKeyValueStore
@@ -25,7 +26,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
-/** Live flavour: the real core against the tt-server at the build's or the user's address. */
+/**
+ * Live flavour: the real core against the build's tt-server (https://tt.finnjones.me unless the
+ * build names another). With Firebase in the build, the user signs in with Google and their saved
+ * data is also kept in their account.
+ */
 internal object FlavorGraph {
     fun create(app: TransitTrackerApplication): AppGraph = LiveGraph(app)
 }
@@ -39,11 +44,15 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
      * else, the device token and id, push token and server address above all, goes to
      * `no_backup/kv/local.properties`, which Android never backs up.
      */
-    private val kv = SplitKeyValueStore(
+    private val phoneKv = SplitKeyValueStore(
         first = PropertiesKeyValueStore(File(app.filesDir, "kv/backup.properties")),
         second = PropertiesKeyValueStore(File(app.noBackupFilesDir, "kv/local.properties")),
         toFirst = { key -> key.startsWith("ui.") || key.startsWith("places.") || key == KvKeys.TRIPS },
     )
+
+    /** With Firebase: the same store, with the user's own data also kept in their account. */
+    private val cloud: CloudKeyValueStore? = if (Push.isAvailable(app)) CloudKeyValueStore(phoneKv) else null
+    private val kv: KeyValueStore = cloud ?: phoneKv
     private val deviceId = MutableStateFlow<String?>(null)
     private val state = MutableStateFlow<Startup>(Startup.Loading)
 
@@ -56,27 +65,13 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
     /** Updates from the GitHub releases CI publishes (null when the build names no repository). */
     private val updater = AppUpdates.create(app, scope)
 
-    override val platform = AndroidPlatformServices(app, appVersionText, deviceId, updater)
+    override val platform = AndroidPlatformServices(app, appVersionText, deviceId, updater).also { p ->
+        if (cloud != null) p.accounts = FirebaseAccountService(app, { p.currentActivity }, cloud)
+    }
     override val startup: StateFlow<Startup> = state.asStateFlow()
 
     init {
-        val built = ServerAddress.normalize(BuildConfig.BASE_URL)
-        if (built != null) {
-            start(built)
-        } else {
-            scope.launch {
-                val saved = kv.get(KEY_BASE_URL)?.let(ServerAddress::normalize)
-                if (saved != null) start(saved) else state.value = Startup.NeedsServerAddress
-            }
-        }
-    }
-
-    override fun setServerAddress(url: String) {
-        val normalized = ServerAddress.normalize(url) ?: return
-        scope.launch {
-            kv.put(KEY_BASE_URL, normalized)
-            start(normalized)
-        }
+        start(ServerAddress.normalize(BuildConfig.BASE_URL) ?: error("Bad server address in the build: ${BuildConfig.BASE_URL}"))
     }
 
     override fun onPushToken(token: String) {
@@ -107,19 +102,24 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
             ),
         )
         core = created
-        state.value = Startup.Ready(
-            AppDeps(
-                core = created,
-                // The real planner: tt-server's /v1/places and /v1/plan through the core's client.
-                planner = created.planner,
-                settings = KeyValueSettingsStore(kv),
-                places = KeyValuePlacesStore(kv),
-                platform = platform,
-                clock = clock,
-                // The planner's recent searches, kept on the phone (not backed up).
-                kv = kv,
-            ),
+        val deps = AppDeps(
+            core = created,
+            // The real planner: tt-server's /v1/places and /v1/plan through the core's client.
+            planner = created.planner,
+            settings = KeyValueSettingsStore(kv),
+            places = KeyValuePlacesStore(kv),
+            platform = platform,
+            clock = clock,
+            // The planner's recent searches, kept on the phone (not backed up) and in the account.
+            kv = kv,
         )
+        state.value = Startup.Ready(deps)
+        // Signed in already: bring down what changed in the account (another phone may have
+        // saved trips or places) and show it. Starting never waits for this.
+        val uid = platform.accounts?.account?.value?.uid
+        if (cloud != null && uid != null) {
+            scope.launch { if (cloud.pull(uid)) deps.reloadSaved() }
+        }
         // Settings > About shows the device id once the phone has joined.
         scope.launch {
             created.joined.collect { joined -> deviceId.value = if (joined) kv.get(KvKeys.DEVICE_ID) else null }
@@ -129,10 +129,5 @@ private class LiveGraph(private val app: TransitTrackerApplication) : AppGraph {
             scope.launch { created.updatePushToken(token) }
         }
         Push.register(app)
-    }
-
-    private companion object {
-        /** The server address the user entered (when the build has none), on the phone only. */
-        const val KEY_BASE_URL = "app.baseUrl"
     }
 }

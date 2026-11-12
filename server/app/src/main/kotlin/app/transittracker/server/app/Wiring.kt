@@ -137,6 +137,8 @@ class TtServer(
     push: PushSender? = null,
     pipelineOptions: PipelineOptions = PipelineOptions.fromEnv(),
     plannerFetcher: PlannerFetcher? = null,
+    /** Sign-in token checks; null picks [FirebaseIdTokenVerifier.fromConfig]. */
+    idTokens: IdTokenVerifier? = null,
 ) : AutoCloseable {
     init {
         listOf(config.dataDir, config.packsDir, config.gtfsArchiveDir, config.recordingsDir)
@@ -164,6 +166,7 @@ class TtServer(
         watches = services.watches,
         clock = clock,
         planner = services.planner,
+        idTokens = idTokens ?: FirebaseIdTokenVerifier.fromConfig(config),
     )
 
     /** Starts the modules and the daily prune in [scope]; cancel the scope to stop them. */

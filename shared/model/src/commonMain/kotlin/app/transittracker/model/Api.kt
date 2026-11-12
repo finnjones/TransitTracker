@@ -86,11 +86,19 @@ data class ApiError(
 
 // ---- Join / device ----
 
+/**
+ * Registers this phone and returns its device token. Two ways in:
+ *  - [idToken]: a Firebase Authentication ID token from the app's sign-in (the usual way); the
+ *    server checks it and that the account is on its allow list (`tt-admin allow`);
+ *  - [inviteCode]: a one-time code from `tt-admin invite` (servers or builds without Firebase).
+ * When both are given, [idToken] is used.
+ */
 @Serializable
 data class JoinRequest(
-    @ProtoNumber(1) val inviteCode: String,
+    @ProtoNumber(1) val inviteCode: String = "",
     @ProtoNumber(2) val platform: String = "android",
     @ProtoNumber(3) val appVersion: String = "",
+    @ProtoNumber(4) val idToken: String? = null,
 )
 
 @Serializable

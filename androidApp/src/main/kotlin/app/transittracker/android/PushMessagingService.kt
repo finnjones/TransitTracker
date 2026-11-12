@@ -36,7 +36,7 @@ class PushMessagingService : FirebaseMessagingService() {
 internal object Push {
     /** True when this build has a Firebase configuration (google-services.json) and it initialised. */
     fun isAvailable(context: Context): Boolean =
-        BuildConfig.PUSH_CONFIGURED && FirebaseApp.getApps(context).isNotEmpty()
+        BuildConfig.FIREBASE_CONFIGURED && FirebaseApp.getApps(context).isNotEmpty()
 
     /**
      * Registers with FCM (firebase-messaging 26: the token arrives in

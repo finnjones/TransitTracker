@@ -88,6 +88,9 @@ interface PlacesStore {
 
     /** Removes the link of a deleted trip. */
     suspend fun unlinkTrip(tripId: String) = linkTrip(tripId, null, null)
+
+    /** Reads the stored places again (after they were restored from the user's account). */
+    suspend fun reload() {}
 }
 
 /**
@@ -137,6 +140,10 @@ class KeyValuePlacesStore(private val kv: KeyValueStore) : PlacesStore {
             if (new.links != old.links) kv.put(KEY_LINKS, json.encodeToString(linksSerializer, new.links.values.toList()))
             state.value = new
         }
+    }
+
+    override suspend fun reload() {
+        mutex.withLock { state.value = read() }
     }
 
     private suspend fun load(): Data = state.value ?: mutex.withLock { state.value ?: read().also { state.value = it } }

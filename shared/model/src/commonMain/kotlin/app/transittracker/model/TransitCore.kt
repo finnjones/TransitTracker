@@ -22,7 +22,15 @@ interface TransitCore {
 
     // ---- Setup ----
     val joined: Flow<Boolean>
+    /** Joins with a one-time invite code (servers and builds without sign-in). */
     suspend fun join(inviteCode: String): JoinResult
+    /**
+     * Joins with a Firebase Authentication ID token from the app's sign-in. The server checks it
+     * and that the account is allowed; [JoinResult.NotAllowed] says when it is not.
+     */
+    suspend fun signIn(idToken: String): JoinResult = JoinResult.Failed("Sign-in is not supported")
+    /** Forgets this phone's join (device token and id): [joined] turns false and onboarding shows again. */
+    suspend fun signOut() {}
     /** Called by the front end whenever Firebase issues a new token. */
     suspend fun updatePushToken(token: String)
 
@@ -31,6 +39,8 @@ interface TransitCore {
     suspend fun saveTrip(trip: SavedTrip)
     suspend fun deleteTrip(id: String)
     suspend fun reorderTrips(ids: List<String>)
+    /** Reads saved trips from storage again (after they were restored from the user's account). */
+    suspend fun reloadTrips() {}
 
     // ---- Departures: timetable with the live layer applied ----
     fun upcoming(tripId: String, count: Int = 6): Flow<List<Journey>>
@@ -225,5 +235,7 @@ data class AlarmSpec(
 sealed interface JoinResult {
     data class Joined(val deviceId: String) : JoinResult
     data object InvalidCode : JoinResult
+    /** Signed in, but the server does not let this account in ([message] says so, from the server). */
+    data class NotAllowed(val message: String) : JoinResult
     data class Failed(val message: String) : JoinResult
 }

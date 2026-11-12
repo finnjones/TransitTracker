@@ -127,6 +127,19 @@ class Database private constructor(
                 "CREATE INDEX notifications_at ON notifications(at_ms)",
                 "CREATE INDEX devices_last_seen ON devices(last_seen_ms)",
             ),
+            // v2: devices joined by signing in (Firebase Authentication) and who may sign in.
+            listOf(
+                "ALTER TABLE devices ADD COLUMN user_id TEXT",
+                "ALTER TABLE devices ADD COLUMN user_email TEXT",
+                "CREATE INDEX devices_user ON devices(user_id)",
+                """
+                CREATE TABLE allowed_users (
+                    pattern TEXT PRIMARY KEY,
+                    note TEXT,
+                    created_ms INTEGER NOT NULL
+                )
+                """,
+            ),
         )
 
         /** Opens (creating if needed) the database at [path] and applies pending migrations. */

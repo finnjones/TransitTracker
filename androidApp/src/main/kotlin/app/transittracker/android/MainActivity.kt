@@ -13,12 +13,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import app.transittracker.ui.app.AppController
 import app.transittracker.ui.app.TransitTrackerApp
-import app.transittracker.ui.settings.UiSettings
-import app.transittracker.ui.theme.TtTheme
 
 /**
- * The one activity: hosts [TransitTrackerApp] edge to edge (or, in a live build with no server
- * address yet, [ServerAddressScreen]) and forwards the system's back, visibility and
+ * The one activity: hosts [TransitTrackerApp] edge to edge and forwards the system's back, visibility and
  * notification taps to the [AppController].
  */
 class MainActivity : ComponentActivity() {
@@ -40,7 +37,7 @@ class MainActivity : ComponentActivity() {
             this,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    // false: on the Trips root (or the server address screen), so back leaves the app.
+                    // false: on the Trips root, so back leaves the app.
                     if (!controller.onBack()) finish()
                 }
             },
@@ -53,9 +50,6 @@ class MainActivity : ComponentActivity() {
             val startup by graph.startup.collectAsState()
             when (val s = startup) {
                 Startup.Loading -> Unit // the window background (Screen colour) shows
-                Startup.NeedsServerAddress -> TtTheme(UiSettings()) {
-                    ServerAddressScreen(onConnect = graph::setServerAddress)
-                }
                 is Startup.Ready -> TransitTrackerApp(s.deps, controller = controller, onDarkTheme = ::applySystemBars)
             }
         }

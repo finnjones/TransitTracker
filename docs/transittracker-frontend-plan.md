@@ -376,6 +376,8 @@ Rules:
 | Walk to the stop | A walking figure ![Walker](design/sprites/preview/walker.gif) stands beside every walk time; it walks when it is time to leave and runs when you are cutting it fine (section 5.7) |
 | Pull to refresh | The trip's own vehicle crosses the top of the list |
 | Timetable download | A train fills a track as the progress bar |
+| Finding journeys | A departure board at work: a flap tile turns over through the vehicles (train, bus, ferry, light rail, metro), the words FINDING JOURNEYS spin and settle letter by letter, and the blank rows below flip in turn. The results then arrive by split-flap |
+| Searching for a place or for stops | A small vehicle runs on the spot beside the words while the ground moves under it; the vehicle changes about once a second, because the mode is not known yet |
 
 Sound is off by default. If enabled later: three short chiptune notification
 sounds (delay, cancellation, platform change) tied to the notification
@@ -823,6 +825,7 @@ later addition.
 | No trips | Empty platform scene and one button |
 | Loading from local data | Nothing: local queries are fast enough to show results directly. No spinners on Home |
 | Waiting on the network (join, save watch, test push) | The button shows a three-frame "working" animation and is disabled; a result line appears under it |
+| Waiting on a search (journeys, places, stops near a place) | The loaders of section 3.5: the departure board for journeys, the small running vehicle for the rest. Under reduce motion they hold one frame and keep their words |
 | Offline or server down | Timetable results with the Info lamp, ghost vehicles and the offline banner. Notify shows the cached list read-only |
 | Planning with no connection | Plan a journey says planning is offline and offers the saved routes and recent journeys instead |
 | No journey found | A plain sentence, and the nearest stops to each end so the user can see why |

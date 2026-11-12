@@ -110,6 +110,10 @@ object PlanShots {
             val d = remember { deps().let { AppDeps(it.core, Waiting, it.settings, it.places, it.platform, it.clock) } }
             page(options, d)
         },
+        Shot("plan-options-loading-day", DayColors, tick = 18) {
+            val d = remember { deps().let { AppDeps(it.core, Waiting, it.settings, it.places, it.platform, it.clock) } }
+            page(options, d)
+        },
         Shot("plan-options-nothing") { page(options, remember { deps(FakeJourneyPlanner.Answer.NOTHING_FOUND) }) },
         Shot("plan-options-offline") {
             page(options, remember { deps(FakeJourneyPlanner.Answer.OFFLINE, CoreScenario(live = LiveData.OFFLINE)) })

@@ -45,6 +45,7 @@ import app.transittracker.ui.components.Stepper
 import app.transittracker.ui.components.pixelBorder
 import app.transittracker.ui.components.pixelFill
 import app.transittracker.ui.format.Lamp
+import app.transittracker.ui.loading.TreadmillLine
 import app.transittracker.ui.motion.flapRow
 import app.transittracker.ui.nav.LocalNavigator
 import app.transittracker.ui.nav.Route
@@ -206,7 +207,7 @@ private fun SearchAnswer(state: PlaceEditState, actions: PlaceEditActions) {
     val c = TtTheme.colors
     when (val s = state.search) {
         AddressSearch.Idle -> Unit
-        AddressSearch.Searching -> Label("SEARCHING…", color = c.textSecondary, size = LabelSize.L10)
+        AddressSearch.Searching -> TreadmillLine("SEARCHING…")
         is AddressSearch.Results -> PixelPanel(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), verticalSpacing = 0.dp) {
             for ((i, place) in s.places.withIndex()) {
                 if (i > 0) DashedDivider()
@@ -255,7 +256,7 @@ private fun StopsSection(state: PlaceEditState, actions: PlaceEditActions, modif
                 "Pick an address, or use where you are now. The stations and stops within walking distance appear here.",
                 style = TtTheme.type.reading15, color = c.textSecondary,
             )
-            state.stopsLoading -> Label("LOOKING FOR STOPS…", color = c.textSecondary, size = LabelSize.L10)
+            state.stopsLoading -> TreadmillLine("LOOKING FOR STOPS…")
             state.stopsProblem != null -> AnswerNote(state.stopsProblem, actions.retryStops)
             state.stops.isEmpty() -> PixelText(
                 NO_STOPS_NEAR,

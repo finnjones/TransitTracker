@@ -170,10 +170,23 @@ class PlanRulesTest {
     fun theThreeButtonsReSortTheSameResults() {
         val options = bondi().mapIndexed { i, it -> optionSummary(i, it, emptyMap()) }
         assertEquals(listOf(54, 56, 66), options.map { it.minutes })
-        assertEquals(listOf(0, 1, 2), sortOptions(options, OptionSort.FASTEST).map { it.rank })
+        assertEquals(options.sortedBy { it.arriveMs }.map { it.rank }, sortOptions(options, OptionSort.ARRIVE_FIRST).map { it.rank })
         assertEquals(2, sortOptions(options, OptionSort.FEWER_CHANGES).first().rank)
         assertEquals(1, sortOptions(options, OptionSort.LESS_WALKING).first().rank)
         assertEquals(listOf(12, 11, 38), options.map { it.walkMinutes })
+    }
+
+    @Test
+    fun arriveFirstOrdersByArrivalNotByTimeTravelling() {
+        val base = optionSummary(0, bondi().first(), emptyMap())
+        fun option(rank: Int, leaveMin: Int, arriveMin: Int) =
+            base.copy(rank = rank, timeline = base.timeline.copy(leaveMs = t0 + leaveMin * min, arriveMs = t0 + arriveMin * min))
+        val quickButLate = option(0, leaveMin = 30, arriveMin = 70) // 40 min, arrives last
+        val slowButFirst = option(1, leaveMin = 0, arriveMin = 50) // 50 min, arrives first
+        val sameArrivalLeavesLater = option(2, leaveMin = 10, arriveMin = 50) // 40 min, arrives first too
+        val sorted = sortOptions(listOf(quickButLate, slowButFirst, sameArrivalLeavesLater), OptionSort.ARRIVE_FIRST)
+        // Arrival first; on the same arrival, the shorter one (it leaves later).
+        assertEquals(listOf(2, 1, 0), sorted.map { it.rank })
     }
 
     @Test

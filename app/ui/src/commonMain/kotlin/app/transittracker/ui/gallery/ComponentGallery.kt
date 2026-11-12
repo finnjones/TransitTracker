@@ -127,7 +127,7 @@ fun ComponentGalleryPage2() = GalleryPage {
     SectionLabel("Days and chips")
     DayToggleRow(setOf(1, 2, 3, 4, 5), {})
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ToggleChip("FASTEST", true, {})
+        ToggleChip("ARRIVE FIRST", true, {})
         ToggleChip("FEWER CHANGES", false, {})
         ToggleChip("LESS WALKING", false, {})
     }

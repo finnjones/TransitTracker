@@ -675,6 +675,19 @@ arrives sooner). The card says BEST OF 3 WAYS.
 | The route's timetable | Tabs: BEST (every way, only the runs no other way beats) and one per way. PIN makes Home show only that way; UNPIN gives the choice back. FIND MORE WAYS NOW plans the route again from its two ends, leaving now |
 | Edit route | WAYS: name each way, or remove it (a route keeps at least one) |
 
+**Switching on the way.** Once Follow my journey knows which journey you are
+on, it also knows which way: two ways can share the train you are on (stay on
+it, or get off for a bus), and the way you chose stays chosen while the phone
+cannot tell them apart. The on-the-way card lists OTHER WAYS FROM HERE: the
+route's other ways that use the vehicle you are on (or, while changing, the
+one you just left at that stop), with live times, so a late train shows a
+better bus connection further on. Each says what to do differently ("CHANGE AT
+REDFERN TO 333", "STAY ON TO CENTRAL"), when it arrives and how many minutes
+sooner or later than yours, with SWITCH; the card then follows that way. A way
+that gets off at a stop the vehicle has passed is not offered. ALL WAYS FROM
+THE NEXT STOP asks the planner for every way from the next stop, at the time
+you reach it, to the route's end; it is to look at only, with nothing to save.
+
 Device alarms follow the pinned way, else the runs no other way beats. The
 return of a route reverses every way. Data saved before ways existed reads as
 a route with one way, and `SavedTrip.legs` stays the first way, so an older

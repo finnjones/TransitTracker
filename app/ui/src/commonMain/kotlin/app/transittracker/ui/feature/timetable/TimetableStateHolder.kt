@@ -6,9 +6,9 @@ import app.transittracker.model.Journey
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.ServiceDate
 import app.transittracker.model.ServiceTime
-import app.transittracker.model.StopId
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
+import app.transittracker.ui.feature.plan.routeEnds
 import app.transittracker.ui.nav.JourneyEnd
 import app.transittracker.ui.places.PlacesStore
 import app.transittracker.ui.places.SavedPlace
@@ -92,20 +92,7 @@ class TimetableStateHolder(
      * stations it starts and ends at, found by name among the phone's stops. Null when an end
      * cannot be found.
      */
-    suspend fun ends(): Pair<JourneyEnd, JourneyEnd>? {
-        val t = core.trips.first().firstOrNull { it.id == tripId } ?: return null
-        val link = runCatching { places.tripPlaces.first()[tripId] }.getOrNull()
-        val all = runCatching { places.currentPlaces() }.getOrDefault(emptyList())
-        suspend fun end(placeId: String?, name: String, ids: Set<StopId>): JourneyEnd? {
-            all.firstOrNull { it.id == placeId }?.let { return JourneyEnd(it.name, it.position, savedPlaceId = it.id) }
-            val found = runCatching { core.searchStops(name) }.getOrDefault(emptyList())
-            val stop = found.firstOrNull { it.id in ids || it.parentId in ids } ?: found.firstOrNull() ?: return null
-            return JourneyEnd(name, stop.position)
-        }
-        val from = end(link?.fromPlaceId, t.originName, t.ways.flatMapTo(HashSet()) { it.legs.first().originStopIds }) ?: return null
-        val to = end(link?.toPlaceId, t.destinationName, t.ways.flatMapTo(HashSet()) { it.legs.last().destinationStopIds }) ?: return null
-        return from to to
-    }
+    suspend fun ends(): Pair<JourneyEnd, JourneyEnd>? = routeEnds(core, places, tripId)
 
     private val trip: Flow<Pair<Boolean, SavedTrip?>> = core.trips
         .map { list -> true to list.firstOrNull { it.id == tripId } }

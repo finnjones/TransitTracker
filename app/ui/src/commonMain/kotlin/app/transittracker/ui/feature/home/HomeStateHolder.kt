@@ -7,7 +7,13 @@ import app.transittracker.model.ServiceTime
 import app.transittracker.model.StopId
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
+import app.transittracker.ui.feature.follow.FollowStage
 import app.transittracker.ui.feature.follow.FollowState
+import app.transittracker.ui.feature.follow.alternativesOf
+import app.transittracker.ui.feature.follow.switchedMatch
+import app.transittracker.ui.feature.plan.routeEnds
+import app.transittracker.ui.nav.JourneyEnd
+import app.transittracker.ui.nav.Route
 import app.transittracker.ui.feature.follow.JourneyFollower
 import app.transittracker.ui.format.shortStopName
 import app.transittracker.ui.places.PlacesStore
@@ -68,10 +74,49 @@ class HomeStateHolder(
         .distinctUntilChanged()
         .flatMapLatest { m ->
             if (m == null) flowOf(null)
-            else core.underway(m.tripId).map { list -> list.firstOrNull { it.departure.ref == m.key }?.let { Followed(m, it) } }
+            else core.underway(m.tripId).map { list ->
+                val way = m.wayId
+                val j = (if (way != null) list.firstOrNull { it.departure.ref == m.key && it.follows(way) } else null)
+                    ?: list.firstOrNull { it.departure.ref == m.key }
+                j?.let { Followed(m, it, alternativesOf(it, m, list, clock.nowMillis())) }
+            }
         }
         .onStart { emit(null) }
         .distinctUntilChanged()
+
+    /** SWITCH: follow [alternative] (another way open from where the user is) instead of the journey on the card. */
+    fun switchTo(alternative: Journey) {
+        val f = lastFollowed ?: return
+        follower?.switchTo(switchedMatch(f.journey, f.match, alternative))
+    }
+
+    /** The journey followed in the last state built (for SWITCH and OTHER WAYS FROM THE NEXT STOP). */
+    private var lastFollowed: Followed? = null
+
+    /**
+     * OTHER WAYS FROM <next stop>: the planner's search from where the user can next get off (the
+     * next stop of the ride, at its expected arrival; while changing, the stop being walked to,
+     * now) to the trip's end. Browse only: it is not a saved route. Null when either end is not known.
+     */
+    suspend fun replanFromHere(): Route.JourneyOptions? {
+        val followed = lastFollowed ?: return null
+        val m = followed.match
+        val leg = followed.journey.legs.getOrNull(m.legIndex) ?: return null
+        val now = clock.nowMillis()
+        val calls = runCatching { core.service(leg.ref).first().calls }.getOrDefault(emptyList())
+        val (call, atMs) = if (m.stage == FollowStage.RIDING) {
+            val c = calls.firstOrNull { !it.passed && it.position != null && (it.expectedArrivalMs ?: it.scheduledArrivalMs ?: Long.MAX_VALUE) > now }
+                ?: return null
+            c to (c.expectedArrivalMs ?: c.scheduledArrivalMs ?: now)
+        } else {
+            (calls.firstOrNull { it.stopId == leg.originStopId && it.position != null } ?: return null) to now
+        }
+        val to = routeEnds(core, places, m.tripId)?.second ?: return null
+        return Route.JourneyOptions(
+            JourneyEnd(shortStopName(call.stopName), call.position!!), to,
+            timeMs = atMs.coerceAtLeast(now), browseOnly = true,
+        )
+    }
 
     /** NOT ON THIS: stop following the journey on the card, and do not pick it again. */
     fun notOnThis(key: ServiceRef) {
@@ -97,6 +142,7 @@ class HomeStateHolder(
         inputs, stopNames, firstNextDay, ticker, followed,
     ) { i, names, first, now, f ->
         val full = i.copy(stopNames = names, firstNextDay = first, follow = f)
+        lastFollowed = f
         lookUpMissing(full)
         buildHomeState(full, now, ServiceTime.localDate(now))
     }.distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, HomeUiState())
@@ -115,6 +161,13 @@ class HomeStateHolder(
         i.follow?.journey?.legs?.forEach { leg ->
             lookUpName(leg.ref, leg.originStopId)
             lookUpName(leg.ref, leg.destinationStopId)
+        }
+        // The other ways open from there: where they change or end.
+        i.follow?.alternatives?.forEach { j ->
+            j.legs.forEach { leg ->
+                lookUpName(leg.ref, leg.originStopId)
+                lookUpName(leg.ref, leg.destinationStopId)
+            }
         }
         for (t in trips) {
             if (i.upcoming[t.id]?.isEmpty() != true) continue

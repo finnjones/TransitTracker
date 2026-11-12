@@ -57,6 +57,9 @@ class JourneyFollower(
         lastFix.value = fix
     }
 
+    /** The user switched to another way of the trip (see [switchedMatch]): follow [match] from now on. */
+    fun switchTo(match: FollowMatch) = memory.update { it.switchTo(match) }
+
     /** "Not on this one": stop following the journey whose first leg is [key], and never pick it again. */
     fun dismiss(key: ServiceRef) = memory.update { it.dismiss(key) }
 
@@ -100,7 +103,7 @@ class JourneyFollower(
                 emit(FollowState(FollowStatus.LOOKING))
             } else {
                 val candidates = underway.map { (tripId, j) -> candidate(tripId, j) }
-                val match = matchFix(fix, candidates, tuning)
+                val match = preferredFit(fitsOf(fix, candidates, tuning), memory.value.pinned)
                 memory.updateAndGet { it.next(match, underway.map { it.second.departure.ref }.toSet()) }
                 lastFix.value = fix
                 emit(FollowState(FollowStatus.LOOKING, fix = fix))

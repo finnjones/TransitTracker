@@ -211,7 +211,7 @@ private fun Footer(route: Route.JourneyDetail, state: JourneyUiState, onSave: ()
     Column(Modifier.fillMaxWidth().background(c.panel)) {
         SolidDivider()
         Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            when (val s = state.save) {
+            if (!route.browseOnly) when (val s = state.save) {
                 is SaveState.Blocked -> PixelText(s.reason, style = TtTheme.type.reading15, color = c.textReading)
                 is SaveState.Failed -> PixelText("Saving did not work (${s.message}). Try again.", style = TtTheme.type.reading15, color = c.stop)
                 else -> Unit
@@ -235,7 +235,7 @@ private fun Footer(route: Route.JourneyDetail, state: JourneyUiState, onSave: ()
                     is SaveState.Ready -> if (state.save.alreadyThere) "SAVED" else if (state.save.joinTo != null) "ADD AS A WAY" else "SAVE ROUTE"
                     else -> "SAVE ROUTE"
                 }
-                PixelButton(label, onSave, Modifier.padding(bottom = 6.dp), ButtonKind.SECONDARY, enabled = enabled)
+                if (!route.browseOnly) PixelButton(label, onSave, Modifier.padding(bottom = 6.dp), ButtonKind.SECONDARY, enabled = enabled)
             }
         }
     }

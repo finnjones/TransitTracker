@@ -88,8 +88,44 @@ data class TripCard(
 
 data class NoMoreServices(val firstNextDayMs: Long?)
 
-/** The journey Follow my journey says the user is on, with its live times from the core. */
-data class Followed(val match: FollowMatch, val journey: Journey)
+/**
+ * The journey Follow my journey says the user is on, with its live times from the core, and the
+ * other ways of the trip still open from there ([alternativesOf]).
+ */
+data class Followed(val match: FollowMatch, val journey: Journey, val alternatives: List<Journey> = emptyList())
+
+/**
+ * Another way open to the user on the way: what to do differently ([words]: "STAY ON TO CENTRAL",
+ * "CHANGE AT REDFERN TO 333"), the rides it takes from there, and when it arrives against the
+ * journey followed ([minutesSooner]: positive is sooner, negative later).
+ */
+data class AlternativeWay(
+    val journey: Journey,
+    val words: String,
+    val rides: List<Departure>,
+    val arrivalMs: Long,
+    val minutesSooner: Int,
+)
+
+/** [alternative] described against [current] for the on-the-way card; [stopNames] gives short stop names. */
+fun alternativeWay(current: Journey, match: FollowMatch, alternative: Journey, stopNames: Map<StopId, String>): AlternativeWay {
+    val anchor = if (match.stage == FollowStage.RIDING) match.legIndex else match.legIndex - 1
+    val ref = current.legs.getOrNull(anchor)?.ref
+    val i = alternative.legs.indexOfFirst { it.ref == ref }.coerceAtLeast(0)
+    val rest = alternative.legs.drop(i)
+    fun name(id: StopId) = stopNames[id]?.uppercase()
+    val words = if (rest.size == 1) {
+        "STAY ON" + (name(rest[0].destinationStopId)?.let { " TO $it" } ?: "")
+    } else {
+        // The first ride after this vehicle where the way goes on differently.
+        val mine = current.legs.drop(anchor)
+        val k = (1 until rest.size).firstOrNull { n -> mine.getOrNull(n)?.ref != rest[n].ref } ?: 1
+        val next = rest[k]
+        "CHANGE" + (name(next.originStopId)?.let { " AT $it" } ?: "") + " TO ${next.routeName}"
+    }
+    val sooner = ((current.arrival.expectedArrivalMs - alternative.arrival.expectedArrivalMs) / 60_000L).toInt()
+    return AlternativeWay(alternative, words, rest.drop(1), alternative.arrival.expectedArrivalMs, sooner)
+}
 
 /**
  * The card of a trip the user is on (Follow my journey): the ride they are on and the connection
@@ -112,6 +148,8 @@ data class OnTheWay(
     val legEnd: String?,
     /** Short name of where [leg] is boarded, when known (the change stop while changing). */
     val legStart: String?,
+    /** Other ways of the trip still open from here, soonest arrival first (at most [ALTERNATIVES_SHOWN]). */
+    val alternatives: List<AlternativeWay> = emptyList(),
 ) {
     val arrivalMs: Long get() = journey.arrival.expectedArrivalMs
     val isLastLeg: Boolean get() = legIndex == journey.legs.lastIndex
@@ -137,8 +175,12 @@ fun onTheWayOf(trip: SavedTrip, followed: Followed, stopNames: Map<StopId, Strin
         tight = tight,
         legEnd = stopNames[leg.destinationStopId],
         legStart = stopNames[leg.originStopId],
+        alternatives = followed.alternatives.take(ALTERNATIVES_SHOWN).map { alternativeWay(followed.journey, followed.match, it, stopNames) },
     )
 }
+
+/** Other ways listed on the on-the-way card. */
+const val ALTERNATIVES_SHOWN = 3
 
 // ---------------------------------------------------------------- rules
 

@@ -86,7 +86,7 @@ class SaveWaysActions(
 fun JourneyOptionsScreen(route: Route.JourneyOptions) {
     val deps = LocalAppDeps.current
     val holder = rememberStateHolder(route) { scope ->
-        JourneyOptionsStateHolder(deps.planner, deps.core, deps.clock, planRequestOf(route), scope, from = route.from, to = route.to, places = deps.places)
+        JourneyOptionsStateHolder(deps.planner, deps.core, deps.clock, planRequestOf(route), scope, from = route.from, to = route.to, places = deps.places.takeUnless { route.browseOnly })
     }
     JourneyOptionsPage(route, holder)
 }
@@ -104,7 +104,7 @@ fun JourneyOptionsPage(route: Route.JourneyOptions, holder: JourneyOptionsStateH
             open = { o ->
                 val first = o.itinerary.rides.firstOrNull()
                 nav.push(
-                    Route.JourneyDetail(route.from, route.to, o.itinerary, route.fromOnboarding),
+                    Route.JourneyDetail(route.from, route.to, o.itinerary, route.fromOnboarding, route.browseOnly),
                     first?.let { PageTransition.vehiclePass(it.mode ?: Mode.OTHER, it.routeColor) },
                 )
             },

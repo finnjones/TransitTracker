@@ -117,6 +117,8 @@ sealed interface Route {
         val timeMs: Long? = null,
         val timeKind: PlanTimeKind = PlanTimeKind.DEPART_AT,
         val fromOnboarding: Boolean = false,
+        /** To look at only (other ways from the next stop, while on the way): nothing is offered to save. */
+        val browseOnly: Boolean = false,
     ) : Route {
         override val title get() = "Journey options"
     }
@@ -128,6 +130,8 @@ sealed interface Route {
         val to: JourneyEnd,
         val itinerary: Itinerary,
         val fromOnboarding: Boolean = false,
+        /** To look at only: no SAVE ROUTE (see [JourneyOptions.browseOnly]). */
+        val browseOnly: Boolean = false,
     ) : Route {
         override val title get() = "Journey"
     }

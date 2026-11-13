@@ -42,7 +42,7 @@ data class OptionsUiState(
     val failMessage: String? = null,
     /** In [sort] order; the first is the recommended journey. */
     val options: List<OptionSummary> = emptyList(),
-    val sort: OptionSort = OptionSort.FASTEST,
+    val sort: OptionSort = OptionSort.ARRIVE_FIRST,
     /** "TRAINS ARE LIVE. BUS TIMES ARE TIMETABLED." */
     val liveNote: String? = null,
     val nowMs: Long = 0,
@@ -153,7 +153,7 @@ class JourneyOptionsStateHolder(
     private val saver = places?.let { RouteSaver(core, it) }
     private val saveWays = MutableStateFlow<SaveWaysState>(SaveWaysState.Idle)
     private val result = MutableStateFlow<PlanResult?>(null)
-    private val sortBy = MutableStateFlow(OptionSort.FASTEST)
+    private val sortBy = MutableStateFlow(OptionSort.ARRIVE_FIRST)
     private val near = MutableStateFlow<Pair<List<String>, List<String>>>(emptyList<String>() to emptyList())
     private var job: Job? = null
 

@@ -69,8 +69,8 @@ class RateLimits(clock: WallClock = SystemClock) {
     /** `POST /v1/join`, per client IP. */
     val join = TokenBucketLimiter(capacity = 5, clock = clock)
 
-    /** `POST /v1/plan`, per device: about 30 an hour, at most 5 at once. Each may cost a TfNSW call. */
-    val plan = TokenBucketLimiter(capacity = 30, periodMs = 3_600_000, clock = clock, burst = 5)
+    /** `POST /v1/plan`, per device: about 30 an hour, at most 10 at once. Each may cost a TfNSW call. */
+    val plan = TokenBucketLimiter(capacity = 30, periodMs = 3_600_000, clock = clock, burst = 10)
 
     /** `GET /v1/places`, per device: about 60 a minute (search as you type), at most 20 at once. */
     val places = TokenBucketLimiter(capacity = 60, periodMs = 60_000, clock = clock, burst = 20)

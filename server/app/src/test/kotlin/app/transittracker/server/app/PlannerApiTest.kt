@@ -21,6 +21,9 @@ import app.transittracker.server.planner.PlannerFetch
 import app.transittracker.server.planner.PlannerFetcher
 import app.transittracker.server.planner.TfnswPlanner
 import app.transittracker.server.spi.ServerConfig
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -35,11 +38,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.protobuf.ProtoBuf
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
@@ -50,6 +48,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.protobuf.ProtoBuf
+import org.slf4j.LoggerFactory
 
 /** Answers Trip Planner calls with the hand-made fixtures in testdata/planner/tfnsw; counts calls. */
 class FixturePlannerFetcher(
@@ -215,7 +219,7 @@ class PlannerApiTest {
     @Test
     fun `plan is limited per device with a small burst`() = api {
         val first = token()
-        repeat(5) { assertEquals(HttpStatusCode.OK, plan(first).status) }
+        repeat(10) { assertEquals(HttpStatusCode.OK, plan(first).status) }
         plan(first).let {
             assertEquals(HttpStatusCode.TooManyRequests, it.status)
             assertEquals("rate_limited", it.problemCode())
@@ -225,6 +229,31 @@ class PlannerApiTest {
         clock.advance(120_000) // one more every 2 minutes (30 an hour)
         assertEquals(HttpStatusCode.OK, plan(first).status)
         assertEquals(HttpStatusCode.TooManyRequests, plan(first).status)
+    }
+
+    @Test
+    fun `plan rate limit logs a stable pseudonymous device tag`() = api {
+        val firstBearer = token()
+        val secondBearer = token()
+        val logger = LoggerFactory.getLogger("app.transittracker.server.app.RateLimit") as Logger
+        val appender = ListAppender<ILoggingEvent>().apply { context = logger.loggerContext; start() }
+        logger.addAppender(appender)
+        try {
+            repeat(11) { plan(firstBearer) }
+            repeat(11) { plan(secondBearer) }
+        } finally {
+            logger.detachAppender(appender)
+            appender.stop()
+        }
+        val messages = appender.list.map { it.formattedMessage }
+        assertEquals(22, messages.size)
+        assertEquals(2, messages.count { it.startsWith("Rate limited") })
+        assertEquals(20, messages.count { it.startsWith("Rate allowed") })
+        assertTrue(messages.all { it.contains("POST /v1/plan") })
+        val tags = messages.map { Regex("subject=([0-9a-f]{12})").find(it)?.groupValues?.get(1) }
+        assertTrue(tags.all { it != null }, messages.toString())
+        assertEquals(2, tags.toSet().size, messages.toString())
+        assertTrue(messages.none { it.contains(firstBearer) || it.contains(secondBearer) })
     }
 
     @Test

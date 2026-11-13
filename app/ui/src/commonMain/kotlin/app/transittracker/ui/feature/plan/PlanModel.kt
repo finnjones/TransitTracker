@@ -357,7 +357,7 @@ fun stripParts(t: Timeline): List<StripPart> {
 
 /** How the options are ordered (plan 5.6: three buttons re-sort the same results). */
 enum class OptionSort(val label: String, val tag: String) {
-    FASTEST("FASTEST", "FASTEST"),
+    ARRIVE_FIRST("ARRIVE FIRST", "ARRIVES FIRST"),
     FEWER_CHANGES("FEWER CHANGES", "FEWEST CHANGES"),
     LESS_WALKING("LESS WALKING", "LEAST WALKING"),
 }
@@ -383,11 +383,14 @@ fun optionSummary(rank: Int, itinerary: Itinerary, details: Map<ServiceRef, Serv
     return OptionSummary(rank, itinerary, t, stripParts(t), liveState(t))
 }
 
-/** The same options in [sort] order; ties keep the faster, then the planner's order. */
+/**
+ * The same options in [sort] order; ties keep the one that arrives first, then the shorter one
+ * (which leaves later), then the planner's order.
+ */
 fun sortOptions(options: List<OptionSummary>, sort: OptionSort): List<OptionSummary> {
-    val then = compareBy<OptionSummary> { it.minutes }.thenBy { it.arriveMs }.thenBy { it.rank }
+    val then = compareBy<OptionSummary> { it.arriveMs }.thenBy { it.minutes }.thenBy { it.rank }
     val primary: Comparator<OptionSummary> = when (sort) {
-        OptionSort.FASTEST -> then
+        OptionSort.ARRIVE_FIRST -> then
         OptionSort.FEWER_CHANGES -> compareBy<OptionSummary> { it.changes }.then(then)
         OptionSort.LESS_WALKING -> compareBy<OptionSummary> { it.timeline.walkSeconds }.then(then)
     }

@@ -70,12 +70,14 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.util.AttributeKey
+import java.nio.file.Files
+import java.security.MessageDigest
+import java.util.HexFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
-import java.nio.file.Files
 
 /** Everything the HTTP API needs; built in `Main.kt` (real) or in tests (fakes). */
 class ApiDependencies(
@@ -256,8 +258,27 @@ private fun ApplicationCall.bearerToken(): String? {
 /** Runs blocking work (JDBC, module calls that may block) off the request thread. */
 private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
+private val rateLimitLogger = LoggerFactory.getLogger("app.transittracker.server.app.RateLimit")
+
+// A short stable digest correlates requests without logging the raw device ID or client IP.
+private fun rateLimitSubjectTag(key: String): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(key.encodeToByteArray())
+    return HexFormat.of().formatHex(digest, 0, 6)
+}
+
 private fun ApplicationCall.rateLimit(limiter: TokenBucketLimiter, key: String) {
+    val path = request.path()
     val retryAfter = limiter.tryAcquire(key)
+    val tagSubject = retryAfter > 0 || path == ApiPaths.PLAN || path == ApiPaths.PLACES
+    if (tagSubject) {
+        val message = "{} {} subject={}"
+        val fields = arrayOf(request.httpMethod.value, path, rateLimitSubjectTag(key))
+        if (retryAfter > 0) {
+            rateLimitLogger.warn("Rate limited $message retry_after_s={}", *fields, retryAfter)
+        } else {
+            rateLimitLogger.info("Rate allowed $message", *fields)
+        }
+    }
     if (retryAfter > 0) {
         response.header(HttpHeaders.RetryAfter, retryAfter.toString())
         throw ApiException(429, "rate_limited", "Too many requests; retry in $retryAfter s")

@@ -106,8 +106,6 @@ class HomeActions(
     val manageRoutes: () -> Unit = {},
     /** The journey the user is on, on one map: every ride, the walks between them, the vehicles. */
     val openJourneyMap: (tripId: String, journey: Journey) -> Unit = { _, _ -> },
-    /** NOT ON THIS: stop following the journey whose first ride is [ServiceRef]. */
-    val notOnThis: (ServiceRef) -> Unit = {},
     /** SWITCH: follow another way of the trip, open from where the user is. */
     val switchWay: (Journey) -> Unit = {},
     /** Every way from the next stop, from the planner (look only). */
@@ -137,7 +135,6 @@ fun HomeScreen() {
             openJourneyMap = { id, j ->
                 nav.push(Route.JourneyMap(id, j.legs.map { MapLeg(it.ref, it.originStopId, it.destinationStopId) }))
             },
-            notOnThis = holder::notOnThis,
             switchWay = holder::switchTo,
             waysFromNextStop = {
                 scope.launch { holder.replanFromHere()?.let { nav.push(it) } }
@@ -563,10 +560,7 @@ private fun OnTheWayCard(card: TripCard, otw: OnTheWay, nowMs: Long, actions: Ho
         }
         // The connection to make.
         otw.next?.let { next -> NextRide(next, otw, nowMs, actions) }
-        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PixelButton("MAP", openMap, Modifier.weight(1f), style = TtTheme.type.label11Bold)
-            PixelButton("NOT ON THIS", { actions.notOnThis(otw.journey.departure.ref) }, Modifier.weight(1f), style = TtTheme.type.label11Bold)
-        }
+        PixelButton("MAP", openMap, Modifier.fillMaxWidth().padding(vertical = 4.dp), style = TtTheme.type.label11Bold)
         OtherWays(otw, actions)
         if (card.following.isNotEmpty()) {
             DashedDivider()

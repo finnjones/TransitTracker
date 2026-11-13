@@ -358,12 +358,25 @@ on and the connection to make (the bus after the train), not the next departure.
 
 - The core lists each trip's journeys under way (`TransitCore.underway`: first leg left, last not
   arrived), chained with live data like `upcoming`, so a late train moves the connection on.
-- `matchFix` (pure, `FollowModel.kt`) places a `LocationFix` against them, leg by leg: on a ride
-  (near its line, and near where the expected times put the vehicle, so the 08:02 is told from the
-  08:12), or changing (near the walk between two rides). Standing at the first stop is waiting,
-  not riding. `FollowMemory` follows a journey after two fixes in a row and drops it after three
-  misses, or when it arrives, or on NOT ON THIS.
-- `JourneyFollower` (one per app) polls `PlatformServices.currentFix` every 15 s only while a
+- `readFix` (pure, `FollowModel.kt`) reads a `LocationFix` against them, leg by leg, and says how
+  much it counts for or against each journey:
+  - on a ride: near the service's real line (its timetable shape, 200 m; straight stop to stop,
+    450 m, when there is none), near the vehicle along it (its live position from
+    `TransitCore.vehicles`, carried forward to the fix, within 500 m; else where the live
+    timetable puts it, within 1.5 km, so the 08:02 is told from the 08:12), and, on the move,
+    heading the line's way (not the other way down the track, not a cross street);
+  - changing: near the walk between two rides, and not moving like a vehicle;
+  - speed: racing past a train the feed has standing at a platform, or "walking" at 60 km/h,
+    counts against;
+  - standing at the first stop is waiting, not riding. A vehicle report more than 3 km from the
+    live timetable is taken as a bad report and ignored.
+- `FollowMemory` adds the evidence up per journey: two fixes that fit pick it up, one stray fix
+  does not switch the card, two clear contradictions (an accurate fix well off the line, the
+  vehicle or the walk, or going the wrong way) drop it, and weak misses (a vague fix, a tunnel)
+  take about four. It is also dropped when it arrives. There is no manual override: whether you
+  are on a journey is decided by location alone.
+- `JourneyFollower` (one per app) polls `PlatformServices.currentFix` (with speed and heading on
+  Android) every 15 s, and watches the live vehicles of the lines under way, only while a
   screen collects `state`, the app is visible, the setting is on (Settings > Places) and location
   was already allowed. It never asks for permission itself and never runs in the background.
 - Home puts the followed trip's card first (`OnTheWay`): the ride and its countdown, THEN the

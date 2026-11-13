@@ -139,11 +139,6 @@ class HomeStateHolder(
         )
     }
 
-    /** NOT ON THIS: stop following the journey on the card, and do not pick it again. */
-    fun notOnThis(key: ServiceRef) {
-        follower?.dismiss(key)
-    }
-
     private val ticker: Flow<Long> = flow {
         while (true) {
             emit(clock.nowMillis())

@@ -184,7 +184,14 @@ class AndroidPlatformServices(
             ?: return null
         // When the fix was taken, on the same clock as nowMs (the phone's wall clock may differ).
         val takenMs = nowMs - age(location) / 1_000_000L
-        return LocationFix(location.toLatLng(), takenMs, location.takeIf { it.hasAccuracy() }?.accuracy?.toDouble())
+        return LocationFix(
+            location.toLatLng(),
+            takenMs,
+            accuracyM = location.takeIf { it.hasAccuracy() }?.accuracy?.toDouble(),
+            // Speed and heading tell a train from a car beside it; only GPS fixes on the move carry them.
+            speedMps = location.takeIf { it.hasSpeed() }?.speed?.toDouble(),
+            bearingDeg = location.takeIf { it.hasBearing() && it.hasSpeed() && it.speed > 0f }?.bearing?.toDouble(),
+        )
     }
 
     /** The providers worth asking for a new fix, best first. GPS needs the precise permission. */

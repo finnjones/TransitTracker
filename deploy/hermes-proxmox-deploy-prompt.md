@@ -138,8 +138,11 @@ Then show me the plan (container spec + steps) and wait for my OK.
   if I say yes. Also suggest adding the container to my existing Proxmox backup job (ask before changing
   any job).
 - **Snapshots:** suggest a Proxmox snapshot of the container before each update (ask first).
-- **Updates:** write `/opt/transittracker/update.sh`: `git pull`, `docker compose build`,
-  `docker compose up -d`, prune old images. Don't schedule it; I'll run it.
+- **Updates:** CI deploys every push to `main` through a self-hosted GitHub Actions runner on this
+  container (`deploy/README.md`, section 14). Walk me through registering the runner as user `tt`
+  with label `transittracker` (I'll create the registration token on GitHub), install it as a
+  service, and set `TT_IMAGE` in `.env`. I set the `TT_DEPLOY_DIR` repository variable myself.
+  Then trigger a run and confirm the *Deploy server* job goes green.
 - **Monitoring:** explain how to add a free uptime check on `https://tt.<my-domain>/health`
   (e.g. Healthchecks.io or UptimeRobot) and offer to help me set it up.
 - Restart test: reboot the container (`pct reboot`) and confirm everything comes back on its own.

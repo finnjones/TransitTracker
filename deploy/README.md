@@ -16,7 +16,9 @@ phone ──HTTPS──> Cloudflare (tt.example.com) ──tunnel──> [cloudf
 | `.env.example` | Every setting, with comments. Copy to `.env` and fill in |
 | `tt-admin` | Runs admin commands (who may sign in, devices, backups) inside the container |
 | `backup.sh` | Nightly backup, keeps 14 days |
+| `deploy.sh` | Starts a published image and waits until it is healthy (used by CI, section 14) |
 | `hermes-proxmox-deploy-prompt.md` | Hand-off prompt for an AI agent to do this whole setup on Proxmox |
+| `hermes-ci-deploy-prompt.md` | Hand-off prompt for an AI agent to set up automatic deploys from GitHub Actions (section 14) |
 
 Budget about an hour for the first setup. Commands below are typed in a terminal on the home
 server (directly or over SSH).
@@ -301,6 +303,61 @@ Create a free account at [UptimeRobot](https://uptimerobot.com) or
 `"ok":true`). You get an email or app notification if your server or home internet goes down.
 
 ## 14. Updating
+
+### Automatic deploys from GitHub Actions (recommended)
+
+Every push to `main` builds and tests the server, publishes the image, then starts it on this
+machine and waits until it is healthy. When the pipeline is green, the server runs that commit.
+If the new server doesn't become healthy, the previous image is started again and the pipeline
+goes red.
+
+GitHub's own machines can't reach this server (no open ports, on purpose), so the last step runs
+on a **self-hosted runner** here. The runner only makes outbound connections to GitHub, like
+cloudflared does. One-time setup:
+
+1. **Install the runner** as the user that runs Docker (`tt` in the Proxmox setup; it must be in
+   the `docker` group). On GitHub: the repository → *Settings → Actions → Runners → New
+   self-hosted runner*, Linux, your architecture (x64, or ARM64 on a Raspberry Pi). Run the
+   commands it shows, in a folder such as `~/actions-runner`. When `./config.sh` asks for
+   additional labels, enter **`transittracker`**. Then install it as a service so it starts at
+   boot:
+
+   ```bash
+   sudo ./svc.sh install tt
+   sudo ./svc.sh start
+   ```
+
+   The runner then shows as *Idle* on the Runners page.
+2. **Tell the workflow where the server lives.** The repository → *Settings → Secrets and
+   variables → Actions → Variables → New repository variable*:
+   - `TT_DEPLOY_DIR` = the folder with your `.env` and `secrets/`, e.g. `/opt/transittracker/deploy`.
+     The deploy job stays off until this is set.
+   - Optional: `TT_PUBLIC_BASE_URL` = `https://tt.<your-domain>`. The job then also checks
+     `/health` through Cloudflare, the way phones reach it.
+3. Set `TT_IMAGE=ghcr.io/<github-owner>/<repo>/tt-server:latest` (all lower case) in `.env`, so
+   that commands you run by hand (`docker compose up -d`) use the published image and never
+   build one on the server. Deploys ignore this value: they start the exact image that CI
+   pushed (by digest).
+
+That's it: push to `main` (or re-run the latest CI run) and watch the **Deploy server** job.
+
+- **Rolling back:** open an earlier CI run on GitHub and re-run its *Deploy server* job. It deploys
+  that run's image. By hand: `TT_DEPLOY_DIR=$PWD ./deploy.sh ghcr.io/...@sha256:...`.
+- **Downtime:** the old container is replaced, so the server is unreachable for about 30–60
+  seconds per deploy. The phone app retries.
+- **Image access:** the job pulls with the run's own short-lived token; no personal access token
+  is stored on the server. If the pull fails with `denied`, open the package on GitHub (your
+  profile → *Packages → tt-server → Package settings → Manage Actions access*) and give this
+  repository *Read*.
+- **The server no longer needs `git pull`.** The deploy uses the `docker-compose.yml` from the
+  commit being deployed, together with the `.env` and `secrets/` in `TT_DEPLOY_DIR`. Keep the
+  checkout only for `tt-admin` and `backup.sh` (pull it now and then for new versions of those).
+- **Security:** anyone who can push a workflow to this repository can run commands on this
+  machine through the runner, and the `docker` group is root-equivalent there. Keep the repository
+  private, keep its collaborators trusted, and never use this runner for a public repository.
+  Only the deploy job runs on it; everything else runs on GitHub's machines.
+
+### By hand
 
 From the repository:
 

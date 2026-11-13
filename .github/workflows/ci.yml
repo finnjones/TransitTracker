@@ -11,9 +11,11 @@ on:
 permissions:
   contents: read
 
+# Pull requests: a new push cancels the run before it. main: runs queue instead, so a push never
+# cancels a deploy half-way.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Runners are 2-4 cores; let Gradle use all of them, with a little more heap than the default 2g.
@@ -201,6 +203,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      # The exact image just pushed (name@digest), for the deploy job.
+      ref: ${{ steps.ref.outputs.ref }}
     steps:
       - uses: actions/checkout@v5
 
@@ -223,7 +228,8 @@ jobs:
             type=ref,event=tag
             type=sha
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/Dockerfile
@@ -233,3 +239,48 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - id: ref
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}/tt-server@${DIGEST}" >> "$GITHUB_OUTPUT"
+
+  # Pushes to main: start the new image on the home server and wait until it is healthy, so a
+  # green run means the server is running this commit. Runs on a self-hosted runner on the server
+  # itself (it only connects out to GitHub; the server still has no open ports). Off until the
+  # TT_DEPLOY_DIR repository variable is set; setup in deploy/README.md, section 14.
+  # To roll back, re-run this job in an earlier run: it deploys that run's image.
+  deploy:
+    name: Deploy server
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TT_DEPLOY_DIR != ''
+    runs-on: [self-hosted, transittracker]
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-server
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v5
+
+      # Logged out again when the job ends.
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy
+        env:
+          TT_DEPLOY_DIR: ${{ vars.TT_DEPLOY_DIR }}
+          IMAGE: ${{ needs.image.outputs.ref }}
+        run: deploy/deploy.sh "$IMAGE"
+
+      # Through Cloudflare, as the phones see it. Optional: set TT_PUBLIC_BASE_URL to turn it on.
+      - name: Check from the internet
+        if: vars.TT_PUBLIC_BASE_URL != ''
+        env:
+          URL: ${{ vars.TT_PUBLIC_BASE_URL }}
+        run: curl -fsS --retry 6 --retry-delay 5 --retry-all-errors "${URL%/}/health"

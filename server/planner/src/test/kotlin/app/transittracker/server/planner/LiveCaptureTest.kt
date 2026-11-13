@@ -263,6 +263,35 @@ class LiveCaptureTest {
         assertNull(manly.stopId, "ferries are not in the rail pack")
     }
 
+    @Test
+    fun `a house keeps its number and the houses with that number come first`() {
+        // "100 George St": 32 houses across NSW, 100 George St, The Rocks marked best.
+        val houses = places("stop_finder-100-george-st.json", "100 George St", limit = 32)
+        assertEquals("100 George St", houses.first().name)
+        assertEquals("The Rocks", houses.first().detail)
+        assertEquals(PlaceKind.ADDRESS, houses.first().kind)
+        assertTrue(houses.none { it.name == "George St" }, "no house is shown as just its street")
+        // 100 on George St (100-104 holds 100), then George St's other numbers, then 100 on other streets.
+        val names = houses.map { it.name }
+        assertEquals(List(4) { "100 George St" }, names.take(4))
+        assertTrue(names.indexOf("100-104 George St") < names.indexOf("100A George St"), names.toString())
+        assertTrue(names.indexOf("100A George St") < names.indexOf("100 St Georges Cr"), names.toString())
+        assertTrue(names.indexOf("100-102 George St") < names.indexOf("100 King George St"), names.toString())
+
+        // The suburb typed decides between the 100s; else the nearest.
+        val redfern = places("stop_finder-100-george-st.json", "100 George St, Redfern")
+        assertEquals("100 George St" to "Redfern", redfern.first().name to redfern.first().detail)
+        val nearParramatta = places("stop_finder-100-george-st.json", "100 George St", LatLng(-33.8150, 151.0011))
+        assertEquals("100 George St" to "Parramatta", nearParramatta.first().name to nearParramatta.first().detail)
+    }
+
+    @Test
+    fun `a house search that fell back to the street keeps the street`() {
+        // "100 George St, Sydney": TfNSW has no such house in Sydney (it is in The Rocks) and answers with the street.
+        val street = places("stop_finder-100-george-st-sydney.json", "100 George St, Sydney").first()
+        assertEquals("George St" to "Sydney", street.name to street.detail)
+    }
+
     private companion object {
         val SYDNEY: ZoneId = ZoneId.of("Australia/Sydney")
         val STRATHFIELD = LatLng(-33.871672, 151.094286)

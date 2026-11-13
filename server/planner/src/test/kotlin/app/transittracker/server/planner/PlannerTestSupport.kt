@@ -151,13 +151,15 @@ class FakePlannerFetcher(
     val calls = ArrayList<Pair<PlannerEndpoint, List<Pair<String, String>>>>()
     var trip: PlannerFetch = PlannerFetch.Success(PlannerFixtures.tfnsw("trip_direct_train.json"))
     var stopFinder: PlannerFetch = PlannerFetch.Success(PlannerFixtures.tfnsw("stop_finder_central.json"))
+    /** When set, answers each stop_finder call by its search text (`name_sf`) instead of [stopFinder]. */
+    var stopFinderFor: ((String) -> PlannerFetch)? = null
     var coord: PlannerFetch = PlannerFetch.Success(PlannerFixtures.live("coord-central.json"))
 
     override suspend fun fetch(endpoint: PlannerEndpoint, params: List<Pair<String, String>>): PlannerFetch {
         calls += endpoint to params
         return when (endpoint) {
             PlannerEndpoint.TRIP -> trip
-            PlannerEndpoint.STOP_FINDER -> stopFinder
+            PlannerEndpoint.STOP_FINDER -> stopFinderFor?.invoke(params.first { it.first == "name_sf" }.second) ?: stopFinder
             PlannerEndpoint.COORD -> coord
         }
     }

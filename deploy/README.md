@@ -18,7 +18,6 @@ phone ──HTTPS──> Cloudflare (tt.example.com) ──tunnel──> [cloudf
 | `backup.sh` | Nightly backup, keeps 14 days |
 | `deploy.sh` | Starts a published image and waits until it is healthy (used by CI, section 14) |
 | `hermes-proxmox-deploy-prompt.md` | Hand-off prompt for an AI agent to do this whole setup on Proxmox |
-| `hermes-ci-deploy-prompt.md` | Hand-off prompt for an AI agent to set up automatic deploys from GitHub Actions (section 14) |
 
 Budget about an hour for the first setup. Commands below are typed in a terminal on the home
 server (directly or over SSH).

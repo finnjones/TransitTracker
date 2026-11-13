@@ -87,17 +87,36 @@ class TfnswPlanner(
         if (limit !in 1..MAX_PLACES) throw badRequest("limit must be 1 to $MAX_PLACES")
         near?.let { requireInArea(it, "Search position") }
         placesRequests.incrementAndGet()
-        val key = text.lowercase(Locale.ROOT)
+        val address = AddressQuery.parse(text)
+        val key = address.text.lowercase(Locale.ROOT)
         val ranked = placesCache.get(key)?.also { cacheHits.incrementAndGet() } ?: run {
-            val body = call(PlannerEndpoint.STOP_FINDER, TripPlannerRequests.stopFinder(text))
-            val response = decode(body, StopFinderResponseDto.serializer())
-            response.error?.message?.let { rejected() }
-            // Timetable lookups read SQLite: off the request thread.
-            withContext(Dispatchers.IO) { PlaceMapper(timetable.value).map(response) }.also { placesCache.put(key, it) }
+            val first = findPlaces(address.text)
+            // A house number but no house: TfNSW fell back to the street (a unit, or the suburb
+            // filed differently). The number and street alone usually find the house.
+            val again = address.numberAndStreet
+                ?.takeIf { address.number != null && first.none { it.house != null } }
+                ?.let { retry ->
+                    try {
+                        findPlaces(retry).takeIf { found -> found.any { it.house != null } }
+                    } catch (e: ApiException) {
+                        log.info("Place search: the house search again failed ({}); keeping the first answer", e.code)
+                        null
+                    }
+                }
+            val merged = if (again == null) first else (again + first).distinctBy { it.place.id }.mapIndexed { i, p -> p.copy(order = i) }
+            merged.also { placesCache.put(key, it) }
         }
-        val places = PlaceRanking.rank(ranked, text, near, limit)
+        val places = PlaceRanking.rank(ranked, address, near, limit)
         log.info("Place search: {} result(s) of {} (limit {})", places.size, ranked.size, limit)
         return PlacesResponse(serverTimeMs = clock.nowMillis(), places = places)
+    }
+
+    private suspend fun findPlaces(text: String): List<RankedPlace> {
+        val body = call(PlannerEndpoint.STOP_FINDER, TripPlannerRequests.stopFinder(text))
+        val response = decode(body, StopFinderResponseDto.serializer())
+        response.error?.message?.let { rejected() }
+        // Timetable lookups read SQLite: off the request thread.
+        return withContext(Dispatchers.IO) { PlaceMapper(timetable.value).map(response) }
     }
 
     // ---- stops near a position ----

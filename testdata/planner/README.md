@@ -35,6 +35,8 @@ refer to, cut from that day's bundles by [make_gtfs_subset.py](live/make_gtfs_su
 | `stop_finder-strathfield.json` | "strathfield" | 48 locations, alphabetical within type; the station `isBest`, `matchQuality` 986 vs ~240 for streets, suburbs and POIs |
 | `stop_finder-central.json` | "central" | Central Station (global id 200060, legacy `stopId` 10101100); "Davistown, Central RSL Wharf" |
 | `stop_finder-sydney-opera-house.json`, `stop_finder-manly-wharf.json` | | A POI; a wharf |
+| `stop_finder-100-george-st.json` | "100 George St" | 32 `singlehouse` locations across NSW (100 George St, The Rocks `isBest`; also 100A, 100-104, and other streets such as "100 St Georges Cr"); a house's `disassembledName` is only the street ("George St"). Captured 13 Nov 2026 |
+| `stop_finder-100-george-st-sydney.json` | "100 George St, Sydney" | No house (TfNSW files it under The Rocks): the street "George St, Sydney" `isBest`, then stops and POIs. Captured 13 Nov 2026 |
 | `coord-central.json` | `/v1/tp/coord` at Central Station (151.2065, -33.8840), `type_1=STOP`, 600 m | 16 stops, every one named "undefined, undefined": the name is `properties.STOP_NAME_WITH_PLACE`, the distance `properties.distance`; `productClasses` per stop; stations by GTFS id (`200060`), many bus stops with a `G` in front (`G201081`). Captured later on 11 Nov 2026 (about 23:35), not with `planner-capture` |
 
 ## `tfnsw/`: hand-made mapping tests

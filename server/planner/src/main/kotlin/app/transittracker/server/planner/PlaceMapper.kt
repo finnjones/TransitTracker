@@ -14,8 +14,13 @@ import app.transittracker.model.Timetable
 internal class PlaceMapper(private val timetable: Timetable?) {
 
     fun map(response: StopFinderResponseDto): List<RankedPlace> =
-        response.locations.mapIndexedNotNull { index, location -> map(location)?.let { RankedPlace(it, location.matchQuality ?: 0, location.isBest == true, index) } }
-            .distinctBy { it.place.id }
+        response.locations.mapIndexedNotNull { index, location ->
+            map(location)?.let { RankedPlace(it, location.matchQuality ?: 0, location.isBest == true, index, house(location, it)) }
+        }.distinctBy { it.place.id }
+
+    /** A house's number ("100", "100A", "12-18"), from its name; null for anything but a `singlehouse`. */
+    private fun house(location: StopFinderLocationDto, place: Place): String? =
+        if (location.type?.lowercase() != "singlehouse") null else HOUSE_NUMBER.find(place.name)?.value
 
     private fun map(location: StopFinderLocationDto): Place? {
         val id = location.id?.trim()?.takeIf { it.isNotEmpty() } ?: return null
@@ -29,7 +34,10 @@ internal class PlaceMapper(private val timetable: Timetable?) {
         }
         val position = TripMapper.latLng(location.coord) ?: return null
         // Places keep " Station" ("Strathfield Station" in the contract); only the platform goes.
+        // A house's short name leaves out its number ("George St" for "100 George St, The Rocks"): use the long one.
+        val house = location.type?.lowercase() == "singlehouse"
         val name = (if (kind == PlaceKind.STOP) Names.withoutPlatform(location.disassembledName ?: location.name) else null)
+            ?: (if (house) Names.placeName(null, location.name)?.takeIf { HOUSE_NUMBER.containsMatchIn(it) } else null)
             ?: Names.placeName(location.disassembledName, location.name) ?: return null
         return Place(
             id = id,
@@ -57,8 +65,11 @@ internal class PlaceMapper(private val timetable: Timetable?) {
     }
 }
 
-/** A place with what ranking needs. */
-internal data class RankedPlace(val place: Place, val matchQuality: Int, val isBest: Boolean, val order: Int)
+/** A house number or range at the start of a name: "100", "100A", "12-18". */
+private val HOUSE_NUMBER = Regex("""^[0-9]+[A-Za-z]?(?:-[0-9]+[A-Za-z]?)?(?=\s)""")
+
+/** A place with what ranking needs; [house] is the number of a house (`singlehouse`), else null. */
+internal data class RankedPlace(val place: Place, val matchQuality: Int, val isBest: Boolean, val order: Int, val house: String? = null)
 
 internal object PlaceRanking {
     /** Distance bands in metres: within a band, TfNSW's own match quality decides. */
@@ -78,18 +89,39 @@ internal object PlaceRanking {
      * Ranking by distance first put "Strathfield College, Haymarket" above Strathfield Station for a
      * phone in the CBD.
      */
-    fun rank(places: List<RankedPlace>, query: String, near: LatLng?, limit: Int): List<Place> {
-        val words = words(query)
+    fun rank(places: List<RankedPlace>, query: String, near: LatLng?, limit: Int): List<Place> =
+        rank(places, AddressQuery.parse(query), near, limit)
+
+    /**
+     * As above; a search that starts with a house number ([AddressQuery.number]) puts houses
+     * first: that number on that street, the street's other numbers, that number on another
+     * street ("100 St Georges Cr" for "100 George St"), other houses; then the tiers above. Among
+     * houses, those in the suburb typed come first.
+     */
+    fun rank(places: List<RankedPlace>, query: AddressQuery, near: LatLng?, limit: Int): List<Place> {
+        val words = words(query.text)
+        val number = query.number
         val tier = { p: RankedPlace ->
+            val house = p.house.takeIf { number != null }
             when {
-                p.isBest -> 0
-                p.place.kind == PlaceKind.STOP && words.isNotEmpty() && words(p.place.name).let { name -> words.all { w -> name.any { it.startsWith(w) } } } -> 1
-                else -> 2
+                house != null -> {
+                    val street = query.sameStreet(p.place.name)
+                    val same = AddressQuery.sameNumber(house, number!!)
+                    if (street && same) 0 else if (street) 1 else if (same) 2 else 3
+                }
+                p.isBest -> 4
+                p.place.kind == PlaceKind.STOP && words.isNotEmpty() && words(p.place.name).let { name -> words.all { w -> name.any { it.startsWith(w) } } } -> 5
+                else -> 6
             }
         }
+        val suburb = query.suburbWords
+        val inSuburb = { p: RankedPlace ->
+            if (p.house == null || suburb.isEmpty()) 0
+            else if (words(p.place.detail).let { d -> suburb.all { w -> d.any { it.startsWith(w) } } }) 0 else 1
+        }
         val byQuality = compareByDescending<RankedPlace> { it.matchQuality }.thenBy { it.order }
-        val inTier = if (near == null) byQuality else compareBy<RankedPlace> { band(Geo.distanceMetres(near, it.place.position)) }.then(byQuality)
-        return places.sortedWith(compareBy(tier).then(inTier)).take(limit).map { it.place }
+        val byDistance = if (near == null) byQuality else compareBy<RankedPlace> { band(Geo.distanceMetres(near, it.place.position)) }.then(byQuality)
+        return places.sortedWith(compareBy(tier).thenBy(inSuburb).then(byDistance)).take(limit).map { it.place }
     }
 
     private fun words(text: String): List<String> = text.lowercase().split(WORD).filter { it.isNotEmpty() }

@@ -21,6 +21,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TfnswPlannerTest {
@@ -168,6 +169,59 @@ class TfnswPlannerTest {
     }
 
     // ---- places ----
+
+    @Test
+    fun `a house search that finds only the street searches the number and street again`() = runTest {
+        fetcher.stopFinderFor = { text ->
+            PlannerFetch.Success(PlannerFixtures.live(if (text == "100 George St") "stop_finder-100-george-st.json" else "stop_finder-100-george-st-sydney.json"))
+        }
+        val p = planner()
+        val found = p.places("Unit 5/100 George St, Sydney", null, 6).places
+        assertEquals(
+            listOf("100 George St, Sydney", "100 George St"),
+            fetcher.calls.map { c -> c.second.first { it.first == "name_sf" }.second },
+            "the unit is dropped, then the suburb TfNSW does not file it under",
+        )
+        assertEquals("100 George St" to "The Rocks", found.first().name to found.first().detail)
+        assertTrue(found.all { it.name.startsWith("100") }, "houses fill the list before the street")
+
+        // Cached under the search without the unit.
+        p.places("100 George St, Sydney", null, 6)
+        assertEquals(2, fetcher.calls.size)
+    }
+
+    @Test
+    fun `a search without a house number, or one that found a house, is sent once`() = runTest {
+        fetcher.stopFinderFor = { PlannerFetch.Success(PlannerFixtures.live("stop_finder-100-george-st.json")) }
+        val p = planner()
+        p.places("George St", null, 6)
+        p.places("100 George St, The Rocks", null, 6)
+        assertEquals(2, fetcher.calls.size)
+    }
+
+    @Test
+    fun `house searches are read as number, street and suburb`() {
+        val q = AddressQuery.parse("Unit 5/100 George Street, The Rocks NSW 2000")
+        assertEquals("100 George Street, The Rocks NSW 2000", q.text)
+        assertEquals("100", q.number)
+        assertEquals("100 George Street", q.numberAndStreet)
+        assertEquals(listOf("the", "rocks"), q.suburbWords)
+        assertTrue(q.sameStreet("100 George St"))
+        assertTrue(!q.sameStreet("100 St Georges Cr") && !q.sameStreet("100 King George St"))
+
+        assertEquals("12 St Johns Rd", AddressQuery.parse("12 St Johns Rd Glebe").numberAndStreet, "a leading St is Saint")
+        assertEquals(listOf("glebe"), AddressQuery.parse("12 St Johns Rd Glebe").suburbWords)
+        assertEquals("1 Macquarie St", AddressQuery.parse("Level 3, 1 Macquarie St, Sydney").numberAndStreet)
+        assertEquals("12A", AddressQuery.parse("3/12A Smith St").number)
+        assertNull(AddressQuery.parse("100 George St").numberAndStreet, "nothing after the street: nothing to drop")
+        assertNull(AddressQuery.parse("Central Station").number)
+        assertNull(AddressQuery.parse("2000").number)
+        assertTrue(AddressQuery.parse("100 George").sameStreet("100 George St"), "no type typed: any type")
+
+        assertTrue(AddressQuery.sameNumber("12-18", "12"))
+        assertTrue(AddressQuery.sameNumber("100a", "100A"))
+        assertTrue(!AddressQuery.sameNumber("100A", "100"))
+    }
 
     @Test
     fun `places are mapped, unknown types dropped, stations first and nearer ones next`() = runTest {

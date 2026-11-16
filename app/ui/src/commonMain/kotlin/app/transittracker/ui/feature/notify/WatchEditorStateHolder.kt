@@ -11,6 +11,7 @@ import app.transittracker.model.WatchKind
 import app.transittracker.model.WatchRules
 import app.transittracker.ui.feature.settings.refusalWords
 import app.transittracker.ui.format.formatClock
+import app.transittracker.ui.format.platformWords
 import app.transittracker.ui.format.shortStopName
 import app.transittracker.ui.nav.Route
 import app.transittracker.ui.settings.ClockFormat
@@ -193,7 +194,7 @@ class WatchEditorStateHolder(
         val alight: StopCall = detail.calls.lastOrNull { it.stopId == alightId } ?: detail.calls.last()
         val at = (board.expectedDepartureMs ?: board.scheduledDepartureMs)?.let { formatClock(it, zone, format) }
         val detailWords = listOfNotNull(
-            detail.route?.shortName?.takeIf { it.isNotBlank() }, at?.let { "LEAVES $it" }, board.platform?.let { "PLAT $it" },
+            detail.route?.shortName?.takeIf { it.isNotBlank() }, at?.let { "LEAVES $it" }, board.platform?.let { platformWords(it) },
         ).joinToString(" · ").ifBlank { "THIS SERVICE ONLY" }
         return WatchTicket(shortStopName(board.stopName), shortStopName(alight.stopName), detailWords.uppercase())
     }

@@ -57,6 +57,8 @@ import app.transittracker.ui.format.DefaultLineColor
 import app.transittracker.ui.format.countdownMmSs
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.format.parseLineColor
+import app.transittracker.ui.format.platformSpoken
+import app.transittracker.ui.format.platformWords
 import app.transittracker.ui.format.shortStopName
 import app.transittracker.ui.format.statusPresentation
 import app.transittracker.ui.motion.PageTransition
@@ -327,7 +329,7 @@ private fun PlatformLine(row: StopRow, inverted: Boolean) {
         if (lead != null && platform != null) Label("·", color = ink, bold = strong, size = LabelSize.L10)
         if (platform != null) {
             if (row.call.platformChanged) PlatformChip(platform)
-            else Label("PLAT $platform", color = if (strong && !inverted) c.text else ink, bold = strong, size = LabelSize.L10)
+            else Label(platformWords(platform), color = if (strong && !inverted) c.text else ink, bold = strong, size = LabelSize.L10)
         }
     }
 }
@@ -337,7 +339,7 @@ private fun PlatformLine(row: StopRow, inverted: Boolean) {
 private fun PlatformChip(platform: String) {
     val c = TtTheme.colors
     Box(Modifier.background(c.caution).padding(horizontal = 4.dp, vertical = 1.dp)) {
-        Label("NOW PLAT $platform", color = c.screen, bold = true, size = LabelSize.L10)
+        Label("NOW ${platformWords(platform)}", color = c.screen, bold = true, size = LabelSize.L10)
     }
 }
 
@@ -388,7 +390,7 @@ private fun stopSentence(
     fmt: app.transittracker.ui.settings.ClockFormat,
 ): String = buildString {
     append(shortStopName(row.call.stopName))
-    row.call.platform?.let { append(if (row.call.platformChanged) ", platform changed, now platform $it" else ", platform $it") }
+    row.call.platform?.let { append(if (row.call.platformChanged) ", platform changed, now ${platformSpoken(it)}" else ", ${platformSpoken(it)}") }
     when (row.role) {
         StopRole.BOARD -> append(", board here")
         StopRole.ALIGHT -> append(", get off here")

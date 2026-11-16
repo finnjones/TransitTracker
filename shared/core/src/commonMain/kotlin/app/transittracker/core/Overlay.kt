@@ -3,6 +3,7 @@ package app.transittracker.core
 import app.transittracker.model.Departure
 import app.transittracker.model.DepartureStatus
 import app.transittracker.model.Mode
+import app.transittracker.model.Platforms
 import app.transittracker.model.RouteId
 import app.transittracker.model.ScheduledDeparture
 import app.transittracker.model.ServiceDate
@@ -83,7 +84,7 @@ class Overlay(
             mode = route?.mode ?: Mode.OTHER,
             headsign = s.headsign,
             originStopId = s.originStopId,
-            originPlatform = timetable.stop(s.originStopId)?.platformCode,
+            originPlatform = Platforms.of(timetable.stop(s.originStopId)),
             platformChanged = false,
             scheduledDepartureMs = s.departureMillis,
             expectedDepartureMs = s.departureMillis,
@@ -118,7 +119,7 @@ class Overlay(
         val platformCommon = if (actual != null) {
             common.copy(
                 originStopId = actual,
-                originPlatform = timetable.stop(actual)?.platformCode,
+                originPlatform = Platforms.of(timetable.stop(actual)),
                 platformChanged = true,
             )
         } else {
@@ -166,7 +167,7 @@ class Overlay(
             mode = route?.mode ?: Mode.OTHER,
             headsign = d.headsign ?: stopName(stops.last().stopId),
             originStopId = origin.stopId,
-            originPlatform = timetable.stop(origin.stopId)?.platformCode,
+            originPlatform = Platforms.of(timetable.stop(origin.stopId)),
             platformChanged = false,
             scheduledDepartureMs = dep,
             expectedDepartureMs = dep,
@@ -201,7 +202,7 @@ class Overlay(
             val schedDep = ServiceTime.toEpochMillis(ref.serviceDate, st.departureSecs)
             val stopDelta = deltas[st.stopSequence]
             val stop = timetable.stop(st.stopId)
-            var platform = stop?.platformCode
+            var platform = Platforms.of(stop)
             var platformChanged = false
             var stopId = st.stopId
             var expArr: Long? = schedArr
@@ -220,7 +221,7 @@ class Overlay(
                     val actual = stopDelta.actualStopId?.takeIf { it != st.stopId }
                     if (actual != null) {
                         stopId = actual
-                        platform = timetable.stop(actual)?.platformCode
+                        platform = Platforms.of(timetable.stop(actual))
                         platformChanged = true
                     }
                 }
@@ -288,7 +289,7 @@ class Overlay(
                 stopSequence = s.stopSequence,
                 stopId = s.stopId,
                 stopName = stopName(s.stopId),
-                platform = stop?.platformCode,
+                platform = Platforms.of(stop),
                 platformChanged = false,
                 scheduledArrivalMs = s.arrivalMs,
                 scheduledDepartureMs = s.departureMs,

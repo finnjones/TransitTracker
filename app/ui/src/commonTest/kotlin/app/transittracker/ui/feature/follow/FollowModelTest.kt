@@ -114,6 +114,55 @@ class FollowModelTest {
         assertEquals(emptyList(), riddenCalls(calls, "B", "A"))
     }
 
+    // ---------------------------------------------------------------- the train ahead
+
+    @Test
+    fun theTrainThreeMinutesAheadIsNotTheOneYouAreOn() {
+        // The line is about 9.2 km in 20 minutes: the 07:00 is 1.4 km ahead of the 07:03 at 07:10.
+        val close = listOf(candidate(0.0), candidate(3.0))
+        val onThe0703 = fix(between(a, b, 0.35), 10.0, accuracy = 30.0)
+        val readings = readFix(onThe0703, close)
+        assertNull(readings[0].match, "1.4 km behind where the 07:00 should be")
+        assertEquals("train-3.0", assertNotNull(readings[1].match).key.tripId)
+    }
+
+    @Test
+    fun ofTwoTrainsThatBothFitTheNearerOneWins() {
+        // 90 seconds apart (about 700 m): the fix fits both, but sits on the 07:01:30.
+        val close = listOf(candidate(0.0), candidate(1.5))
+        val readings = readFix(fix(between(a, b, 0.425), 10.0, accuracy = 20.0), close)
+        assertNull(readings[0].match)
+        assertEquals(FollowTuning().missEvidence, readings[0].evidence)
+        assertEquals("train-1.5", assertNotNull(readings[1].match).key.tripId)
+        assertEquals(FollowTuning().fitEvidence, readings[1].evidence)
+    }
+
+    @Test
+    fun lockedOntoTheTrainAheadByMistakeItSoonMovesToTheRightOne() {
+        val close = listOf(candidate(0.0), candidate(1.5))
+        val keys = close.map { it.journey.departure.ref }.toSet()
+        val ahead = close[0].journey.departure.ref
+        val mine = close[1].journey.departure.ref
+        // Followed the 07:00 for a while (as sure as can be).
+        var mem = FollowMemory().switchTo(FollowMatch("trip", ahead, 0, FollowStage.RIDING, 0.0))
+        for (min in listOf(10.0, 10.5, 11.0)) {
+            val f = fix(between(a, b, (min - 1.5) / 20.0), min, accuracy = 20.0)
+            val readings = readFix(f, close)
+            val evidence = readings.groupBy { it.key }.mapValues { (_, r) -> r.maxOf { it.evidence } }
+            mem = mem.next(preferredFit(readings.mapNotNull { it.match }, mem.pinned, mem.scores), keys, evidence)
+        }
+        assertEquals(mine, mem.pinned?.key)
+    }
+
+    @Test
+    fun waysSharingTheTrainAreNotSetAgainstEachOther() {
+        // The same train in two ways: both fit equally, neither is dropped.
+        val one = candidate(0.0)
+        val other = one.copy(journey = one.journey.copy(wayId = "w2"))
+        val readings = readFix(fix(between(a, b, 0.5), 10.0, accuracy = 20.0), listOf(one.copy(journey = one.journey.copy(wayId = "w1")), other))
+        assertTrue(readings.all { it.match != null })
+    }
+
     // ---------------------------------------------------------------- the real line
 
     /** The railway bows a kilometre north between A and B; the straight line A-B is a road. */

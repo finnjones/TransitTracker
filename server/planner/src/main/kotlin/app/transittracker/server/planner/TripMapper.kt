@@ -3,6 +3,7 @@ package app.transittracker.server.planner
 import app.transittracker.model.Itinerary
 import app.transittracker.model.ItineraryLeg
 import app.transittracker.model.LatLng
+import app.transittracker.model.Platforms
 import app.transittracker.model.LegKind
 import app.transittracker.model.LegPoint
 import app.transittracker.model.Mode
@@ -377,7 +378,7 @@ internal class TripMapper(
             name = name,
             position = position,
             stopId = stopId,
-            platform = if (isStop) Names.platform(stop) ?: stopId?.let { timetable?.stop(it)?.platformCode } else null,
+            platform = if (isStop) Names.platform(stop) ?: stopId?.let { Platforms.of(timetable?.stop(it)) } else null,
             scheduledMs = planned ?: estimated ?: 0L,
             expectedMs = estimated?.takeIf { planned == null || realtime || it != planned },
         )
@@ -442,8 +443,8 @@ internal class TripMapper(
         val boarding = leg.from.stopId?.takeIf { it in matcher.stationStops(listOf(match.boardingStopId)) } ?: match.boardingStopId
         val alighting = leg.to.stopId ?: match.alightingStopId
         return leg.copy(
-            from = leg.from.copy(stopId = boarding, platform = leg.from.platform ?: tt.stop(boarding)?.platformCode),
-            to = leg.to.copy(stopId = alighting, platform = leg.to.platform ?: alighting?.let { tt.stop(it)?.platformCode }),
+            from = leg.from.copy(stopId = boarding, platform = leg.from.platform ?: Platforms.of(tt.stop(boarding))),
+            to = leg.to.copy(stopId = alighting, platform = leg.to.platform ?: alighting?.let { Platforms.of(tt.stop(it)) }),
             routeId = match.routeId,
             tripId = match.tripId,
             serviceDate = match.serviceDate,

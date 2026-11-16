@@ -2,6 +2,7 @@ package app.transittracker.server.watch
 
 import app.transittracker.model.Alert
 import app.transittracker.model.AlertSeverity
+import app.transittracker.model.Platforms
 import app.transittracker.model.PushKeys
 import app.transittracker.model.RouteId
 import app.transittracker.model.ServiceDate
@@ -442,7 +443,7 @@ class WatchEngine(
 
     private fun platformLabel(stopId: StopId): String {
         val stop = timetable.value?.stop(stopId)
-        return stop?.platformCode?.takeIf { it.isNotBlank() } ?: stop?.name ?: stopId
+        return Platforms.of(stop) ?: stop?.name ?: stopId
     }
 
     /** "Next: 7:51 (on time)" for the next covered, not-cancelled trip after [after]. */

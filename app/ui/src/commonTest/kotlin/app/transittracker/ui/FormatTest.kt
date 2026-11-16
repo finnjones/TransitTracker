@@ -66,6 +66,13 @@ class FormatTest {
     fun platformOccupancyCars() {
         assertEquals("NOW PLAT", platformPresentation("6", true).prefix)
         assertEquals("PLAT", platformPresentation("3", false).prefix)
+        // Buses and ferries board at stands and wharves, not platforms.
+        assertEquals("STAND", platformPresentation("Stand A", false).prefix)
+        assertEquals("A", platformPresentation("Stand A", false).platform)
+        assertEquals("NOW STAND", platformPresentation("Stand C", true).prefix)
+        assertEquals("WHARF 3 SIDE", platformPresentation("Wharf 3, Side A", false).prefix)
+        assertEquals("wharf 3, side A", platformPresentation("Wharf 3, Side A", false).spoken)
+        assertEquals("platform changed, now platform 6", platformPresentation("6", true).spoken)
         assertNull(occupancyPresentation(Occupancy.UNKNOWN))
         assertEquals(1, occupancyPresentation(Occupancy.MANY_SEATS_AVAILABLE)!!.filled)
         assertEquals("FEW SEATS", occupancyPresentation(Occupancy.FEW_SEATS_AVAILABLE)!!.words)

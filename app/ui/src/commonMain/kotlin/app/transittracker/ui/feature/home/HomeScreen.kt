@@ -78,6 +78,8 @@ import app.transittracker.ui.format.countdown
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.format.formatDayDate
 import app.transittracker.ui.format.parseLineColor
+import app.transittracker.ui.format.platformSpoken
+import app.transittracker.ui.format.platformWords
 import app.transittracker.ui.format.shortStopName
 import app.transittracker.ui.format.statusPresentation
 import app.transittracker.ui.motion.PageTransition
@@ -428,7 +430,7 @@ private fun ServiceRow(d: Departure, nowMs: Long, actions: HomeActions) {
     val status = statusPresentation(d)
     val cancelled = d.status == DepartureStatus.CANCELLED
     val cd = countdown(d.expectedDepartureMs, nowMs, tz, fmt, status.countdownPrefix)
-    val where = d.headsign + (d.originPlatform?.let { " · Plat $it" } ?: "")
+    val where = d.headsign + (d.originPlatform?.let { " · ${platformWords(it)}" } ?: "")
     Row(
         Modifier
             .fillMaxWidth()
@@ -482,7 +484,7 @@ private fun ConnectionLine(d: Departure, tripId: String, journey: Journey, actio
     val cancelled = d.status == DepartureStatus.CANCELLED
     val time = formatClock(if (cancelled) d.scheduledDepartureMs else d.expectedDepartureMs, tz, fmt)
     val sentence = "Then ${d.routeName} to ${d.headsign}, leaves $time" +
-        (d.originPlatform?.let { ", ${standWord(d.mode).lowercase()} $it" } ?: "") + ", ${status.spoken}"
+        (d.originPlatform?.let { ", ${platformSpoken(it)}" } ?: "") + ", ${status.spoken}"
     Row(
         Modifier.fillMaxWidth().heightIn(min = 40.dp).serviceTaps({ actions.openService(d) }, actions.manageRoutes, sentence),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -491,16 +493,9 @@ private fun ConnectionLine(d: Departure, tripId: String, journey: Journey, actio
         Label("THEN", size = LabelSize.L10, color = c.textSecondary)
         RouteBadge(d.routeName, d.routeColor, null, style = BadgeStyle.COMPACT)
         PixelText(time, style = TtTheme.type.row15Strong, color = if (cancelled) c.textSecondary else c.text, strike = cancelled, maxLines = 1)
-        d.originPlatform?.let { Label("${standWord(d.mode)} $it", size = LabelSize.L10, color = c.textSecondary) }
+        d.originPlatform?.let { Label(platformWords(it), size = LabelSize.L10, color = c.textSecondary) }
         StatusLine(status, Modifier.weight(1f), size = StatusSize.SMALL)
     }
-}
-
-/** What a boarding point is called for [mode]: platform, stand, wharf. */
-private fun standWord(mode: Mode): String = when (mode) {
-    Mode.BUS, Mode.COACH -> "STAND"
-    Mode.FERRY -> "WHARF"
-    else -> "PLAT"
 }
 
 // ---------------------------------------------------------------- on your way
@@ -591,7 +586,7 @@ private fun NextRide(next: Departure, otw: OnTheWay, nowMs: Long, actions: HomeA
         else -> "${otw.changeMinutes} MIN TO CHANGE" + (otw.legEnd?.let { " AT ${it.uppercase()}" } ?: "")
     }
     val spoken = "Then ${next.routeName} to ${next.headsign}, ${cd.spoken}" +
-        (next.originPlatform?.let { ", ${standWord(next.mode).lowercase()} $it" } ?: "") + ", ${status.spoken}" +
+        (next.originPlatform?.let { ", ${platformSpoken(it)}" } ?: "") + ", ${status.spoken}" +
         (change?.let { ", ${it.lowercase()}" } ?: "")
     Column(
         Modifier.fillMaxWidth().padding(top = 4.dp).serviceTaps({ actions.openService(next) }, actions.manageRoutes, spoken),
@@ -687,7 +682,7 @@ private fun CompactTripCard(card: TripCard, nowMs: Long, actions: HomeActions, m
                 if (card.waysLabel != null) Label(card.waysLabel, size = LabelSize.L10, color = c.info, bold = true)
                 if (d != null) {
                     val status = statusPresentation(d)
-                    val suffix = formatClock(d.expectedDepartureMs, tz, fmt) + (d.originPlatform?.let { " · PLAT $it" } ?: "")
+                    val suffix = formatClock(d.expectedDepartureMs, tz, fmt) + (d.originPlatform?.let { " · ${platformWords(it)}" } ?: "")
                     StatusLine(status, size = StatusSize.SMALL, suffix = suffix)
                 } else {
                     val first = card.noMoreServices?.firstNextDayMs

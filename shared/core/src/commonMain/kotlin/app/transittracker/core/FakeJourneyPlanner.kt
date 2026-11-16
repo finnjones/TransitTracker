@@ -317,7 +317,7 @@ class FakeJourneyPlanner(
             name = (station?.name ?: stopId).removeSuffix(" Station"),
             position = stop?.position ?: LatLng(0.0, 0.0),
             stopId = stopId,
-            platform = stop?.platformCode,
+            platform = app.transittracker.model.Platforms.of(stop),
             scheduledMs = scheduledMs,
             expectedMs = expectedMs,
         )

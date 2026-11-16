@@ -97,12 +97,36 @@ fun ageSpoken(ms: Long): String {
 
 internal fun minutesSpoken(m: Int) = if (m == 1) "1 minute" else "$m minutes"
 
-/** Platform sign words (plan 2.7): "PLAT 3", or "NOW PLAT 6" in a Caution block when changed. */
+/**
+ * Platform sign words (plan 2.7): "PLAT 3", "STAND A", "WHARF 3 SIDE A", or "NOW PLAT 6" in a
+ * Caution block when changed. [platform] is a platform number ("3") or the stop's own words for
+ * where to board ("Stand A", "Wharf 3, Side A": see [app.transittracker.model.Platforms]); the
+ * last word is drawn big, the rest small before it.
+ */
 data class PlatformPresentation(val prefix: String, val platform: String, val changed: Boolean, val spoken: String)
 
-fun platformPresentation(platform: String, changed: Boolean): PlatformPresentation =
-    if (changed) PlatformPresentation("NOW PLAT", platform, true, "platform changed, now platform $platform")
-    else PlatformPresentation("PLAT", platform, false, "platform $platform")
+fun platformPresentation(platform: String, changed: Boolean): PlatformPresentation {
+    val (prefix, value) = if (isPlatformNumber(platform)) {
+        "PLAT" to platform
+    } else {
+        val words = platform.replace(",", "").uppercase().split(' ').filter { it.isNotEmpty() }
+        words.dropLast(1).joinToString(" ") to (words.lastOrNull() ?: platform)
+    }
+    val spoken = platformSpoken(platform)
+    return if (changed) PlatformPresentation("NOW $prefix".trim(), value, true, "platform changed, now $spoken")
+    else PlatformPresentation(prefix, value, false, spoken)
+}
+
+/** "PLAT 3" for a platform number; the stop's own words otherwise ("STAND B", "WHARF 3, SIDE A"). Never broken across lines. */
+fun platformWords(platform: String): String =
+    (if (isPlatformNumber(platform)) "PLAT $platform" else platform.uppercase()).replace(' ', '\u00A0')
+
+/** "platform 3", "stand B", "wharf 3, side A": for TalkBack. */
+fun platformSpoken(platform: String): String =
+    if (isPlatformNumber(platform)) "platform $platform"
+    else platform.split(' ').joinToString(" ") { w -> if (w.length > 2 && w.first().isUpperCase()) w.lowercase() else w }
+
+private fun isPlatformNumber(platform: String) = platform.firstOrNull()?.isDigit() == true || platform.length <= 2
 
 /** Seat pips (plan 2.7): [filled] of four pips, and the words beside them. */
 data class OccupancyPresentation(val filled: Int, val words: String) {

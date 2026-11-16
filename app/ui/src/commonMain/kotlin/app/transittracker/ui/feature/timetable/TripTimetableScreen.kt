@@ -71,6 +71,8 @@ import app.transittracker.ui.feature.service.DataChipLine
 import app.transittracker.ui.format.Lamp
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.format.formatDayDate
+import app.transittracker.ui.format.platformSpoken
+import app.transittracker.ui.format.platformWords
 import app.transittracker.ui.format.statusPresentation
 import app.transittracker.ui.loading.FlapBoardLoader
 import app.transittracker.ui.loading.LoaderTiming
@@ -535,10 +537,10 @@ private fun PlatformCell(platform: String, changed: Boolean) {
     val c = TtTheme.colors
     if (changed) {
         Box(Modifier.background(c.caution).padding(horizontal = 4.dp, vertical = 2.dp)) {
-            Label("NOW PLAT $platform", color = c.screen, bold = true, size = LabelSize.L10)
+            Label("NOW ${platformWords(platform)}", color = c.screen, bold = true, size = LabelSize.L10)
         }
     } else {
-        Label("PLAT $platform", color = c.textSecondary, size = LabelSize.L10)
+        Label(platformWords(platform), color = c.textSecondary, size = LabelSize.L10)
     }
 }
 
@@ -552,7 +554,7 @@ private fun entrySentence(entry: TimetableEntry, statusSpoken: String, tz: TimeZ
             append(", leaves ${formatClock(d.expectedDepartureMs, tz, fmt)}")
             append(", arrives ${formatClock(j.arrival.expectedArrivalMs, tz, fmt)}")
             append(", ${entry.durationMinutes} minutes")
-            d.originPlatform?.let { append(if (d.platformChanged) ", platform changed, now platform $it" else ", platform $it") }
+            d.originPlatform?.let { append(if (d.platformChanged) ", platform changed, now ${platformSpoken(it)}" else ", ${platformSpoken(it)}") }
         } else {
             append(", was ${formatClock(d.scheduledDepartureMs, tz, fmt)}")
         }

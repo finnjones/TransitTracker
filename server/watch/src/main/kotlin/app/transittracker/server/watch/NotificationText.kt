@@ -41,7 +41,7 @@ internal object NotificationText {
         "${time(depart)} to $destination now $minutes min late (${time(expected)})"
 
     fun platform(depart: Long, destination: String, platform: String) =
-        "${time(depart)} to $destination now leaves from platform $platform"
+        "${time(depart)} to $destination now leaves from ${if (platform.first().isDigit()) "platform $platform" else platform}"
 
     fun recovered(depart: Long, destination: String) = "${time(depart)} to $destination back on time"
 

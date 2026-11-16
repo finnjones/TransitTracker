@@ -23,6 +23,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import app.transittracker.ui.format.platformWords
 
 /** The pure rules of the planner screens: times, margins, live data, sorting, saving. */
 class PlanRulesTest {

@@ -486,10 +486,6 @@ fun liveModesNote(liveModes: Collection<Mode>, used: Collection<Mode>): String? 
 
 // ---------------------------------------------------------------- words
 
-/** "PLAT 3" for a platform number, the planner's own words otherwise ("STAND B", "WHARF 3"). */
-fun platformWords(platform: String): String =
-    (if (platform.firstOrNull()?.isDigit() == true) "PLAT $platform" else platform.uppercase()).replace(' ', ' ')
-
 /** "2 CHANGES · 12 MIN WALK" (no walk: "NO WALKING"). */
 fun summaryWords(changes: Int, walkMinutes: Int): String {
     val c = when (changes) {

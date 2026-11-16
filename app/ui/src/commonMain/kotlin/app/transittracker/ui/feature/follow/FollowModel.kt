@@ -92,10 +92,21 @@ data class FollowTuning(
     val corridorM: Double = 450.0,
     /** Furthest from the service's real line (its shape) a rider can be. */
     val shapeCorridorM: Double = 200.0,
-    /** Furthest along the line from where the timetable (with live data) puts the vehicle. */
-    val alongM: Double = 1_500.0,
+    /**
+     * Furthest along the line from where the timetable (with live data) puts the vehicle. Kept
+     * well under the gap to the service ahead (a train 3 minutes ahead is 2 to 4 km up the line),
+     * so the phone locks onto the train it is on, not the one in front.
+     */
+    val alongM: Double = 800.0,
     /** Furthest along the line from the vehicle's own live position, carried forward to the fix. */
-    val vehicleAlongM: Double = 500.0,
+    val vehicleAlongM: Double = 300.0,
+    /** A vague fix widens the along-the-line window by its accuracy, but by no more than this. */
+    val alongAccuracyCapM: Double = 150.0,
+    /**
+     * When the fix fits two vehicles (two trains on the same track), the one this much further
+     * from where the user is than the other does not fit: the user is on the nearer one.
+     */
+    val closerVehicleM: Double = 250.0,
     /**
      * A live vehicle position this far along the line from where the live timetable puts the
      * vehicle is a bad report (a stale position, the depot, the wrong trip) and is not used.
@@ -271,6 +282,41 @@ fun readFix(
     tuning: FollowTuning = FollowTuning(),
     projection: MapProjection = MapProjection.Sydney,
 ): List<FollowReading> {
+    val readings = readEach(fix, candidates, tuning, projection)
+    return nearestVehicleOnly(readings, candidates, fix, tuning)
+}
+
+/**
+ * The user is on one vehicle. When the fix fits riding two different vehicles (the train they are
+ * on and the one ahead on the same track), a fit [FollowTuning.closerVehicleM] further off than
+ * the best one is not a fit: it counts against that journey, so a journey followed by mistake is
+ * soon dropped for the right one. Ways sharing a vehicle are never set against each other.
+ */
+private fun nearestVehicleOnly(
+    readings: List<FollowReading>,
+    candidates: List<FollowCandidate>,
+    fix: LocationFix,
+    tuning: FollowTuning,
+): List<FollowReading> {
+    fun vehicle(i: Int): ServiceRef? = readings[i].match?.takeIf { it.stage == FollowStage.RIDING }
+        ?.let { candidates[i].legs.getOrNull(it.legIndex)?.departure?.ref }
+    val riding = readings.indices.filter { vehicle(it) != null }
+    if (riding.size < 2) return readings
+    val weight = if ((fix.accuracyM ?: 0.0) > tuning.vagueAccuracyM) 0.5 else 1.0
+    return readings.mapIndexed { i, r ->
+        val mine = vehicle(i) ?: return@mapIndexed r
+        val off = r.match!!.offMetres
+        val nearer = riding.any { j -> vehicle(j) != mine && readings[j].match!!.offMetres + tuning.closerVehicleM < off }
+        if (nearer) r.copy(match = null, evidence = tuning.missEvidence * weight) else r
+    }
+}
+
+private fun readEach(
+    fix: LocationFix,
+    candidates: List<FollowCandidate>,
+    tuning: FollowTuning,
+    projection: MapProjection,
+): List<FollowReading> {
     val t = fix.timeMs
     val p = projection.project(fix.position)
     val accuracy = (fix.accuracyM ?: 0.0).coerceIn(0.0, 500.0)
@@ -303,7 +349,8 @@ fun readFix(
                 val waitingAtStart = k == 0 && p.distanceTo(line.path.points.first()) <= tuning.atFirstStopM
                 val corridor = line.corridor(tuning) + accuracy
                 val live = line.vehicleAlong(leg.vehicle, t, tuning, projection)
-                val alongTolerance = (if (live != null) tuning.vehicleAlongM else tuning.alongM) + accuracy
+                val alongTolerance = (if (live != null) tuning.vehicleAlongM else tuning.alongM) +
+                    accuracy.coerceAtMost(tuning.alongAccuracyCapM)
                 val along = abs(snap.distance - (live ?: line.expectedAlong(t)))
                 val headingOff = bearing?.let { headingGap(it, line.compassAt(snap.distance)) }
                 val wrongWay = headingOff != null &&

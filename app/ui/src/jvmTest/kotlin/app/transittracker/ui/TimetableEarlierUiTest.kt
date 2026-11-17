@@ -21,6 +21,7 @@ import app.transittracker.ui.feature.timetable.TimetableActions
 import app.transittracker.ui.feature.timetable.TimetableContent
 import app.transittracker.ui.feature.timetable.TimetableStateHolder
 import app.transittracker.ui.state.rememberStateHolder
+import app.transittracker.ui.theme.TtTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -32,17 +33,17 @@ class TimetableEarlierUiTest {
         val deps = AppDeps.fake()
         var showEarlier by mutableStateOf(false)
         setContent {
-            PagePreview(deps) {
+            TtTheme { PagePreview(deps) {
                 val holder = rememberStateHolder { scope ->
                     TimetableStateHolder(deps.core, deps.places, deps.clock, FakeSetup.TRIP_HOME_WORK, null, scope)
                 }
                 val state by holder.state.collectAsState()
                 val actions = remember { TimetableActions(toggleEarlier = { showEarlier = !showEarlier }) }
                 TimetableContent(state, showEarlier, actions, Modifier.size(400.dp, 800.dp))
-            }
+            } }
         }
         val now = hasContentDescription("Services above have left", substring = true)
-        waitUntil(10_000) { onAllNodes(now).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 10_000) { onAllNodes(now).fetchSemanticsNodes().isNotEmpty() }
         waitForIdle()
         val before = onNode(now).getBoundsInRoot().top
 

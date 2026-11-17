@@ -17,6 +17,7 @@ import app.transittracker.model.wayIdFor
 import app.transittracker.model.RouteOption
 import app.transittracker.model.DepartureStatus
 import app.transittracker.ui.app.AppDeps
+import app.transittracker.ui.platform.FakePlatformServices
 import app.transittracker.ui.fake.CoreScenario
 import app.transittracker.ui.fake.FakeSetup
 import app.transittracker.ui.fake.LiveData
@@ -250,5 +251,35 @@ class HomeStateHolderTest {
         assertEquals(setOf(FakeData.STRATHFIELD), added[0].originStopIds)
         assertEquals(setOf(FakeData.CENTRAL), added[0].destinationStopIds)
         assertEquals(setOf(FakeData.T1), added[1].routeIds)
+    }
+
+    @Test
+    fun whenTheLocationCannotTellTheCardAsksAndOneTapFollows() = runTest {
+        // A tunnel: no fix. The Town Hall to Tallawong trip has trains under way.
+        val deps = AppDeps.fake(platform = FakePlatformServices(location = null))
+        val trip = FakeSetup.TRIP_TOWNHALL_TALLAWONG
+        val h = HomeStateHolder(deps.core, deps.places, deps.settings, deps.clock, backgroundScope, follower = deps.follower)
+        fun HomeUiState.card() = folders.flatMap { it.cards }.first { it.trip.id == trip }
+        val asking = h.ready { st -> st.folders.flatMap { it.cards }.any { it.trip.id == trip && it.aboard.isNotEmpty() } }.card()
+        assertNull(asking.onTheWay)
+        // The services that have left, the latest first, each boarded vehicle once.
+        val left = asking.aboard.map { it.departure.expectedDepartureMs }
+        assertEquals(left.sortedDescending(), left)
+        assertTrue(left.all { it < SampleData.NOW_MS })
+        assertEquals(asking.aboard.size, asking.aboard.map { it.departure.ref }.distinct().size)
+
+        // ON BOARD: the card is the journey the user named, first on Home, and nothing is asked.
+        val mine = asking.aboard.first()
+        h.onBoard(trip, mine)
+        val on = h.ready { st -> st.folders.firstOrNull()?.cards?.firstOrNull()?.onTheWay != null }
+        val otw = on.folders.first().cards.first().onTheWay!!
+        assertEquals(mine.departure.ref, otw.journey.departure.ref)
+        assertTrue(otw.told)
+        assertTrue(on.folders.flatMap { it.cards }.all { it.aboard.isEmpty() })
+
+        // NOT ON THIS: the next departures again, and the question.
+        h.notOnThis()
+        val back = h.ready { st -> st.folders.flatMap { it.cards }.any { it.trip.id == trip && it.aboard.isNotEmpty() } }.card()
+        assertNull(back.onTheWay)
     }
 }

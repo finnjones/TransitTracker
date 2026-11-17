@@ -373,12 +373,26 @@ on and the connection to make (the bus after the train), not the next departure.
 - `FollowMemory` adds the evidence up per journey: two fixes that fit pick it up, one stray fix
   does not switch the card, two clear contradictions (an accurate fix well off the line, the
   vehicle or the walk, or going the wrong way) drop it, and weak misses (a vague fix, a tunnel)
-  take about four. It is also dropped when it arrives. There is no manual override: whether you
-  are on a journey is decided by location alone.
+  take about four. It is also dropped when it arrives.
+- When the location cannot tell, the user is asked. A tunnel gives no fix, or one hundreds of
+  metres wide (the M1 is underground from Sydenham to Chatswood), so `FollowState.unsure` lists
+  the trips the location cannot rule out, each with its journeys under way: every trip when
+  there is no fix (or it takes more than 5 s to come), and with a fix vaguer than 100 m the
+  trips with a ride or a change within its accuracy (`unsureTrips`). An accurate fix is trusted
+  and nothing is asked. A trip stays unsure for a minute after the last such fix, so the
+  question does not flicker between a station and the tunnel after it. Home shows ON BOARD? on
+  those cards with the departure times of the services that have left, the latest first
+  (`aboardChoices`); one tap (`JourneyFollower.onBoard`) follows that journey.
+- What the user said stands (`FollowMemory.tell`, `told`): the journey is followed until it
+  arrives, whatever the fixes say, or until NOT ON THIS on its card takes it back
+  (`notOnThis`). Fixes that fit it still say which ride the user is on; with none, the live
+  times do (`progressByClock`: the ride that has not arrived yet, or the change onto it).
+  SWITCH and TAKE THIS ONE from a journey the user named keep it named.
 - `JourneyFollower` (one per app) polls `PlatformServices.currentFix` (with speed and heading on
   Android) every 15 s, and watches the live vehicles of the lines under way, only while a
   screen collects `state`, the app is visible, the setting is on (Settings > Places) and location
   was already allowed. It never asks for permission itself and never runs in the background.
+  Without the permission nothing is asked either: ON BOARD? needs Follow my journey working.
 - Home puts the followed trip's card first (`OnTheWay`): the ride and its countdown, THEN the
   connection with its own countdown, stand and status (TIGHT CHANGE when the change is shorter
   than the route allows), and the next departures underneath as OTHER SERVICES. Multi-leg cards
@@ -395,7 +409,8 @@ on and the connection to make (the bus after the train), not the next departure.
   side. The map opens on, and RECENTRE returns to, what is happening now (`nowFocus`: the rest of
   the ride you are on and the start of the next, or the walk and the start of the ride you are
   changing to); each new stage recentres it, and the fourth button (WHOLE JOURNEY) fits it all.
-  `FollowShots` shows both screens; `MapShots` has `map-journey-train-bus*` (`JourneyMapSamples`:
+  `FollowShots` shows both screens, and Home asking (`follow-home-asking`) and following a
+  journey the user named (`follow-home-told`); `MapShots` has `map-journey-train-bus*` (`JourneyMapSamples`:
   the T2 then the 333 to Bondi Beach, on real stops and line shapes).
 - Rides follow their line's shape (`followShape`): each stop is snapped where the shape first
   reaches it after the stop before (`snapAhead`; the plain nearest point caught stops on the

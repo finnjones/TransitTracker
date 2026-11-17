@@ -3,6 +3,7 @@ package app.transittracker.ui.feature.home
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -112,6 +114,10 @@ class HomeActions(
     val switchWay: (Journey) -> Unit = {},
     /** Every way from the next stop, from the planner (look only). */
     val waysFromNextStop: () -> Unit = {},
+    /** ON BOARD?: the user is on this journey of the trip (the location could not tell); follow it. */
+    val onBoard: (tripId: String, journey: Journey) -> Unit = { _, _ -> },
+    /** NOT ON THIS: the user takes back ON BOARD. */
+    val notOnThis: () -> Unit = {},
 )
 
 /** The Trips tab (plan 5.2, Main mockup). */
@@ -141,6 +147,8 @@ fun HomeScreen() {
             waysFromNextStop = {
                 scope.launch { holder.replanFromHere()?.let { nav.push(it) } }
             },
+            onBoard = holder::onBoard,
+            notOnThis = holder::notOnThis,
         )
     }
     HomeContent(state, deps.clock, holder::service, actions)
@@ -279,6 +287,10 @@ private fun FullTripCard(
             Headline(d, headline, nowMs, card, actions)
             HeadlineStrip(d, clock, service, Modifier.serviceTaps({ actions.openService(d) }, actions.manageRoutes))
             for (connection in headline.legs.drop(1)) ConnectionLine(connection, card.trip.id, headline, actions)
+        }
+        if (card.aboard.isNotEmpty()) {
+            DashedDivider()
+            AboardRow(card, actions, Modifier.padding(vertical = 6.dp))
         }
         for (j in card.following) {
             Column {
@@ -555,7 +567,15 @@ private fun OnTheWayCard(card: TripCard, otw: OnTheWay, nowMs: Long, actions: Ho
         }
         // The connection to make.
         otw.next?.let { next -> NextRide(next, otw, nowMs, actions) }
-        PixelButton("MAP", openMap, Modifier.fillMaxWidth().padding(vertical = 4.dp), style = TtTheme.type.label11Bold)
+        if (otw.told) {
+            // The user said so (ON BOARD?), and the location will not drop it: they can take it back.
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PixelButton("MAP", openMap, Modifier.weight(1f), style = TtTheme.type.label11Bold)
+                PixelButton("NOT ON THIS", actions.notOnThis, Modifier.weight(1f), style = TtTheme.type.label11Bold)
+            }
+        } else {
+            PixelButton("MAP", openMap, Modifier.fillMaxWidth().padding(vertical = 4.dp), style = TtTheme.type.label11Bold)
+        }
         OtherWays(otw, actions)
         if (card.following.isNotEmpty()) {
             DashedDivider()
@@ -696,6 +716,35 @@ private fun CompactTripCard(card: TripCard, nowMs: Long, actions: HomeActions, m
             if (d != null) {
                 val status = statusPresentation(d)
                 Countdown(countdown(d.expectedDepartureMs, nowMs, tz, fmt, status.countdownPrefix), size = CountdownSize.S30)
+            }
+        }
+        if (card.aboard.isNotEmpty()) AboardRow(card, actions, Modifier.padding(top = 8.dp))
+    }
+}
+
+/**
+ * ON BOARD?: the location cannot tell (a tunnel, no fix, a vague one) whether the user is on one
+ * of the trip's services that have left, so the card asks. One tap on a departure time follows
+ * that journey; the latest to leave comes first, earlier ones scroll in from the right.
+ */
+@Composable
+private fun AboardRow(card: TripCard, actions: HomeActions, modifier: Modifier = Modifier) {
+    val c = TtTheme.colors
+    val tz = TtTheme.time.timeZone
+    val fmt = TtTheme.time.clockFormat
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Label("ON BOARD?", size = LabelSize.L10, color = c.info, bold = true)
+        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (j in card.aboard) {
+                val d = j.departure
+                val time = formatClock(d.expectedDepartureMs, tz, fmt, withSuffix = false)
+                val spoken = "I am on the ${d.routeName} to ${d.headsign} that left at ${formatClock(d.expectedDepartureMs, tz, fmt)}"
+                PixelButton({ actions.onBoard(card.trip.id, j) }, kind = ButtonKind.FLAT, faceHeight = 44.dp, contentDescription = spoken) { color ->
+                    PixelText(
+                        if (card.aboardNamesLine) "$time ${d.routeName}" else time,
+                        Modifier.padding(horizontal = 10.dp), TtTheme.type.row15Strong, color, maxLines = 1,
+                    )
+                }
             }
         }
     }

@@ -85,7 +85,16 @@ data class TripCard(
     val onTheWay: OnTheWay? = null,
     /** For a route with several ways: "BEST OF 3 WAYS", or "PINNED · T9 FROM GORDON"; null for one way. */
     val waysLabel: String? = null,
-)
+    /**
+     * ON BOARD?: the location cannot tell whether the user is on one of this trip's journeys
+     * under way, so the card asks. One tap on a journey follows it. Latest departure first; empty
+     * when the location can tell, or nothing is under way.
+     */
+    val aboard: List<Journey> = emptyList(),
+) {
+    /** The ON BOARD? choices name their line as well as their time: they are not all on one line. */
+    val aboardNamesLine: Boolean get() = aboard.map { it.departure.routeName }.distinct().size > 1
+}
 
 data class NoMoreServices(val firstNextDayMs: Long?)
 
@@ -93,7 +102,29 @@ data class NoMoreServices(val firstNextDayMs: Long?)
  * The journey Follow my journey says the user is on, with its live times from the core, and the
  * other ways of the trip still open from there ([alternativesOf]).
  */
-data class Followed(val match: FollowMatch, val journey: Journey, val alternatives: List<Journey> = emptyList())
+data class Followed(
+    val match: FollowMatch,
+    val journey: Journey,
+    val alternatives: List<Journey> = emptyList(),
+    /** The user said they are on it (ON BOARD?); the location did not work it out. */
+    val told: Boolean = false,
+)
+
+/** ON BOARD? choices listed on a card. */
+const val ABOARD_SHOWN = 12
+
+/**
+ * The ON BOARD? choices of [trip] among its journeys [underway] that the location cannot rule
+ * out: one per vehicle boarded first (of two ways sharing it, the pinned way's, else the one that
+ * arrives first; the card offers the other ways once followed), the latest to leave first.
+ */
+fun aboardChoices(trip: SavedTrip, underway: List<Journey>): List<Journey> {
+    val pinned = trip.pinnedWay?.id
+    return underway.groupBy { it.departure.ref }.values
+        .map { same -> same.firstOrNull { pinned != null && it.wayId != null && it.follows(pinned) } ?: same.minBy { it.arrival.expectedArrivalMs } }
+        .sortedByDescending { it.departure.expectedDepartureMs }
+        .take(ABOARD_SHOWN)
+}
 
 /**
  * Another way open to the user on the way: what to do differently ([words]: "STAY ON TO CENTRAL",
@@ -153,6 +184,8 @@ data class OnTheWay(
     val alternatives: List<AlternativeWay> = emptyList(),
     /** A journey taken on the way (TAKE THIS ONE), not one of the route's saved ways. */
     val oneOff: Boolean = false,
+    /** The user said they are on it (ON BOARD?): the card offers NOT ON THIS to take it back. */
+    val told: Boolean = false,
 ) {
     val arrivalMs: Long get() = journey.arrival.expectedArrivalMs
     val isLastLeg: Boolean get() = legIndex == journey.legs.lastIndex
@@ -182,6 +215,7 @@ fun onTheWayOf(trip: SavedTrip, followed: Followed, stopNames: Map<StopId, Strin
         legStart = stopNames[leg.originStopId],
         alternatives = followed.alternatives.take(ALTERNATIVES_SHOWN).map { alternativeWay(followed.journey, followed.match, it, stopNames) },
         oneOff = oneOff,
+        told = followed.told,
     )
 }
 
@@ -333,6 +367,8 @@ data class HomeInputs(
     val firstNextDay: Map<String, Long?> = emptyMap(),
     /** The journey the user is on (Follow my journey), if any. */
     val follow: Followed? = null,
+    /** Trip id -> its journeys under way that the location cannot rule out (`FollowState.unsure`). */
+    val unsure: Map<String, List<Journey>> = emptyMap(),
 )
 
 /** Pure: the home screen for [inputs] at [nowMs]; [today] is the service date `YYYYMMDD`. */
@@ -402,6 +438,8 @@ private fun card(trip: SavedTrip, full: Boolean, inputs: HomeInputs, places: Map
         noMoreServices = if (journeys.isEmpty()) NoMoreServices(inputs.firstNextDay[trip.id]) else null,
         onTheWay = onTheWay,
         waysLabel = waysLabel(trip) { w -> wayName(trip, w, inputs.upcoming[trip.id].orEmpty()) },
+        // Nothing is asked while a journey is followed (of this trip or another).
+        aboard = if (inputs.follow == null) aboardChoices(trip, inputs.unsure[trip.id].orEmpty()) else emptyList(),
     )
 }
 

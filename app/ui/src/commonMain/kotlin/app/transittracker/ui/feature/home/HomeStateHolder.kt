@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -70,11 +71,15 @@ class HomeStateHolder(
         else combine(trips.map { t -> core.upcoming(t.id, count).map { t.id to it } }) { it.toMap() }
     }
 
+    /** Follow my journey, collected once (it asks for the location while collected). */
+    private val following: Flow<FollowState> = (follower?.state ?: flowOf(FollowState()))
+        .shareIn(scope, SharingStarted.WhileSubscribed(), replay = 1)
+
     /** The journey the user is on, with live times (re-read whenever the core recomputes it). */
-    private val followed: Flow<Followed?> = (follower?.state ?: flowOf(FollowState()))
-        .map { it.match }
+    private val followed: Flow<Followed?> = following
+        .map { it.match to it.told }
         .distinctUntilChanged()
-        .flatMapLatest { m ->
+        .flatMapLatest { (m, told) ->
             if (m == null) flowOf(null)
             // Under way, and still to come: a way can board the vehicle the user is on further along.
             else combine(
@@ -87,11 +92,27 @@ class HomeStateHolder(
                 val j = taken?.takeIf { way != null && it.wayId == way }
                     ?: (if (way != null && !isOneOff(way)) list.firstOrNull { it.departure.ref == m.key && it.follows(way) } else null)
                     ?: list.firstOrNull { it.departure.ref == m.key }
-                j?.let { Followed(m, it, alternativesOf(it, m, list, clock.nowMillis())) }
+                j?.let { Followed(m, it, alternativesOf(it, m, list, clock.nowMillis()), told) }
             }
         }
         .onStart { emit(null) }
         .distinctUntilChanged()
+
+    /** The journey followed, and the trips the location cannot tell about (ON BOARD?). */
+    private val follow: Flow<Pair<Followed?, Map<String, List<Journey>>>> = combine(
+        followed,
+        following.map { it.unsure }.onStart { emit(emptyMap()) }.distinctUntilChanged(),
+    ) { f, unsure -> f to unsure }
+
+    /** ON BOARD: the user says they are on [journey] of saved trip [tripId]; it is followed from now. */
+    fun onBoard(tripId: String, journey: Journey) {
+        follower?.onBoard(tripId, journey)
+    }
+
+    /** NOT ON THIS: the user takes back ON BOARD; the card goes back to the next departures. */
+    fun notOnThis() {
+        follower?.notOnThis()
+    }
 
     /** SWITCH: follow [alternative] (another way open from where the user is) instead of the journey on the card. */
     fun switchTo(alternative: Journey) {
@@ -155,9 +176,9 @@ class HomeStateHolder(
     ) { trips, up, status, density, (p, l) -> HomeInputs(trips, up, status, density, p, l) }
 
     override val state: StateFlow<HomeUiState> = combine(
-        inputs, stopNames, firstNextDay, ticker, followed,
-    ) { i, names, first, now, f ->
-        val full = i.copy(stopNames = names, firstNextDay = first, follow = f)
+        inputs, stopNames, firstNextDay, ticker, follow,
+    ) { i, names, first, now, (f, unsure) ->
+        val full = i.copy(stopNames = names, firstNextDay = first, follow = f, unsure = unsure)
         lastFollowed = f
         lookUpMissing(full)
         buildHomeState(full, now, ServiceTime.localDate(now))

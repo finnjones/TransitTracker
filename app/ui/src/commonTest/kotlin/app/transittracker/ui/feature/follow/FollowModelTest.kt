@@ -11,6 +11,7 @@ import app.transittracker.model.VehiclePosition
 import app.transittracker.ui.platform.LocationFix
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -361,5 +362,79 @@ class FollowModelTest {
         assertEquals(k2, mem.pinned?.key)
         // and survives a few misses.
         assertEquals(k2, mem.next(null, running).next(null, running).pinned?.key)
+    }
+
+    // ---------------------------------------------------------------- when the location cannot tell
+
+    @Test
+    fun whatTheUserSaidStandsWhateverTheFixesSay() {
+        var mem = FollowMemory().tell(m(k1))
+        assertEquals(k1, mem.pinned?.key)
+        // A tunnel's worth of fixes that do not fit, even clear ones: still on it.
+        repeat(6) { mem = mem.clearMiss() }
+        assertEquals(k1, mem.pinned?.key)
+        // Fixes that fit another train do not take over either.
+        repeat(4) { mem = mem.next(m(k2), running) }
+        assertEquals(k1, mem.pinned?.key)
+        // A fix that fits it says where on it the user is.
+        mem = mem.next(m(k1, leg = 1), running)
+        assertEquals(1, mem.pinned?.legIndex)
+        assertTrue(mem.told)
+        // It ends when it arrives, fix or no fix.
+        mem = mem.next(null, setOf(k2), emptyMap())
+        assertNull(mem.pinned)
+        assertFalse(mem.told)
+    }
+
+    @Test
+    fun takingItBackFollowsNothingUntilTheFixesSaySo() {
+        var mem = FollowMemory().tell(m(k1)).letGo()
+        assertNull(mem.pinned)
+        assertFalse(mem.told)
+        // Two fixes that fit are not enough after NOT ON THIS; a third is, and then by location.
+        mem = mem.next(m(k1), running).next(m(k1), running)
+        assertNull(mem.pinned)
+        mem = mem.next(m(k1), running)
+        assertEquals(k1, mem.pinned?.key)
+        assertFalse(mem.told)
+    }
+
+    @Test
+    fun switchingWaysKeepsWhatTheUserSaid() {
+        val mem = FollowMemory().tell(m(k1)).switchTo(m(k1, leg = 1))
+        assertTrue(mem.told)
+        // A way switched to on a journey location worked out is still up to location.
+        assertFalse(FollowMemory().switchTo(m(k2)).told)
+    }
+
+    @Test
+    fun aJourneyTheUserSaidTheyAreOnMovesAlongByTheClock() {
+        // The train 07:00 to 07:20, then the bus 07:30 to 07:45.
+        val j = candidate(0.0).journey
+        val said = FollowMatch("trip", j.departure.ref, 0, FollowStage.RIDING, 0.0)
+        assertEquals(said, progressByClock(said, j, t(10.0)))
+        val changing = progressByClock(said, j, t(25.0))
+        assertEquals(1 to FollowStage.CHANGING, changing.legIndex to changing.stage)
+        val bus = progressByClock(changing, j, t(35.0))
+        assertEquals(1 to FollowStage.RIDING, bus.legIndex to bus.stage)
+        // Never backwards, and the ride the user named stands before the timetable has it leaving.
+        assertEquals(bus, progressByClock(bus, j, t(10.0)))
+        assertEquals(said, progressByClock(said, j, t(-1.0)))
+    }
+
+    @Test
+    fun onlyAFixThatCannotRuleATripOutLeavesItUnsure() {
+        val mid = between(a, b, 0.5)
+        val far = LatLng(-33.70, 150.90)
+        // An accurate fix is trusted, on the line or off it: nothing to ask.
+        assertTrue(unsureTrips(fix(mid, 10.0, accuracy = 20.0), both).isEmpty())
+        assertTrue(unsureTrips(fix(far, 10.0, accuracy = 20.0), both).isEmpty())
+        // A tunnel's fix, 600 m wide and 900 m off the line: the user may well be on it.
+        val vague = LatLng(mid.lat + 0.008, mid.lon)
+        assertEquals(setOf("trip"), unsureTrips(fix(vague, 10.0, accuracy = 600.0), both))
+        // The same vague fix nowhere near the trip rules it out.
+        assertTrue(unsureTrips(fix(far, 10.0, accuracy = 600.0), both).isEmpty())
+        // No accuracy at all rules nothing out.
+        assertEquals(setOf("trip"), unsureTrips(fix(far, 10.0), both))
     }
 }

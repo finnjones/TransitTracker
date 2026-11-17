@@ -31,8 +31,16 @@ import kotlin.math.abs
  *
  * Each fix gives every journey evidence for or against ([FollowReading]); [FollowMemory] adds it
  * up over fixes, so a strong contradiction drops a journey within two fixes while a tunnel or a
- * vague fix only nudges it. Everything here is pure; [JourneyFollower] fetches the data, asks for
- * the location and keeps the memory.
+ * vague fix only nudges it.
+ *
+ * Location cannot always tell (a tunnel, no fix, a fix hundreds of metres wide). Then the user is
+ * asked ([unsureTrips]: ON BOARD?) and one tap says which journey they are on
+ * ([FollowMemory.tell]). What the user said stands until the journey arrives or they take it back,
+ * whatever the fixes say; where it has got to comes from the fixes that fit it, else the clock
+ * ([progressByClock]).
+ *
+ * Everything here is pure; [JourneyFollower] fetches the data, asks for the location and keeps
+ * the memory.
  */
 
 enum class FollowStage {
@@ -405,6 +413,52 @@ private fun readEach(
 }
 
 /**
+ * The saved trips among [candidates] that [fix] cannot rule out, so the user is asked which
+ * journey they are on instead (ON BOARD?). A fix as accurate as [FollowTuning.clearAccuracyM] is
+ * trusted: [readFix] decides, and no trip is unsure. A vaguer one (a tunnel, indoors, the mobile
+ * network) only rules out the trips it is nowhere near: a trip stays unsure when a ride or a
+ * change of one of its journeys under way lies within the fix's accuracy of it. Without an
+ * accuracy, every trip is unsure.
+ */
+fun unsureTrips(
+    fix: LocationFix,
+    candidates: List<FollowCandidate>,
+    tuning: FollowTuning = FollowTuning(),
+    projection: MapProjection = MapProjection.Sydney,
+): Set<String> {
+    val accuracy = fix.accuracyM ?: return candidates.mapTo(LinkedHashSet()) { it.tripId }
+    if (accuracy <= tuning.clearAccuracyM) return emptySet()
+    val p = projection.project(fix.position)
+    return candidates.filter { c ->
+        val lines = c.legs.map { LegLine.of(it, projection) }
+        // A journey with no stop positions cannot be ruled out either.
+        if (lines.all { it == null }) return@filter true
+        val riding = lines.any { it != null && it.path.snap(p).offset <= it.corridor(tuning) + accuracy }
+        riding || (1 until c.legs.size).any { k ->
+            val from = c.legs[k - 1].calls.lastOrNull { it.position != null }?.position
+            val to = c.legs[k].calls.firstOrNull { it.position != null }?.position
+            from != null && to != null &&
+                MapPath(listOf(projection.project(from), projection.project(to))).snap(p).offset <= tuning.changeM + accuracy
+        }
+    }.mapTo(LinkedHashSet()) { it.tripId }
+}
+
+/**
+ * Where [journey] (with live times) has got to at [nowMs] by the clock alone, for a journey the
+ * user said they are on while no fix says where they are: the first ride that has not arrived,
+ * or, before it leaves, the change onto it. Never backwards from [match], so the ride the user
+ * said they are on stands even before the timetable has it leaving.
+ */
+fun progressByClock(match: FollowMatch, journey: Journey, nowMs: Long): FollowMatch {
+    val legs = journey.legs
+    if (legs.isEmpty()) return match
+    val k = legs.indexOfFirst { it.expectedArrivalMs > nowMs }.takeIf { it >= 0 } ?: legs.lastIndex
+    val stage = if (k > 0 && nowMs < legs[k].expectedDepartureMs) FollowStage.CHANGING else FollowStage.RIDING
+    fun step(leg: Int, s: FollowStage) = leg * 2 + (if (s == FollowStage.RIDING) 1 else 0)
+    return if (step(k, stage) > step(match.legIndex, match.stage)) match.copy(legIndex = k, stage = stage, offMetres = 0.0) else match
+}
+
+/**
  * The fit to follow: the journey already followed ([held], the same first service and way) when
  * the fix fits it, so a way the user chose stays chosen while they ride a vehicle another way
  * shares; else the fit of the journey with the best [scores] so far, then the closest.
@@ -489,6 +543,14 @@ data class FollowState(
     val match: FollowMatch? = null,
     /** The last location used. */
     val fix: LocationFix? = null,
+    /** The user said they are on [match] (one tap); location did not work it out. */
+    val told: Boolean = false,
+    /**
+     * While nothing is followed: the saved trips the location cannot rule out ([unsureTrips], or
+     * every trip with a journey under way when there is no fix), each with its journeys under
+     * way. Home asks the user which one they are on (ON BOARD?).
+     */
+    val unsure: Map<String, List<Journey>> = emptyMap(),
 )
 
 /**
@@ -497,16 +559,22 @@ data class FollowState(
  * [FollowTuning.followAt] and beats the one followed; the one followed is dropped when its score
  * falls to zero, or when it arrives. So two fixes that fit pick a journey up, one stray fix does
  * not switch the card, two clear contradictions drop it, and a tunnel or a vague fix only nudges
- * it. Whether the user is on a journey is decided by location alone.
+ * it.
+ *
+ * A journey the user said they are on ([tell], [told]) is not up to the fixes: it is followed
+ * until it arrives or the user takes it back ([letGo]). Fixes that fit it still say where on it
+ * the user is.
  */
 data class FollowMemory(
     val pinned: FollowMatch? = null,
     val scores: Map<ServiceRef, Double> = emptyMap(),
+    /** The user said they are on [pinned]. */
+    val told: Boolean = false,
 ) {
     /**
      * The memory after a fix: [match] is the fit to follow ([preferredFit]), [underway] every
      * journey still under way, [evidence] what the fix says about each (by default: for [match],
-     * against the rest).
+     * against the rest; empty when there was no fix, which is no news).
      */
     fun next(
         match: FollowMatch?,
@@ -518,6 +586,11 @@ data class FollowMemory(
             val old = scores[k] ?: 0.0
             evidence[k]?.let { (old + it).coerceIn(tuning.minScore, tuning.maxScore) } ?: old
         }
+        // What the user said stands while the journey runs, as sure as can be whatever the fixes say.
+        if (told && pinned != null && pinned.key in underway) {
+            val held = if (match != null && match.key == pinned.key) match else pinned
+            return FollowMemory(held, s + (pinned.key to tuning.maxScore), told = true)
+        }
         // A followed journey that has arrived (no longer under way), or that the fixes no longer back, is finished.
         val held = pinned?.takeIf { (s[it.key] ?: 0.0) > 0.0 }?.let { h -> if (match != null && match.key == h.key) match else h }
         val heldScore = held?.let { s[it.key] } ?: Double.NEGATIVE_INFINITY
@@ -525,7 +598,23 @@ data class FollowMemory(
         return FollowMemory(switch ?: held, s)
     }
 
-    /** The user switched to another way: follow [match] at once, as sure as can be. */
+    /**
+     * The user switched to another way: follow [match] at once, as sure as can be. A journey the
+     * user said they are on stays so (the other way shares its vehicle).
+     */
     fun switchTo(match: FollowMatch, tuning: FollowTuning = FollowTuning()): FollowMemory =
-        FollowMemory(match, scores + (match.key to tuning.maxScore))
+        FollowMemory(match, scores + (match.key to tuning.maxScore), told = told && pinned?.tripId == match.tripId)
+
+    /** ON BOARD: the user says they are on [match]. Followed at once, until it arrives or [letGo]. */
+    fun tell(match: FollowMatch, tuning: FollowTuning = FollowTuning()): FollowMemory =
+        FollowMemory(match, scores + (match.key to tuning.maxScore), told = true)
+
+    /**
+     * NOT ON THIS: the user takes back what they said. Nothing is followed, and the journey needs
+     * more than two fixes that fit to be picked up again.
+     */
+    fun letGo(tuning: FollowTuning = FollowTuning()): FollowMemory {
+        val p = pinned ?: return copy(told = false)
+        return FollowMemory(null, scores + (p.key to tuning.minScore))
+    }
 }

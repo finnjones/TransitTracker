@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
@@ -344,7 +345,24 @@ private fun TimetableList(
     val showTimetableNote = state.timetableOnly && banners.none { it.kind == BannerKind.OFFLINE } && state.rowsLoaded
     val bannerRows = banners.size + (if (alert != null) 1 else 0) + (if (showTimetableNote) 1 else 0)
     flap.base = row + bannerRows
-    LazyColumn(modifier, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)) {
+    val listState = rememberLazyListState()
+    val showNow = state.isToday && state.rowsLoaded && !state.isEmpty
+    // Opening the fold adds the earlier services above the row under it (the NOW marker on today), and
+    // that row stays where it was on screen: the list grows upwards, so you keep reading from now and
+    // scroll up for the earlier ones instead of being sent back to the day's first service.
+    val toggleEarlier: () -> Unit = {
+        val anchorKey: Any? = when {
+            showEarlier -> null
+            showNow -> "now"
+            state.upcoming.isNotEmpty() -> "u-${state.upcoming.first().key}"
+            state.nothingToCome -> "nothing"
+            else -> null
+        }
+        val anchor = anchorKey?.let { k -> listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == k } }
+        actions.toggleEarlier()
+        if (anchor != null) listState.requestScrollToItem(anchor.index + state.earlier.size, -anchor.offset)
+    }
+    LazyColumn(modifier, listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)) {
         for (b in banners) {
             val r = row++
             item(key = "banner-${b.kind}") { NoteBanner(b, Modifier.padding(bottom = 8.dp).flapRow(r)) }
@@ -366,7 +384,7 @@ private fun TimetableList(
         if (state.earlier.isNotEmpty()) {
             val r = row++
             item(key = "fold") {
-                FoldControl(state.earlier.size, showEarlier, actions.toggleEarlier, Modifier.padding(bottom = 4.dp).flapRow(r))
+                FoldControl(state.earlier.size, showEarlier, toggleEarlier, Modifier.padding(bottom = 4.dp).flapRow(r))
             }
             if (showEarlier) {
                 for (entry in state.earlier) {
@@ -375,7 +393,7 @@ private fun TimetableList(
                 }
             }
         }
-        if (state.isToday && state.rowsLoaded && !state.isEmpty) {
+        if (showNow) {
             val r = row++
             item(key = "now") { NowMarker(state.nowMs, tz, fmt, Modifier.padding(vertical = 4.dp).flapRow(r)) }
         }

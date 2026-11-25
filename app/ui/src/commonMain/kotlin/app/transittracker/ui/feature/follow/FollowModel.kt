@@ -7,6 +7,7 @@ import app.transittracker.model.ServiceRef
 import app.transittracker.model.StopCall
 import app.transittracker.model.StopId
 import app.transittracker.model.VehiclePosition
+import app.transittracker.model.isTicketId
 import app.transittracker.ui.feature.map.MapPath
 import app.transittracker.ui.feature.map.MapProjection
 import app.transittracker.ui.feature.map.ServiceGeometry
@@ -39,6 +40,10 @@ import kotlin.math.abs
  * whatever the fixes say; where it has got to comes from the fixes that fit it, else the clock
  * ([progressByClock]).
  *
+ * The user's own choice counts for more than a saved trip ([isChosen]): a ticket (they set off on
+ * it with GO) or a journey taken with TAKE THIS ONE wins over a saved trip's journey that fits as
+ * well, so the ticket on Home is the one followed when it rides the same vehicle as a saved trip.
+ *
  * Everything here is pure; [JourneyFollower] fetches the data, asks for the location and keeps
  * the memory.
  */
@@ -63,7 +68,7 @@ data class RiddenLeg(
     val vehicle: VehiclePosition? = null,
 )
 
-/** An underway journey of saved trip [tripId], with the ridden stops of each of its legs. */
+/** An underway journey of saved trip (or ticket) [tripId], with the ridden stops of each of its legs. */
 data class FollowCandidate(val tripId: String, val journey: Journey, val legs: List<RiddenLeg>)
 
 /** The journey a fix fits: [key] is its first leg's service (stable while the journey runs). */
@@ -160,7 +165,23 @@ data class FollowTuning(
     /** Scores are kept within these, so no history outweighs a few fresh fixes. */
     val maxScore: Double = 1.5,
     val minScore: Double = -0.5,
+    /**
+     * How much more a journey the user chose ([isChosen]: a ticket, or one taken with TAKE THIS
+     * ONE) counts than a saved trip's when choosing between fits. Less than a fix's evidence, so
+     * fixes still decide between journeys that do not fit alike.
+     */
+    val chosenPrior: Double = 0.5,
 )
+
+/**
+ * True when the user chose [match]'s journey for this trip: a ticket's (they set off on it with
+ * GO) or one taken with TAKE THIS ONE. Saved trips are only what the user often does.
+ */
+fun isChosen(match: FollowMatch): Boolean = isTicketId(match.tripId) || isOneOff(match.wayId)
+
+/** How much [match] is preferred: its journey's score so far, and [FollowTuning.chosenPrior] when the user chose it. */
+fun preference(match: FollowMatch, scores: Map<ServiceRef, Double>, tuning: FollowTuning = FollowTuning()): Double =
+    (scores[match.key] ?: 0.0) + if (isChosen(match)) tuning.chosenPrior else 0.0
 
 private fun StopCall.depMs(): Long? = expectedDepartureMs ?: scheduledDepartureMs ?: expectedArrivalMs ?: scheduledArrivalMs
 private fun StopCall.arrMs(): Long? = expectedArrivalMs ?: scheduledArrivalMs ?: expectedDepartureMs ?: scheduledDepartureMs
@@ -461,19 +482,46 @@ fun progressByClock(match: FollowMatch, journey: Journey, nowMs: Long): FollowMa
 /**
  * The fit to follow: the journey already followed ([held], the same first service and way) when
  * the fix fits it, so a way the user chose stays chosen while they ride a vehicle another way
- * shares; else the fit of the journey with the best [scores] so far, then the closest.
+ * shares; else the fit with the best [preference] (its journey's [scores] so far, more for a
+ * journey the user chose), then the closest.
+ *
+ * A journey the user chose ([isChosen]: a ticket) wins over a saved trip's held one when the fix
+ * fits it on the same first vehicle, or when it is followable ([FollowTuning.followAt]) and
+ * preferred, as [FollowMemory.next] would switch to it.
  */
-fun preferredFit(fits: List<FollowMatch>, held: FollowMatch?, scores: Map<ServiceRef, Double> = emptyMap()): FollowMatch? {
+fun preferredFit(
+    fits: List<FollowMatch>,
+    held: FollowMatch?,
+    scores: Map<ServiceRef, Double> = emptyMap(),
+    tuning: FollowTuning = FollowTuning(),
+): FollowMatch? {
+    val byPreference = compareByDescending<FollowMatch> { preference(it, scores, tuning) }.thenBy { it.offMetres }
     if (held != null) {
-        fits.firstOrNull { it.tripId == held.tripId && it.key == held.key && it.wayId == held.wayId }?.let { return it }
-        // A way chosen that boards this same first vehicle further on cannot fit until the vehicle
-        // gets there: while the user still fits riding that first vehicle, the choice stands.
-        if (held.stage == FollowStage.RIDING && held.legIndex == 0) {
-            fits.firstOrNull { it.tripId == held.tripId && it.key == held.key && it.stage == FollowStage.RIDING && it.legIndex == 0 }
-                ?.let { return it.copy(wayId = held.wayId) }
+        val kept = heldFit(fits, held)
+        if (kept != null) {
+            if (isChosen(held)) return kept
+            val chosen = fits.filter { f ->
+                isChosen(f) && (
+                    f.key == held.key ||
+                        ((scores[f.key] ?: 0.0) >= tuning.followAt && preference(f, scores, tuning) > preference(kept, scores, tuning))
+                    )
+            }
+            return chosen.minWithOrNull(byPreference) ?: kept
         }
     }
-    return fits.minWithOrNull(compareByDescending<FollowMatch> { scores[it.key] ?: 0.0 }.thenBy { it.offMetres })
+    return fits.minWithOrNull(byPreference)
+}
+
+/** The fit of [held] itself among [fits] (the same trip, first service and way), if the fix fits it. */
+private fun heldFit(fits: List<FollowMatch>, held: FollowMatch): FollowMatch? {
+    fits.firstOrNull { it.tripId == held.tripId && it.key == held.key && it.wayId == held.wayId }?.let { return it }
+    // A way chosen that boards this same first vehicle further on cannot fit until the vehicle
+    // gets there: while the user still fits riding that first vehicle, the choice stands.
+    if (held.stage == FollowStage.RIDING && held.legIndex == 0) {
+        fits.firstOrNull { it.tripId == held.tripId && it.key == held.key && it.stage == FollowStage.RIDING && it.legIndex == 0 }
+            ?.let { return it.copy(wayId = held.wayId) }
+    }
+    return null
 }
 
 /**
@@ -593,8 +641,9 @@ data class FollowMemory(
         }
         // A followed journey that has arrived (no longer under way), or that the fixes no longer back, is finished.
         val held = pinned?.takeIf { (s[it.key] ?: 0.0) > 0.0 }?.let { h -> if (match != null && match.key == h.key) match else h }
-        val heldScore = held?.let { s[it.key] } ?: Double.NEGATIVE_INFINITY
-        val switch = match?.takeIf { it.key != held?.key && (s[it.key] ?: 0.0) >= tuning.followAt && s.getValue(it.key) > heldScore }
+        // A journey the user chose ([isChosen]: a ticket) counts a little more than a saved trip's.
+        val heldScore = held?.let { preference(it, s, tuning) } ?: Double.NEGATIVE_INFINITY
+        val switch = match?.takeIf { it.key != held?.key && (s[it.key] ?: 0.0) >= tuning.followAt && preference(it, s, tuning) > heldScore }
         return FollowMemory(switch ?: held, s)
     }
 

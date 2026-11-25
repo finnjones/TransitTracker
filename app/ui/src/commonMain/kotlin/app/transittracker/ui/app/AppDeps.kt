@@ -11,6 +11,7 @@ import app.transittracker.model.WallClock
 import app.transittracker.ui.fake.CoreScenario
 import app.transittracker.ui.fake.FakeSetup
 import app.transittracker.ui.feature.follow.JourneyFollower
+import app.transittracker.ui.feature.follow.TicketKeeper
 import app.transittracker.ui.fake.ScenarioTransitCore
 import app.transittracker.ui.gallery.SampleData
 import app.transittracker.ui.places.KeyValuePlacesStore
@@ -32,7 +33,9 @@ import app.transittracker.ui.settings.UiSettings
  * - [places]: saved places and which places each saved trip runs between (phone only).
  * - [platform]: what only the platform shell can do (location, permissions, links, versions).
  * - [clock]: the time every screen uses ("now"); the core's clock, fixed in previews and tests.
- * - [follower]: Follow my journey (which saved-trip journey the phone is on), one per app.
+ * - [follower]: Follow my journey (which saved-trip or ticket journey the phone is on), one per app.
+ * - [ticketKeeper]: moves tickets on (waiting, on the way, arrived) as the follower sees them
+ *   ridden; run by `TransitTrackerApp` while the app runs.
  * - [kv]: the phone's small store, for screen-level things that should survive a restart (the
  *   planner's recent searches). Optional: without it they are kept in memory only.
  */
@@ -46,6 +49,7 @@ class AppDeps(
     val kv: KeyValueStore? = null,
 ) {
     val follower: JourneyFollower by lazy { JourneyFollower(core, platform, settings, clock) }
+    val ticketKeeper: TicketKeeper by lazy { TicketKeeper(core, follower, clock) }
 
     /**
      * Reads saved trips, places and display settings from storage again: after signing in

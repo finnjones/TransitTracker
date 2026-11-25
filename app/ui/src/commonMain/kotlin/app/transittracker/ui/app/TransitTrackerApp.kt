@@ -90,6 +90,7 @@ private fun AppBody(
     drive: Boolean,
 ) {
     LaunchedEffect(deps) { deps.core.start() }
+    LaunchedEffect(deps) { deps.ticketKeeper.run() }
     DisposableEffect(controller, navigator, deps) {
         controller.navigator = navigator
         controller.core = deps.core

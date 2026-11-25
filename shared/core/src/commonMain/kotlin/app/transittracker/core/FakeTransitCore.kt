@@ -21,6 +21,8 @@ import app.transittracker.model.ShapeId
 import app.transittracker.model.Stop
 import app.transittracker.model.StopId
 import app.transittracker.model.TestPushResponse
+import app.transittracker.model.Ticket
+import app.transittracker.model.isExpired
 import app.transittracker.model.TrackingState
 import app.transittracker.model.TransitCore
 import app.transittracker.model.TripLeg
@@ -163,8 +165,27 @@ class FakeTransitCore(
         planner.forServiceDay(trip, serviceDate)
     }
 
+    // ---- Tickets: in memory, expired ones dropped on every tick ----
+    private val ticketsState = MutableStateFlow<List<Ticket>>(emptyList())
+
+    override val tickets: Flow<List<Ticket>> = combine(ticketsState, ticker()) { list, _ ->
+        val now = clock.nowMillis()
+        list.filterNot { it.isExpired(now) }.sortedBy { it.issuedAtMs }
+    }.distinctUntilChanged()
+
+    override suspend fun saveTicket(ticket: Ticket) {
+        ticketsState.update { list -> list.filter { it.id != ticket.id } + ticket }
+    }
+
+    override suspend fun closeTicket(id: String) {
+        ticketsState.update { list -> list.filter { it.id != id } }
+    }
+
+    /** The saved trip, else the ticket's trip, with id [tripId]. */
+    private val tripsAndTickets: Flow<List<SavedTrip>> = combine(tripsState, ticketsState) { t, k -> t + k.map { it.trip } }
+
     private fun journeys(tripId: String, compute: (JourneyPlanner, SavedTrip, Long) -> List<Journey>): Flow<List<Journey>> =
-        combine(tripsState, ticker()) { list, _ -> list.firstOrNull { it.id == tripId } }
+        combine(tripsAndTickets, ticker()) { list, _ -> list.firstOrNull { it.id == tripId } }
             .map { trip ->
                 if (trip == null) return@map emptyList()
                 val now = clock.nowMillis()
@@ -212,7 +233,7 @@ class FakeTransitCore(
     override val alerts: Flow<List<Alert>> = flow { emit(FakeData.alerts(clock.nowMillis())) }
 
     override fun alertsFor(tripId: String): Flow<List<Alert>> =
-        combine(tripsState, alerts) { list, all ->
+        combine(tripsAndTickets, alerts) { list, all ->
             list.firstOrNull { it.id == tripId }?.let { alertsForTrip(it, all, timetableData) }.orEmpty()
         }.distinctUntilChanged()
 

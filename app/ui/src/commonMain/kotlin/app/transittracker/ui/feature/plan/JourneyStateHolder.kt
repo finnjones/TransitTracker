@@ -74,6 +74,21 @@ sealed interface TakeState {
     data object Taken : TakeState
 }
 
+/** GO: set off on the journey now, with a ticket (plan 5.6 "Tickets"). */
+sealed interface GoState {
+    data object Idle : GoState
+
+    data object Going : GoState
+
+    /**
+     * Done; the screen goes back to Trips. [ticketId] is the ticket issued, or null when a saved
+     * route already has this journey (Home shows that route's card instead).
+     */
+    data class Gone(val ticketId: String?) : GoState
+
+    data class Failed(val message: String) : GoState
+}
+
 /** Everything the One journey page draws (plan 5.6 step 3, Journey mockup). */
 data class JourneyUiState(
     val timeline: Timeline,
@@ -81,7 +96,13 @@ data class JourneyUiState(
     val save: SaveState = SaveState.Checking,
     /** Null unless the page was opened on the way (TAKE THIS ONE instead of SAVE ROUTE). */
     val take: TakeState? = null,
-)
+    val go: GoState = GoState.Idle,
+) {
+    /** GO can be pressed: the journey passed the same checks as saving it, and nothing is under way. */
+    val canGo: Boolean
+        get() = take == null && go !is GoState.Going && go !is GoState.Gone &&
+            (save is SaveState.Ready || save is SaveState.Failed || save is SaveState.Saved)
+}
 
 /**
  * State for one journey, step by step: the timeline with the phone's own live data applied to
@@ -103,6 +124,9 @@ class JourneyStateHolder(
     private val follower: JourneyFollower? = null,
 ) : StateHolder<JourneyUiState>(scope) {
     private val saveState = MutableStateFlow<SaveState>(SaveState.Checking)
+    private val goState = MutableStateFlow<GoState>(GoState.Idle)
+    /** The last [SaveState.Ready] (GO uses it whatever SAVE ROUTE did since). */
+    private var lastReady: SaveState.Ready? = null
     private val takeState = MutableStateFlow<TakeState?>(if (takeFrom != null && follower != null) TakeState.Checking else null)
     private var addLegs: List<app.transittracker.model.TripLeg>? = null
     private val saver = RouteSaver(core, places)
@@ -128,8 +152,8 @@ class JourneyStateHolder(
         details.map { journeyTimeline(itinerary, it, from.name, to.name) }.distinctUntilChanged(),
         ticker,
         saveState,
-        takeState,
-    ) { t, now, s, take -> JourneyUiState(t, now, s, take) }
+        combine(takeState, goState) { take, go -> take to go },
+    ) { t, now, s, (take, go) -> JourneyUiState(t, now, s, take, go) }
         .stateIn(scope, SharingStarted.Eagerly, initial)
 
     init {
@@ -161,7 +185,35 @@ class JourneyStateHolder(
         is Savable.Blocked -> SaveState.Blocked(c.reason)
         is Savable.Ready -> {
             val plan = saver.plan(c.trip, from, to)
-            SaveState.Ready(c.trip, returnTripOf(c.trip), plan.joinTo, plan.joinTitle, plan.alreadyThere)
+            SaveState.Ready(c.trip, returnTripOf(c.trip), plan.joinTo, plan.joinTitle, plan.alreadyThere).also { lastReady = it }
+        }
+    }
+
+    /**
+     * GO: follow this journey now. When a saved route already has it, nothing is issued (Home
+     * shows that route's card, and Follow my journey follows it); otherwise a ticket for this
+     * pattern, with the run on this page as the one picked, goes to the top of Home.
+     */
+    fun go() {
+        val s = state.value
+        if (!s.canGo) return
+        val ready = lastReady ?: return
+        goState.value = GoState.Going
+        scope.launch {
+            try {
+                // Saved routes now, not when the page opened: SAVE ROUTE may have run since.
+                val joinTo = if (saveState.value is SaveState.Saved) saver.plan(ready.trip, from, to).joinTo else ready.joinTo
+                if (alreadySaved(ready.trip, joinTo)) {
+                    goState.value = GoState.Gone(null)
+                } else {
+                    val ticket = ticketOf(itinerary, ready.trip, from, to, clock.nowMillis())
+                    core.saveTicket(ticket)
+                    goState.value = GoState.Gone(ticket.id)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                goState.value = GoState.Failed(e.message ?: "The ticket could not be issued")
+            }
         }
     }
 

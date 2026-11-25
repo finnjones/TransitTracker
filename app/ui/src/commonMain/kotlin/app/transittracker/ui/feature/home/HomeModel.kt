@@ -7,6 +7,9 @@ import app.transittracker.model.Journey
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.ServiceDate
 import app.transittracker.model.StopId
+import app.transittracker.model.Ticket
+import app.transittracker.model.TicketStatus
+import app.transittracker.model.isExpired
 import app.transittracker.model.bestRuns
 import app.transittracker.ui.feature.follow.FollowMatch
 import app.transittracker.ui.feature.follow.FollowStage
@@ -22,10 +25,32 @@ data class HomeUiState(
     val nowMs: Long = 0,
     val chip: DataChip? = null,
     val banners: List<HomeBanner> = emptyList(),
+    /** Tickets (GO), above every folder, oldest issued first (plan 5.6 "Tickets"). */
+    val tickets: List<TicketCard> = emptyList(),
     val folders: List<HomeFolder> = emptyList(),
 ) {
-    /** No saved trips: the empty platform and ADD YOUR FIRST TRIP. */
-    val isEmpty: Boolean get() = !loading && folders.isEmpty()
+    /** No saved trips and no ticket: the empty platform and ADD YOUR FIRST TRIP. */
+    val isEmpty: Boolean get() = !loading && folders.isEmpty() && tickets.isEmpty()
+}
+
+/**
+ * A ticket on Home (plan 5.6 "Tickets"): a journey set off on with GO, followed for this trip only.
+ * Waiting or on the way, [card] is what a trip card would show for its pattern, titled with the
+ * ticket's ends: the headline is the run picked with GO until it leaves, then the next running
+ * one ([ticketHeadline]); when Follow my journey has the user on it, [TripCard.onTheWay]. Arrived,
+ * it is a stamped stub ([arrived]) with KEEP AS ROUTE and DONE.
+ */
+data class TicketCard(
+    val ticket: Ticket,
+    val card: TripCard,
+    /** The headline is the run picked with GO (not a later one: that one has left, or was cancelled). */
+    val pickedRun: Boolean,
+) {
+    val id: String get() = ticket.id
+    val arrived: Boolean get() = ticket.status == TicketStatus.ARRIVED
+
+    /** When the journey arrived (the stub's stamp): as recorded, else as planned. */
+    val arrivedAtMs: Long get() = ticket.arrivedAtMs ?: ticket.plannedArrivalMs
 }
 
 /** The header chip (plan 2.7). */
@@ -353,6 +378,19 @@ fun banners(status: DataStatus?, today: ServiceDate): List<HomeBanner> {
     }
 }
 
+/**
+ * The headline of a ticket's card: the run picked with GO (its first ride is
+ * [Ticket.plannedRides]' first) while it has not left and is not cancelled; otherwise the next
+ * running one, so a missed service simply shows the next run of the same pattern.
+ */
+fun ticketHeadline(ticket: Ticket, journeys: List<Journey>, nowMs: Long): Journey? {
+    val picked = ticket.plannedRides.firstOrNull()
+    val running = journeys.filter { j -> j.legs.none { it.status == DepartureStatus.CANCELLED } && j.departure.expectedDepartureMs > nowMs }
+    return running.firstOrNull { picked != null && it.departure.ref == picked }
+        ?: running.minByOrNull { it.departure.expectedDepartureMs }
+        ?: headlineOf(journeys)
+}
+
 /** Inputs the holder gathers; [buildHomeState] turns them into [HomeUiState]. */
 data class HomeInputs(
     val trips: List<SavedTrip>?,
@@ -369,6 +407,8 @@ data class HomeInputs(
     val follow: Followed? = null,
     /** Trip id -> its journeys under way that the location cannot rule out (`FollowState.unsure`). */
     val unsure: Map<String, List<Journey>> = emptyMap(),
+    /** Tickets not torn off yet; their journeys are in [upcoming] under the ticket's id. */
+    val tickets: List<Ticket> = emptyList(),
 )
 
 /** Pure: the home screen for [inputs] at [nowMs]; [today] is the service date `YYYYMMDD`. */
@@ -392,16 +432,46 @@ fun buildHomeState(inputs: HomeInputs, nowMs: Long, today: ServiceDate): HomeUiS
         nowMs = nowMs,
         chip = dataChip(inputs.status, nowMs),
         banners = banners(inputs.status, today),
+        tickets = inputs.tickets.filterNot { it.isExpired(nowMs) }.map { ticketCard(it, inputs, placesById, nowMs) },
         folders = folders,
     )
 }
 
-private fun card(trip: SavedTrip, full: Boolean, inputs: HomeInputs, places: Map<String, SavedPlace>, nowMs: Long): TripCard {
-    val link = inputs.links[trip.id]
+/** The card of [ticket]: its pattern as a trip card, titled with the ticket's two ends. */
+private fun ticketCard(ticket: Ticket, inputs: HomeInputs, places: Map<String, SavedPlace>, nowMs: Long): TicketCard {
+    val trip = ticket.trip
+    // Leave-by from the saved place the ticket starts at, as for a route linked to it.
+    val link = TripPlaces(ticket.id, ticket.from.savedPlaceId?.takeIf { it in places }, ticket.to.savedPlaceId?.takeIf { it in places })
+    val base = card(trip, full = true, inputs, places, nowMs, link) { journeys -> ticketHeadline(ticket, journeys, nowMs) }
+    val title = listOf(ticket.from.name, ticket.to.name)
+    val sameAsStations = title.map { it.uppercase() } == listOf(trip.originName.uppercase(), trip.destinationName.uppercase())
+    val card = base.copy(
+        titleParts = title,
+        stationsLine = if (sameAsStations) null else "${trip.originName} to ${trip.destinationName}".uppercase(),
+        waysLabel = null,
+    )
+    val picked = ticket.plannedRides.firstOrNull()
+    return TicketCard(ticket, card, pickedRun = picked != null && card.headline?.departure?.ref == picked)
+}
+
+private fun card(
+    trip: SavedTrip,
+    full: Boolean,
+    inputs: HomeInputs,
+    places: Map<String, SavedPlace>,
+    nowMs: Long,
+    link: TripPlaces? = inputs.links[trip.id],
+    /** Picks the headline instead of the usual rules (a ticket's picked run). */
+    pick: ((List<Journey>) -> Journey?)? = null,
+): TripCard {
     val fromPlace = link?.fromPlaceId?.let { places[it] }
     val journeys = journeysShown(trip, inputs.upcoming[trip.id].orEmpty())
-    val choosing = trip.ways.size > 1 && trip.pinnedWay == null
-    val headline = if (choosing) bestHeadline(trip, journeys, fromPlace, nowMs) else headlineOf(journeys)
+    val choosing = pick == null && trip.ways.size > 1 && trip.pinnedWay == null
+    val headline = when {
+        pick != null -> pick(journeys)
+        choosing -> bestHeadline(trip, journeys, fromPlace, nowMs)
+        else -> headlineOf(journeys)
+    }
     val toPlace = link?.toPlaceId?.let { places[it] }
     val linked = fromPlace != null || toPlace != null
     val stations = "${trip.originName} to ${trip.destinationName}".uppercase()

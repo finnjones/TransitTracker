@@ -17,6 +17,11 @@ object KvKeys {
     /** Push token not yet accepted by the server (sent after joining / on next start). */
     const val PUSH_TOKEN_PENDING = "device.pushTokenPending"
     const val TRIPS = "trips"
+    /**
+     * Tickets (see [TicketStore]). They stay on the phone: this key is never synced to the
+     * user's account, unlike [TRIPS].
+     */
+    const val TICKETS = "tickets"
     const val WATCHES = "watches.cache"
     const val INSTALLED_PACKS = "packs.installed"
     const val CONFIG = "config.cache"

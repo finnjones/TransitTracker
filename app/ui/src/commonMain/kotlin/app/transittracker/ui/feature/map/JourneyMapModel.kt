@@ -34,6 +34,8 @@ data class JourneyLegInput(
     val tracking: TrackingState,
     val geometry: ServiceGeometry,
     val reckoning: Reckoning?,
+    /** [reckoning] comes from the phone's fixes (the user is on board), not the feed. */
+    val fromRider: Boolean = false,
 )
 
 data class JourneyMapInput(
@@ -299,11 +301,14 @@ fun buildJourneyMapState(
         // not yet left is not drawn: its ghost would only stand on the stop and hide its flag.
         val soon = l.dep?.let { it - nowMs <= 60 * 60_000L } ?: false
         val v = l.input.tracking.vehicle
-        val live = d.status != DepartureStatus.TIMETABLED && positionFresh(v, nowMs)
+        // On board with a fix on the line: the train is where the phone is.
+        val rider = l.input.fromRider && k == current && stage == FollowStage.RIDING && follow != null
+        val live = rider || (d.status != DepartureStatus.TIMETABLED && positionFresh(v, nowMs))
         if (!finished && !cancelled && soon && (departed || live)) {
             val reck = l.input.reckoning
             val motion = if (live && reck != null) VehicleMotion.Reckoned(g, reck) else VehicleMotion.Timetabled(g, l.calls)
             val look = when {
+                rider -> SpriteLook.NORMAL
                 !live -> SpriteLook.GHOST
                 d.stale -> SpriteLook.FADED
                 else -> SpriteLook.NORMAL

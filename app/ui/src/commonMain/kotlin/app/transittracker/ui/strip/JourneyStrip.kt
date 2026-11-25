@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -17,7 +19,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
@@ -113,6 +117,16 @@ fun JourneyStrip(
             if (a != null && b != null) a - b else 0f
         }
     }
+    // The names under the strip follow the vehicle as it reaches and leaves stops (the leftmost
+    // stop is the vehicle's own when it is far back; "YOU" moves onto it once it leaves yours).
+    // Recomposes only when they change, not on every tick.
+    val labels by remember(calls, yourStopId, destinationStopId, mode, ghost) {
+        derivedStateOf {
+            spriteClock.tick
+            stripLabels(journeyStripModel(calls, yourStopId, destinationStopId, clock.nowMillis(), mode, ghost))
+        }
+    }
+
     val pending = remember(calls) { mutableStateOf(jump != 0f) }
     val offset = remember { Animatable(0f) }
     LaunchedEffect(calls) {
@@ -171,7 +185,9 @@ fun JourneyStrip(
                 drawPixelIcon(PixelIcons.LampCross, c.stop, d, v.left + (bodyMid - 3.5f).roundToInt() * d, v.top + d)
             }
         }
-        for (s in model.stops.filter { it.labelled }) StripLabel(s)
+        StripLabelRow(labels) { w ->
+            placement(w)?.let { it.left + (sheet.bodyLeft + sheet.bodyRight) / 2f * dot.px }
+        }
         // The "+4" tag rides above a late vehicle (plan 3.2); it may overhang the top of the strip.
         val late = if (lateTag) stateFor(model) as? VehicleState.Late else null
         if (late != null) {
@@ -238,28 +254,54 @@ private fun DrawScope.drawStripStop(s: StripStop, groundY: Float, d: Float, blin
     }
 }
 
+/**
+ * The names under the strip: the leftmost stop's from the left edge, "YOU" under your stop, the
+ * destination's against the right edge. When [StripLabels.youOnVehicle], "YOU" is under the
+ * vehicle instead ([vehicleMid] gives its centre in px for a strip width), kept clear of the
+ * destination's name.
+ */
 @Composable
-private fun StripLabel(s: StripStop) {
+private fun StripLabelRow(labels: StripLabels, vehicleMid: (Float) -> Float?) {
     val dot = TtTheme.dot
     val c = TtTheme.colors
-    val yours = s.kind == StripStopKind.YOURS
-    val text = if (yours) "YOU" else s.name.uppercase()
-    PixelText(
-        text,
-        Modifier.layout { m, cons ->
-            val p = m.measure(cons.copy(minWidth = 0))
-            layout(cons.maxWidth, p.height) {
-                val w = cons.maxWidth
+    Layout(
+        content = {
+            for (s in labels.stops) {
+                val yours = s.kind == StripStopKind.YOURS
+                PixelText(
+                    if (yours) "YOU" else s.name.uppercase(),
+                    style = if (yours) TtTheme.type.label10Bold else TtTheme.type.label10,
+                    color = if (yours) c.text else c.textSecondary,
+                    maxLines = 1,
+                )
+            }
+            if (labels.youOnVehicle) PixelText("YOU", style = TtTheme.type.label10Bold, color = c.text, maxLines = 1)
+        },
+    ) { measurables, cons ->
+        val w = cons.maxWidth
+        val ps = measurables.map { it.measure(Constraints(maxWidth = w)) }
+        val top = StripDots.LABEL_TOP * dot.px
+        layout(w, ps.maxOfOrNull { it.height } ?: 0) {
+            var destLeft = w
+            labels.stops.forEachIndexed { i, s ->
+                val p = ps[i]
                 val x = when (s.kind) {
                     StripStopKind.DESTINATION -> w - p.width
                     StripStopKind.YOURS -> (s.x * w - p.width / 2f).roundToInt()
                     else -> if (s.x < 0.1f) 0 else (s.x * w - p.width / 2f).roundToInt()
                 }.coerceIn(0, maxOf(0, w - p.width))
-                p.place(x, StripDots.LABEL_TOP * dot.px)
+                if (s.kind == StripStopKind.DESTINATION) destLeft = x
+                p.place(x, top)
             }
-        },
-        if (yours) TtTheme.type.label10Bold else TtTheme.type.label10,
-        if (yours) c.text else c.textSecondary,
-        maxLines = 1,
-    )
+            if (labels.youOnVehicle) {
+                val p = ps.last()
+                val mid = vehicleMid(w.toFloat())
+                if (mid != null) {
+                    val gap = 6 * dot.px
+                    val x = (mid - p.width / 2f).roundToInt().coerceIn(0, maxOf(0, destLeft - gap - p.width))
+                    p.place(x, top)
+                }
+            }
+        }
+    }
 }

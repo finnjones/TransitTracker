@@ -97,6 +97,11 @@ data class JourneyStripModel(
     val vehicleX: Float?,
     /** For the screen reader (plan 3.6). */
     val sentence: String,
+    /**
+     * The vehicle has left your stop, so you are on it (or missed it): "YOU" is written under the
+     * vehicle instead of under your stop, which is then drawn as a stop passed.
+     */
+    val youOnVehicle: Boolean = false,
 )
 
 /** Layout constants (Main mockup, 334 dp wide strip): first stop centre, your stop, destination. */
@@ -111,7 +116,12 @@ object StripLayout {
  * Lays out a journey strip (plan 3.3): up to three stops before yours on the left, your stop about
  * two-thirds along, your destination at the right end (stops between yours and the destination
  * are not drawn), and the vehicle placed by [vehicleProgress] between whichever of them it is.
- * A vehicle further back than the first stop shown waits at the left edge.
+ *
+ * A vehicle further back than those three stops is not drawn over the first of them (it is not
+ * there yet): the leftmost stop is instead the one the vehicle is at or has just left, named, and
+ * it runs from there towards the next stop shown, the stops in between not drawn.
+ *
+ * Once the vehicle has left your stop, "YOU" rides with it ([JourneyStripModel.youOnVehicle]).
  *
  * [yourStopId] / [destinationStopId] match a call's stopId (falls back to the first / last call).
  */
@@ -131,19 +141,31 @@ fun journeyStripModel(
     val progress = vehicleProgress(calls, nowMs)
     val position = progress?.position
 
-    val before = live.filter { it < yours }.takeLast(StripLayout.MAX_BEFORE)
+    val nearest = live.filter { it < yours }.takeLast(StripLayout.MAX_BEFORE)
+    // Further back than the stops shown: start the strip at the vehicle's own stop.
+    val before = if (progress != null && nearest.isNotEmpty() && position!! < nearest.first() && progress.fromIndex in live) {
+        listOf(progress.fromIndex) + nearest.drop(1)
+    } else nearest
+    val aboard = position != null && position > yours
     fun kindOf(i: Int) = if (position != null && (i < position || (progress?.atStop == true && i.toFloat() == position && i != yours))) StripStopKind.PASSED else StripStopKind.AHEAD
     val stops = buildList {
         before.forEachIndexed { k, i ->
             val x = StripLayout.FIRST_X + k * (StripLayout.YOURS_X - StripLayout.FIRST_X) / before.size
             add(StripStop(i, calls[i].stopName, kindOf(i), x, labelled = k == 0))
         }
-        add(StripStop(yours, calls[yours].stopName, StripStopKind.YOURS, StripLayout.YOURS_X, labelled = true))
+        add(StripStop(yours, calls[yours].stopName, if (aboard) StripStopKind.PASSED else StripStopKind.YOURS, StripLayout.YOURS_X, labelled = !aboard))
         if (dest != yours) add(StripStop(dest, calls[dest].stopName, StripStopKind.DESTINATION, StripLayout.DESTINATION_X, labelled = true))
     }
     val vehicleX = position?.let { stripX(stops, it) }
-    return JourneyStripModel(stops, progress, vehicleX, stripSentence(calls, progress, yours, mode, ghost))
+    return JourneyStripModel(stops, progress, vehicleX, stripSentence(calls, progress, yours, mode, ghost), youOnVehicle = aboard)
 }
+
+/** The names written under a strip, and whether "YOU" rides under the vehicle; see [stripLabels]. */
+data class StripLabels(val stops: List<StripStop>, val youOnVehicle: Boolean)
+
+/** What [model] writes under the strip (changes only when a stop is reached or left). */
+fun stripLabels(model: JourneyStripModel): StripLabels =
+    StripLabels(model.stops.filter { it.labelled }, model.youOnVehicle)
 
 /** Piecewise-linear map from a fractional call index to a strip fraction through the drawn stops. */
 internal fun stripX(stops: List<StripStop>, position: Float): Float {

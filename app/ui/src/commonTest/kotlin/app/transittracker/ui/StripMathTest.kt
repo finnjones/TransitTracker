@@ -97,9 +97,44 @@ class StripMathTest {
     }
 
     @Test
-    fun vehicleFarBackWaitsAtLeftEdgeAndPastYoursMovesTowardsDestination() {
-        val far = journeyStripModel(calls(10), "S5", "S9", 2 * min)
-        assertEquals(0f, far.vehicleX)
+    fun vehicleFarBackStartsTheStripAtItsOwnStop() {
+        // Yours is F (5); the stops shown before it would be C, D, E. The vehicle has left A
+        // (0:00) and is half way to B (3:30).
+        val far = journeyStripModel(calls(10), "S5", "S9", 105_000)
+        assertEquals(listOf(0, 3, 4, 5, 9), far.stops.map { it.callIndex })
+        assertEquals("A", far.stops[0].name)
+        assertTrue(far.stops[0].labelled)
+        assertEquals(StripStopKind.PASSED, far.stops[0].kind)
+        // Half way from A to B, which is a third of the way from A to D: not drawn on D.
+        val x = far.vehicleX!!
+        assertTrue(x > far.stops[0].x && x < far.stops[1].x, "between A and D: $x")
+        assertEquals(far.stops[0].x + (far.stops[1].x - far.stops[0].x) / 6f, x, 0.001f)
+        // Standing at B: the strip starts at B.
+        val atB = journeyStripModel(calls(10), "S5", "S9", 4 * min - 10_000)
+        assertEquals("B", atB.stops[0].name)
+        assertEquals(atB.stops[0].x, atB.vehicleX!!, 0.001f)
+        // Close enough: the usual three stops before yours.
+        val near = journeyStripModel(calls(10), "S5", "S9", 2 * 4 * min + 2 * min)
+        assertEquals(listOf(2, 3, 4, 5, 9), near.stops.map { it.callIndex })
+    }
+
+    @Test
+    fun youRidesWithTheVehicleOnceItLeavesYourStop() {
+        // At F (yours): YOU is still at your stop.
+        val atYours = journeyStripModel(calls(10), "S5", "S9", 5 * 4 * min - 10_000)
+        assertFalse(atYours.youOnVehicle)
+        assertEquals(StripStopKind.YOURS, atYours.stops.single { it.callIndex == 5 }.kind)
+        // Left F: YOU is on the vehicle, F is a stop passed and no longer named.
+        val left = journeyStripModel(calls(10), "S5", "S9", 5 * 4 * min + min)
+        assertTrue(left.youOnVehicle)
+        val f = left.stops.single { it.callIndex == 5 }
+        assertEquals(StripStopKind.PASSED, f.kind)
+        assertFalse(f.labelled)
+        assertEquals(listOf("C", "J"), app.transittracker.ui.strip.stripLabels(left).stops.map { it.name })
+    }
+
+    @Test
+    fun pastYoursMovesTowardsDestination() {
         val past = journeyStripModel(calls(10), "S5", "S9", 7 * 4 * min - 10_000)
         assertTrue(past.vehicleX!! > StripLayout.YOURS_X && past.vehicleX!! < StripLayout.DESTINATION_X)
         assertEquals("The train is at H, past F.", past.sentence)

@@ -61,6 +61,13 @@ object ServiceShots {
         Shot("service-extra") {
             Page(Route.Service(ServiceRef("ADDED-T1-0812", DATE), p(FakeData.CENTRAL, 4), p(FakeData.PARRAMATTA, 1))) { AppDeps.fake() }
         },
+        // T1 boarded at Chatswood, seen while the train is still between Parramatta and
+        // Strathfield: the strip starts at Parramatta, not with the train drawn on Strathfield.
+        Shot("service-far-back") {
+            Page(Route.Service(ServiceRef("T1E-0915", DATE), p(FakeData.CHATSWOOD, 2))) { AppDeps.fake(clock = clockAt(107)) }
+        },
+        // T1 after it has left Central, your stop: YOU rides under the train.
+        Shot("service-aboard") { Page(t1Travelling) { AppDeps.fake(clock = clockAt(128)) } },
         Shot("service-no-stops") { Page(Route.Service(ServiceRef("T1E-0915", DATE))) { AppDeps.fake(clock = clockAt(120)) } },
         Shot("service-day", DayColors) {
             Page(t1Travelling) { AppDeps.fake(clock = clockAt(120), settings = UiSettings(theme = ThemePreference.DAY)) }

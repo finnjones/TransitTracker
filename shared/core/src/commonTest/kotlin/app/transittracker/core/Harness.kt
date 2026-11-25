@@ -11,11 +11,13 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.serialization.builtins.ListSerializer
 
-/** A [DefaultTransitCore] wired to in-memory stores, a fake timetable opener and a [FakeServer]. */
-class Harness(private val scope: TestScope, startMs: Long = at(6, 50)) {
+/**
+ * A [DefaultTransitCore] wired to in-memory stores, a fake timetable opener and a [FakeServer].
+ * Pass another harness's [kv] to start a second core on the same stored data.
+ */
+class Harness(private val scope: TestScope, startMs: Long = at(6, 50), val kv: InMemoryKeyValueStore = InMemoryKeyValueStore()) {
     val clock = scope.virtualClock(startMs)
     val server = FakeServer(scope) { clock.nowMillis() }
-    val kv = InMemoryKeyValueStore()
     val files = InMemoryFileStore()
     var unmetered = true
     val opened = mutableMapOf<String, InMemoryTimetable>()

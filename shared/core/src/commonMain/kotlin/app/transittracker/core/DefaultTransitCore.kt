@@ -17,6 +17,8 @@ import app.transittracker.model.LatLng
 import app.transittracker.model.PackStatus
 import app.transittracker.model.PushKeys
 import app.transittracker.model.TestPushResponse
+import app.transittracker.model.Ticket
+import app.transittracker.model.isExpired
 import app.transittracker.model.Route
 import app.transittracker.model.RouteId
 import app.transittracker.model.SavedTrip
@@ -98,6 +100,7 @@ class DefaultTransitCore internal constructor(
         updater.installed.value.flatMap { it.modes }.toSet()
     }
     private val tripStore = TripStore(kv)
+    private val ticketStore = TicketStore(kv)
     private val configState = MutableStateFlow<ConfigResponse?>(null)
 
     /** Why the last `/v1/config` call failed when the server answered (null otherwise). */
@@ -124,6 +127,7 @@ class DefaultTransitCore internal constructor(
             started = true
         }
         loadToken()
+        ticketStore.deleteExpired(timeSync.nowMillis())
         kv.get(KvKeys.CONFIG)?.let { json ->
             runCatching { ApiJson.decodeFromString(ConfigResponse.serializer(), json) }.getOrNull()?.let(::applyConfig)
         }
@@ -262,6 +266,27 @@ class DefaultTransitCore internal constructor(
 
     override suspend fun reloadTrips() = tripStore.reload()
 
+    // ---- Tickets (on the phone only) ----
+
+    /** Re-evaluated every [TICK_MS], so tickets leave the list as they expire; expired ones are dropped from storage. */
+    override val tickets: Flow<List<Ticket>> = combine(ticketStore.tickets, ticker()) { list, _ -> list }
+        .mapLatest { list ->
+            val now = timeSync.nowMillis()
+            if (list.any { it.isExpired(now) }) ticketStore.deleteExpired(now)
+            list.filterNot { it.isExpired(now) }
+        }
+        .distinctUntilChanged()
+
+    override suspend fun saveTicket(ticket: Ticket) = ticketStore.save(ticket)
+
+    override suspend fun closeTicket(id: String) = ticketStore.delete(id)
+
+    /** The saved trip, else the trip of the ticket not yet expired, with id [tripId] (null when neither). */
+    private fun tripById(tripId: String): Flow<SavedTrip?> =
+        combine(tripStore.trips, tickets) { trips, tickets ->
+            trips.firstOrNull { it.id == tripId } ?: tickets.firstOrNull { it.id == tripId }?.trip
+        }.distinctUntilChanged()
+
     // ---- Departures ----
 
     override fun upcoming(tripId: String, count: Int): Flow<List<Journey>> =
@@ -279,14 +304,14 @@ class DefaultTransitCore internal constructor(
             planner.forServiceDay(trip, serviceDate) to (serviceDate in ServiceTime.candidateServiceDates(now))
         }
 
-    /** Shared plumbing: recompute on trip / pack / live changes and every [TICK_MS]; lease routes for polling. */
+    /** Shared plumbing (for a saved trip's or a ticket's id): recompute on trip / pack / live changes and every [TICK_MS]; lease routes for polling. */
     private fun journeysFlow(
         tripId: String,
         compute: (JourneyPlanner, SavedTrip, Long) -> Pair<List<Journey>, Boolean>,
     ): Flow<List<Journey>> = flow {
         val lease = poller.leaseRoutes()
         try {
-            val trip = tripStore.trips.map { list -> list.firstOrNull { it.id == tripId } }.distinctUntilChanged()
+            val trip = tripById(tripId)
             emitAll(
                 combine(trip, holder.generation, poller.snapshot, ticker()) { t, _, snap, _ -> t to snap }
                     .mapLatest { (t, snap) ->
@@ -395,7 +420,7 @@ class DefaultTransitCore internal constructor(
     }
 
     override fun alertsFor(tripId: String): Flow<List<Alert>> {
-        val trip = tripStore.trips.map { list -> list.firstOrNull { it.id == tripId } }.distinctUntilChanged()
+        val trip = tripById(tripId)
         return combine(trip, alerts, holder.generation) { t, list, _ -> t to list }
             .mapLatest { (t, list) ->
                 if (t == null || list.isEmpty()) {
@@ -552,8 +577,10 @@ class DefaultTransitCore internal constructor(
     // ---- Alarms ----
 
     override suspend fun nextAlarmTimes(alarm: AlarmSpec, count: Int): List<Long> {
-        val trip = tripStore.get(alarm.savedTripId) ?: return emptyList()
         val now = timeSync.nowMillis()
+        val trip = tripStore.get(alarm.savedTripId)
+            ?: ticketStore.get(alarm.savedTripId)?.takeUnless { it.isExpired(now) }?.trip
+            ?: return emptyList()
         return holder.read { tt -> alarmTimes(tt, trip, alarm, now, count) }.orEmpty()
     }
 

@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,6 +45,7 @@ import app.transittracker.model.Mode
 import app.transittracker.model.ServiceDetail
 import app.transittracker.model.ServiceRef
 import app.transittracker.model.WallClock
+import app.transittracker.model.isTicketId
 import app.transittracker.ui.app.LocalAppDeps
 import app.transittracker.ui.components.BadgeStyle
 import app.transittracker.ui.components.ButtonKind
@@ -118,6 +120,10 @@ class HomeActions(
     val onBoard: (tripId: String, journey: Journey) -> Unit = { _, _ -> },
     /** NOT ON THIS: the user takes back ON BOARD. */
     val notOnThis: () -> Unit = {},
+    /** KEEP AS ROUTE on a ticket: save its journey as a route, then tear the ticket off. */
+    val keepTicket: (ticketId: String) -> Unit = {},
+    /** DONE, or ✕, on a ticket: tear it off. */
+    val closeTicket: (ticketId: String) -> Unit = {},
 )
 
 /** The Trips tab (plan 5.2, Main mockup). */
@@ -149,6 +155,8 @@ fun HomeScreen() {
             },
             onBoard = holder::onBoard,
             notOnThis = holder::notOnThis,
+            keepTicket = holder::keepTicket,
+            closeTicket = holder::closeTicket,
         )
     }
     HomeContent(state, deps.clock, holder::service, actions)
@@ -180,6 +188,13 @@ fun HomeContent(
                 for (b in state.banners) {
                     val r = row++
                     item(key = "banner-${b.kind}") { Banner(b, Modifier.flapRow(r)) }
+                }
+                // Tickets come first, above every folder (plan 5.6 "Tickets").
+                for (ticket in state.tickets) {
+                    val r = row++
+                    item(key = "ticket-${ticket.id}") {
+                        TicketView(ticket, state.nowMs, clock, service, actions, Modifier.fillMaxWidth().flapRow(r))
+                    }
                 }
                 for (folder in state.folders) {
                     if (folder.name != null) {
@@ -279,24 +294,49 @@ private fun FullTripCard(
         contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = if (card.following.isEmpty()) 12.dp else 0.dp),
     ) {
         CardTitle(card, headline?.departure)
-        if (card.changes.isNotEmpty() && headline != null) ChangesRow(headline, card.changes)
-        if (headline == null) {
-            NoServices(card)
-        } else {
-            val d = headline.departure
-            Headline(d, headline, nowMs, card, actions)
-            HeadlineStrip(d, clock, service, Modifier.serviceTaps({ actions.openService(d) }, actions.manageRoutes))
-            for (connection in headline.legs.drop(1)) ConnectionLine(connection, card.trip.id, headline, actions)
+        TripBody(card, nowMs, clock, service, actions)
+    }
+}
+
+/**
+ * Everything of a full card under its title: the changes, the headline with its strip and
+ * connections (or no services), ON BOARD? and the following services. With [lineRow] a one-ride
+ * headline also gets its badge and destination (a ticket's title row has no room for them).
+ */
+@Composable
+private fun TripBody(
+    card: TripCard,
+    nowMs: Long,
+    clock: WallClock,
+    service: (ServiceRef) -> Flow<ServiceDetail>,
+    actions: HomeActions,
+    lineRow: Boolean = false,
+) {
+    val headline = card.headline
+    if (card.changes.isNotEmpty() && headline != null) ChangesRow(headline, card.changes)
+    else if (lineRow && headline != null) {
+        val first = headline.departure
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            RouteBadge(first.routeName, first.routeColor, null)
+            PixelText(first.headsign, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (card.aboard.isNotEmpty()) {
+    }
+    if (headline == null) {
+        NoServices(card)
+    } else {
+        val d = headline.departure
+        Headline(d, headline, nowMs, card, actions)
+        HeadlineStrip(d, clock, service, Modifier.serviceTaps({ actions.openService(d) }, actions.manageRoutes))
+        for (connection in headline.legs.drop(1)) ConnectionLine(connection, card.trip.id, headline, actions)
+    }
+    if (card.aboard.isNotEmpty()) {
+        DashedDivider()
+        AboardRow(card, actions, Modifier.padding(vertical = 6.dp))
+    }
+    for (j in card.following) {
+        Column {
             DashedDivider()
-            AboardRow(card, actions, Modifier.padding(vertical = 6.dp))
-        }
-        for (j in card.following) {
-            Column {
-                DashedDivider()
-                ServiceRow(j.departure, nowMs, actions)
-            }
+            ServiceRow(j.departure, nowMs, actions)
         }
     }
 }
@@ -521,10 +561,6 @@ private fun ConnectionLine(d: Departure, tripId: String, journey: Journey, actio
 @Composable
 private fun OnTheWayCard(card: TripCard, otw: OnTheWay, nowMs: Long, actions: HomeActions, modifier: Modifier = Modifier) {
     val c = TtTheme.colors
-    val tz = TtTheme.time.timeZone
-    val fmt = TtTheme.time.clockFormat
-    val leg = otw.leg
-    val riding = otw.stage == FollowStage.RIDING
     val openMap = { actions.openJourneyMap(card.trip.id, otw.journey) }
     PixelPanel(
         modifier.cardTaps(openMap, actions.manageRoutes, "Map of your journey"),
@@ -534,57 +570,69 @@ private fun OnTheWayCard(card: TripCard, otw: OnTheWay, nowMs: Long, actions: Ho
             TitleParts(card.titleParts, TtTheme.type.name17)
             Label(if (otw.oneOff) "ON YOUR WAY · ONE-OFF" else "ON YOUR WAY", color = c.go, bold = true, size = LabelSize.L10)
         }
-        // The ride now (or the one being walked to).
-        val status = statusPresentation(leg)
-        val word = vehicleWord(leg.mode)
-        val (label, target, verb) = if (riding) {
-            Triple("ON THE $word · ARRIVES" + (otw.legEnd?.let { " ${it.uppercase()}" } ?: ""), leg.expectedArrivalMs, "arrives")
-        } else {
-            Triple("CHANGE" + (otw.legStart?.let { " AT ${it.uppercase()}" } ?: "") + " · $word LEAVES", leg.expectedDepartureMs, "leaves")
+        OnTheWayBody(card, otw, nowMs, actions)
+    }
+}
+
+/** The on-the-way card under its title: the ride now, the connection, MAP, other ways, other services. */
+@Composable
+private fun OnTheWayBody(card: TripCard, otw: OnTheWay, nowMs: Long, actions: HomeActions) {
+    val c = TtTheme.colors
+    val tz = TtTheme.time.timeZone
+    val fmt = TtTheme.time.clockFormat
+    val leg = otw.leg
+    val riding = otw.stage == FollowStage.RIDING
+    val openMap = { actions.openJourneyMap(card.trip.id, otw.journey) }
+    // The ride now (or the one being walked to).
+    val status = statusPresentation(leg)
+    val word = vehicleWord(leg.mode)
+    val (label, target, verb) = if (riding) {
+        Triple("ON THE $word · ARRIVES" + (otw.legEnd?.let { " ${it.uppercase()}" } ?: ""), leg.expectedArrivalMs, "arrives")
+    } else {
+        Triple("CHANGE" + (otw.legStart?.let { " AT ${it.uppercase()}" } ?: "") + " · $word LEAVES", leg.expectedDepartureMs, "leaves")
+    }
+    val cd = countdown(target, nowMs, tz, fmt, status.countdownPrefix, verb)
+    val spoken = "${if (riding) "On the" else "Change to the"} ${leg.routeName} to ${leg.headsign}, ${cd.spoken}, ${status.spoken}"
+    Column(
+        Modifier.fillMaxWidth().serviceTaps({ actions.openService(leg) }, actions.manageRoutes, spoken),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            RouteBadge(leg.routeName, leg.routeColor, null)
+            PixelText(leg.headsign, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        val cd = countdown(target, nowMs, tz, fmt, status.countdownPrefix, verb)
-        val spoken = "${if (riding) "On the" else "Change to the"} ${leg.routeName} to ${leg.headsign}, ${cd.spoken}, ${status.spoken}"
-        Column(
-            Modifier.fillMaxWidth().serviceTaps({ actions.openService(leg) }, actions.manageRoutes, spoken),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                RouteBadge(leg.routeName, leg.routeColor, null)
-                PixelText(leg.headsign, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Label(label, size = LabelSize.L10, color = c.textSecondary)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-                Countdown(cd, size = CountdownSize.L60)
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    PixelText(formatClock(target, tz, fmt), style = TtTheme.type.title22)
-                    Label("ARR " + formatClock(otw.arrivalMs, tz, fmt), color = c.textSecondary)
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                StatusLine(status)
-                if (!riding && leg.originPlatform != null) PlatformSign(leg.originPlatform!!, leg.platformChanged)
+        Label(label, size = LabelSize.L10, color = c.textSecondary)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+            Countdown(cd, size = CountdownSize.L60)
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                PixelText(formatClock(target, tz, fmt), style = TtTheme.type.title22)
+                Label("ARR " + formatClock(otw.arrivalMs, tz, fmt), color = c.textSecondary)
             }
         }
-        // The connection to make.
-        otw.next?.let { next -> NextRide(next, otw, nowMs, actions) }
-        if (otw.told) {
-            // The user said so (ON BOARD?), and the location will not drop it: they can take it back.
-            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PixelButton("MAP", openMap, Modifier.weight(1f), style = TtTheme.type.label11Bold)
-                PixelButton("NOT ON THIS", actions.notOnThis, Modifier.weight(1f), style = TtTheme.type.label11Bold)
-            }
-        } else {
-            PixelButton("MAP", openMap, Modifier.fillMaxWidth().padding(vertical = 4.dp), style = TtTheme.type.label11Bold)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            StatusLine(status)
+            if (!riding && leg.originPlatform != null) PlatformSign(leg.originPlatform!!, leg.platformChanged)
         }
-        OtherWays(otw, actions)
-        if (card.following.isNotEmpty()) {
-            DashedDivider()
-            Label("OTHER SERVICES", Modifier.padding(top = 8.dp), size = LabelSize.L10, color = c.textSecondary)
-            for ((i, j) in card.following.withIndex()) {
-                Column {
-                    if (i > 0) DashedDivider()
-                    ServiceRow(j.departure, nowMs, actions)
-                }
+    }
+    // The connection to make.
+    otw.next?.let { next -> NextRide(next, otw, nowMs, actions) }
+    if (otw.told) {
+        // The user said so (ON BOARD?), and the location will not drop it: they can take it back.
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PixelButton("MAP", openMap, Modifier.weight(1f), style = TtTheme.type.label11Bold)
+            PixelButton("NOT ON THIS", actions.notOnThis, Modifier.weight(1f), style = TtTheme.type.label11Bold)
+        }
+    } else {
+        PixelButton("MAP", openMap, Modifier.fillMaxWidth().padding(vertical = 4.dp), style = TtTheme.type.label11Bold)
+    }
+    OtherWays(otw, actions, ticket = isTicketId(card.trip.id))
+    if (card.following.isNotEmpty()) {
+        DashedDivider()
+        Label("OTHER SERVICES", Modifier.padding(top = 8.dp), size = LabelSize.L10, color = c.textSecondary)
+        for ((i, j) in card.following.withIndex()) {
+            Column {
+                if (i > 0) DashedDivider()
+                ServiceRow(j.departure, nowMs, actions)
             }
         }
     }
@@ -638,7 +686,7 @@ private fun NextRide(next: Departure, otw: OnTheWay, nowMs: Long, actions: HomeA
  * the user is on, with live times, each with SWITCH; then every way from the next stop, from the planner.
  */
 @Composable
-private fun OtherWays(otw: OnTheWay, actions: HomeActions) {
+private fun OtherWays(otw: OnTheWay, actions: HomeActions, ticket: Boolean = false) {
     val c = TtTheme.colors
     val tz = TtTheme.time.timeZone
     val fmt = TtTheme.time.clockFormat
@@ -676,12 +724,169 @@ private fun OtherWays(otw: OnTheWay, actions: HomeActions) {
                 PixelButton("SWITCH", { actions.switchWay(alt.journey) }, kind = if (alt.minutesSooner > 0) ButtonKind.PRIMARY else ButtonKind.SECONDARY, style = TtTheme.type.label11Bold)
             }
         }
-        if (otw.alternatives.isEmpty()) {
+        if (otw.alternatives.isEmpty() && !ticket) {
             PixelText("No other saved way of this route can be made from here.", style = TtTheme.type.label10, color = c.textSecondary)
         }
         PixelButton("ALL WAYS FROM THE NEXT STOP", actions.waysFromNextStop, Modifier.fillMaxWidth(), ButtonKind.FLAT, style = TtTheme.type.label11Bold)
     }
 }
+
+// ---------------------------------------------------------------- tickets
+
+/**
+ * A ticket (plan 5.6 "Tickets"): a journey set off on with GO, for this trip only. It is drawn as
+ * a paper ticket, not a route card: a stub (TICKET, its two ends, ✕) torn along a perforation from
+ * the body. Waiting, the body is a full trip card's (the run picked with GO until it leaves, then
+ * the next); on the way, the on-the-way card's. Arrived, it is a stamped stub ([ArrivedStub]).
+ */
+@Composable
+private fun TicketView(
+    ticket: TicketCard,
+    nowMs: Long,
+    clock: WallClock,
+    service: (ServiceRef) -> Flow<ServiceDetail>,
+    actions: HomeActions,
+    modifier: Modifier = Modifier,
+) {
+    if (ticket.arrived) {
+        ArrivedStub(ticket, actions, modifier)
+        return
+    }
+    val c = TtTheme.colors
+    val card = ticket.card
+    val otw = card.onTheWay
+    val title = card.titleParts.joinToString(" to ")
+    TicketPaper(modifier) {
+        val label = when {
+            otw != null -> "TICKET · ON YOUR WAY"
+            // The run picked with GO has gone (or was cancelled): the card shows the next one.
+            !ticket.pickedRun && ticket.ticket.plannedRides.isNotEmpty() && card.headline != null -> "TICKET · NEXT RUN"
+            else -> "TICKET"
+        }
+        TicketStub(card, label, if (otw != null) c.go else c.textSecondary) {
+            PixelIconButton(PixelIcons.LampCross, "Close the ticket for $title", { actions.closeTicket(ticket.id) })
+        }
+        TicketPerforation()
+        val body = if (otw != null) {
+            Modifier.cardTaps({ actions.openJourneyMap(card.trip.id, otw.journey) }, actions.manageRoutes, "Map of your journey")
+        } else Modifier
+        Column(
+            body.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (otw != null) OnTheWayBody(card, otw, nowMs, actions)
+            else TripBody(card, nowMs, clock, service, actions, lineRow = true)
+            PixelButton(
+                "KEEP AS ROUTE", { actions.keepTicket(ticket.id) }, Modifier.fillMaxWidth(), ButtonKind.FLAT,
+                style = TtTheme.type.label11Bold,
+            )
+        }
+    }
+}
+
+/** The stamped stub of a ticket that arrived: ARRIVED 08:33 · Bondi Beach, KEEP AS ROUTE and DONE. */
+@Composable
+private fun ArrivedStub(ticket: TicketCard, actions: HomeActions, modifier: Modifier = Modifier) {
+    val c = TtTheme.colors
+    val tz = TtTheme.time.timeZone
+    val fmt = TtTheme.time.clockFormat
+    val time = formatClock(ticket.arrivedAtMs, tz, fmt)
+    val to = ticket.ticket.to.name
+    TicketPaper(modifier) {
+        TicketStub(ticket.card, "TICKET · USED", c.textSecondary, compact = true)
+        TicketPerforation()
+        Column(
+            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Arrived at $to at $time" },
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // The stamp: a box in the Go colour, as if inked on the ticket.
+                Box(Modifier.pixelBorder(c.go, dots = 2).padding(TtTheme.dot * 2).padding(horizontal = 6.dp, vertical = 4.dp)) {
+                    Label("ARRIVED $time", color = c.go, bold = true, size = LabelSize.L12)
+                }
+                PixelText(to, Modifier.weight(1f), TtTheme.type.row15Strong, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PixelButton("KEEP AS ROUTE", { actions.keepTicket(ticket.id) }, Modifier.weight(1f), style = TtTheme.type.label11Bold)
+                PixelButton("DONE", { actions.closeTicket(ticket.id) }, Modifier.weight(1f), ButtonKind.PRIMARY, style = TtTheme.type.label11Bold)
+            }
+        }
+    }
+}
+
+/** The paper of a ticket: a panel with no padding of its own, so the perforation reaches its edges. */
+@Composable
+private fun TicketPaper(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val c = TtTheme.colors
+    Column(modifier.pixelFill(c.panel).pixelBorder(c.divider).padding(TtTheme.dot.dp), content = content)
+}
+
+/** The stub: TICKET ([label] in [labelColor]), the ticket's two ends, the stations under them, and [trailing]. */
+@Composable
+private fun TicketStub(
+    card: TripCard,
+    label: String,
+    labelColor: androidx.compose.ui.graphics.Color,
+    compact: Boolean = false,
+    trailing: @Composable () -> Unit = {},
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = if (compact) 10.dp else 8.dp, bottom = if (compact) 8.dp else 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Label(label, color = labelColor, bold = true, size = LabelSize.L10)
+            TitleParts(card.titleParts, if (compact) TtTheme.type.row15Strong else TtTheme.type.name17)
+            if (!compact && card.stationsLine != null) Label(card.stationsLine, size = LabelSize.L10, color = TtTheme.colors.textSecondary)
+        }
+        trailing()
+    }
+}
+
+/**
+ * The tear line between a ticket's stub and its body: a half-round notch bitten out of each edge
+ * (the screen showing through, edged like the panel) and a row of punched holes between them, all
+ * on the dot grid.
+ */
+@Composable
+private fun TicketPerforation(modifier: Modifier = Modifier) {
+    val c = TtTheme.colors
+    val dot = TtTheme.dot
+    Canvas(modifier.fillMaxWidth().height(dot * NOTCH.size).clearAndSetSemantics { }) {
+        val d = dot.px.toFloat()
+        val w = size.width
+        val cols = (w / d).toInt()
+        // Column -1 and column [cols] are the panel's border, one dot outside this canvas each side.
+        fun cut(row: Int, col: Int): Boolean {
+            if (row !in NOTCH.indices) return false
+            val depth = NOTCH[row]
+            return col < depth - 1 || col > cols - depth
+        }
+        // The right edge counts from the canvas's right side, whatever is left over in between.
+        fun cell(row: Int, col: Int, color: androidx.compose.ui.graphics.Color) =
+            drawRect(color, Offset(if (col > cols / 2) w - (cols - col) * d else col * d, row * d), Size(d, d))
+        val maxDepth = NOTCH.max()
+        val edgeCols = (-1..maxDepth) + (cols - maxDepth..cols)
+        for (row in -1..NOTCH.size) for (col in edgeCols) {
+            when {
+                cut(row, col) -> cell(row, col, c.screen)
+                cut(row - 1, col) || cut(row + 1, col) || cut(row, col - 1) || cut(row, col + 1) -> cell(row, col, c.divider)
+            }
+        }
+        // The holes: two dots of the screen showing through, two of paper, from notch to notch.
+        val inset = (maxDepth + 2) * d
+        val mid = (NOTCH.size / 2 - 1) * d
+        drawDashes(c.screen, d, mid, left = inset, width = w - 2 * inset, on = 2, off = 2, thick = 2)
+    }
+}
+
+/** How deep the ticket's notch bites into each edge, row by row (dots, counting the border). */
+private val NOTCH = intArrayOf(2, 3, 4, 4, 4, 4, 3, 2)
 
 // ---------------------------------------------------------------- compact card
 

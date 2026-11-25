@@ -105,8 +105,8 @@ fun JourneyPage(route: Route.JourneyDetail, holder: JourneyStateHolder, showSave
             if (nav.currentTab != Tab.TRIPS) nav.switchTab(Tab.TRIPS)
         }
     }
-    LaunchedEffect(state.save) {
-        if (state.save is SaveState.Saved) {
+    LaunchedEffect(state.save, state.go) {
+        if (state.save is SaveState.Saved || state.go is GoState.Gone) {
             if (route.fromOnboarding) {
                 nav.resetTo(Tab.TRIPS, PageTransition.Doors)
             } else {
@@ -115,7 +115,10 @@ fun JourneyPage(route: Route.JourneyDetail, holder: JourneyStateHolder, showSave
             }
         }
     }
-    JourneyContent(route, state, places, onBack = { nav.back() }, onSave = holder::save, showSaveDialog = showSaveDialog, onTake = holder::take)
+    JourneyContent(
+        route, state, places, onBack = { nav.back() }, onSave = holder::save, showSaveDialog = showSaveDialog,
+        onTake = holder::take, onGo = holder::go,
+    )
 }
 
 private fun iconOf(end: app.transittracker.ui.nav.JourneyEnd, places: List<SavedPlace>): PixelIconData = endIcon(choiceOf(end, places).icon)
@@ -129,6 +132,7 @@ fun JourneyContent(
     onSave: (withReturn: Boolean, join: Boolean) -> Unit,
     showSaveDialog: Boolean = false,
     onTake: (addToRoute: Boolean) -> Unit = {},
+    onGo: () -> Unit = {},
 ) {
     val c = TtTheme.colors
     val tz = TtTheme.time.timeZone
@@ -172,7 +176,7 @@ fun JourneyContent(
                     }
                 }
             }
-            Footer(route, state, onSave = { dialog = true }, onTake = { takeDialog = true })
+            Footer(route, state, onSave = { dialog = true }, onTake = { takeDialog = true }, onGo = onGo)
         }
         val take = state.take as? TakeState.Ready
         if (takeDialog && take != null) {
@@ -235,7 +239,7 @@ private fun leaveWords(cd: CountdownText) = when (cd.kind) {
 // ---------------------------------------------------------------- footer
 
 @Composable
-private fun Footer(route: Route.JourneyDetail, state: JourneyUiState, onSave: () -> Unit, onTake: () -> Unit) {
+private fun Footer(route: Route.JourneyDetail, state: JourneyUiState, onSave: () -> Unit, onTake: () -> Unit, onGo: () -> Unit) {
     val c = TtTheme.colors
     val t = state.timeline
     val passed = t.leaveMs <= state.nowMs
@@ -248,6 +252,7 @@ private fun Footer(route: Route.JourneyDetail, state: JourneyUiState, onSave: ()
                 is SaveState.Failed -> PixelText("Saving did not work (${s.message}). Try again.", style = TtTheme.type.reading15, color = c.stop)
                 else -> Unit
             }
+            (state.go as? GoState.Failed)?.let { PixelText("GO did not work (${it.message}). Try again.", style = TtTheme.type.reading15, color = c.stop) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
                 val name = route.from.name.uppercase()
                 Column(
@@ -274,7 +279,11 @@ private fun Footer(route: Route.JourneyDetail, state: JourneyUiState, onSave: ()
                         ButtonKind.PRIMARY, enabled = take is TakeState.Ready,
                     )
                 } else if (!route.browseOnly) {
-                    PixelButton(label, onSave, Modifier.padding(bottom = 6.dp), ButtonKind.SECONDARY, enabled = enabled)
+                    // SAVE ROUTE keeps it on Home; GO issues a ticket and follows it now (plan 5.6 "Tickets").
+                    Row(Modifier.padding(start = 8.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PixelButton(label, onSave, kind = ButtonKind.SECONDARY, enabled = enabled)
+                        PixelButton(if (state.go is GoState.Going) "GO..." else "GO", onGo, kind = ButtonKind.PRIMARY, enabled = state.canGo)
+                    }
                 }
             }
         }

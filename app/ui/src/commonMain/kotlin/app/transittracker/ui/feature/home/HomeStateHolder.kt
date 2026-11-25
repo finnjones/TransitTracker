@@ -5,6 +5,7 @@ import app.transittracker.model.ServiceDetail
 import app.transittracker.model.ServiceRef
 import app.transittracker.model.ServiceTime
 import app.transittracker.model.StopId
+import app.transittracker.model.Ticket
 import app.transittracker.model.TransitCore
 import app.transittracker.model.WallClock
 import app.transittracker.ui.feature.follow.FollowStage
@@ -12,6 +13,7 @@ import app.transittracker.ui.feature.follow.FollowState
 import app.transittracker.ui.feature.follow.alternativesOf
 import app.transittracker.ui.feature.follow.isOneOff
 import app.transittracker.ui.feature.follow.switchedMatch
+import app.transittracker.ui.feature.plan.RouteSaver
 import app.transittracker.ui.feature.plan.routeEnds
 import app.transittracker.ui.nav.JourneyEnd
 import app.transittracker.ui.nav.TakeFrom
@@ -66,9 +68,38 @@ class HomeStateHolder(
     private val firstNextDay = MutableStateFlow<Map<String, Long?>>(emptyMap())
     private val asked = mutableSetOf<String>()
 
-    private val upcoming: Flow<Map<String, List<Journey>>> = core.trips.flatMapLatest { trips ->
-        if (trips.isEmpty()) flowOf(emptyMap())
-        else combine(trips.map { t -> core.upcoming(t.id, count).map { t.id to it } }) { it.toMap() }
+    /** Tickets (GO), read once for every use below. */
+    private val tickets: Flow<List<Ticket>> = core.tickets
+        .distinctUntilChanged()
+        .shareIn(scope, SharingStarted.WhileSubscribed(), replay = 1)
+
+    /** The next services of every saved trip and every ticket (a ticket's id works like a trip's). */
+    private val upcoming: Flow<Map<String, List<Journey>>> = combine(
+        core.trips,
+        tickets.map { list -> list.map { it.trip } }.distinctUntilChanged().onStart { emit(emptyList()) },
+    ) { trips, ticketTrips -> trips + ticketTrips }
+        .distinctUntilChanged()
+        .flatMapLatest { trips ->
+            if (trips.isEmpty()) flowOf(emptyMap())
+            else combine(trips.map { t -> core.upcoming(t.id, count).map { t.id to it } }) { it.toMap() }
+        }
+
+    private val saver = RouteSaver(core, places)
+
+    /** DONE, or the ticket's close button: tears ticket [id] off. */
+    fun closeTicket(id: String) {
+        scope.launch { runCatching { core.closeTicket(id) } }
+    }
+
+    /**
+     * KEEP AS ROUTE: saves ticket [id]'s journey as a saved route between its two ends (another
+     * way of the route between the same ends when there is one), then tears the ticket off.
+     */
+    fun keepTicket(id: String) {
+        scope.launch {
+            val ticket = tickets.first().firstOrNull { it.id == id } ?: return@launch
+            runCatching { saver.keepTicket(ticket) }
+        }
     }
 
     /** Follow my journey, collected once (it asks for the location while collected). */
@@ -172,8 +203,8 @@ class HomeStateHolder(
         upcoming.onStart { emit(emptyMap()) },
         core.dataStatus.map<_, app.transittracker.model.DataStatus?> { it }.onStart { emit(null) },
         settings.settings.map { it.cardDensity }.distinctUntilChanged(),
-        combine(places.places, places.tripPlaces) { p, l -> p to l },
-    ) { trips, up, status, density, (p, l) -> HomeInputs(trips, up, status, density, p, l) }
+        combine(places.places, places.tripPlaces, tickets.onStart { emit(emptyList()) }) { p, l, k -> Triple(p, l, k) },
+    ) { trips, up, status, density, (p, l, k) -> HomeInputs(trips, up, status, density, p, l, tickets = k) }
 
     override val state: StateFlow<HomeUiState> = combine(
         inputs, stopNames, firstNextDay, ticker, follow,

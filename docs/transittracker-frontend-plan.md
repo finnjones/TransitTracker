@@ -532,6 +532,9 @@ Four steps, each one screen, each skippable where the app can still work.
 - Multi-leg trips show each leg's badge and the change: "[T9] → [M1] · change
   at Chatswood · 6 min". The strip shows the first leg.
 - After the last service: "No more services tonight · first 04:32".
+- A ticket (GO, section 5.6 "Tickets") sits at the top, above every folder,
+  drawn as a torn paper ticket (a stub with notched edges and a perforation)
+  so it never looks like a saved route's card.
 - Empty state: an empty platform at night and one button, ADD YOUR FIRST TRIP.
 
 ### 5.3 Trip timetable
@@ -649,10 +652,29 @@ Rules for walking and changes:
 Two actions at the bottom:
 
 - **SAVE ROUTE** keeps the journey as a saved route on Home.
-- **GO** follows this journey: the screen steps through the legs as time
-  passes ("get off at the next stop", a countdown at each change) and warns
-  when a later connection is at risk. GO is planned for a later phase; SAVE
-  ROUTE is in the first.
+- **GO** sets off on this journey now, for this trip only: it issues a
+  ticket (below) and opens Trips.
+
+GO makes the same checks as SAVE ROUTE: for a journey with a ride the phone's
+timetable does not have, the page says why and both buttons are off.
+
+**Tickets**
+
+A saved route is like an Opal card, kept and used every day; a ticket is a
+paper ticket, issued for one trip and then torn off. The user never chooses
+"temporary": GO makes a ticket, SAVE ROUTE a route.
+
+| Moment | What happens |
+|---|---|
+| GO | A ticket for the journey's pattern (as SAVE ROUTE would save it), between the journey's two ends, with the run on the page as the one picked. If a saved route already has that pattern (the same route, or a route between the same ends with that way), no ticket is issued: Trips shows that route's card |
+| Waiting | The ticket card at the top of Home: TICKET, "From ▶ To", the lines and changes, and the run picked with its countdown and leave-by, until it leaves. A missed run is no problem: the ticket holds the pattern, so the card shows the next run (TICKET · NEXT RUN) |
+| On the way | Follow my journey prefers a ticket over a saved route on the same vehicle; the card shows the on-the-way content (the ride, the connection, other ways from the next stop), marked TICKET · ON YOUR WAY |
+| Arrived | A stamped stub, "ARRIVED 08:33 · Campbell Pde", with KEEP AS ROUTE and DONE, for 10 minutes; then it disappears |
+| Unused | It expires 90 minutes after the run picked was to leave (90 minutes after the planned arrival once on the way) |
+| Any time | ✕ (or DONE) tears it off. KEEP AS ROUTE, on the card or the stub, saves the pattern as a route between the ticket's ends (another way of the route between the same ends when there is one) and tears the ticket off |
+
+Tickets live on the phone only: they are never synced to the account, and
+signing in elsewhere does not bring them along.
 
 **Saved routes**
 

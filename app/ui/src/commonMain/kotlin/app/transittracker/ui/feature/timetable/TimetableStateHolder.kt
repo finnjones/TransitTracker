@@ -94,8 +94,11 @@ class TimetableStateHolder(
      */
     suspend fun ends(): Pair<JourneyEnd, JourneyEnd>? = routeEnds(core, places, tripId)
 
-    private val trip: Flow<Pair<Boolean, SavedTrip?>> = core.trips
-        .map { list -> true to list.firstOrNull { it.id == tripId } }
+    /** The saved trip, else the ticket (GO), with this id. */
+    private val trip: Flow<Pair<Boolean, SavedTrip?>> = combine(core.trips, core.tickets.onStart { emit(emptyList()) }) { list, tickets ->
+        true to (list.firstOrNull { it.id == tripId } ?: tickets.firstOrNull { it.id == tripId }?.trip)
+    }
+        .distinctUntilChanged()
         .onStart { emit(false to null) }
 
     private val rows: Flow<Pair<ServiceDate, List<Journey>?>> = dateFlow.flatMapLatest { d ->

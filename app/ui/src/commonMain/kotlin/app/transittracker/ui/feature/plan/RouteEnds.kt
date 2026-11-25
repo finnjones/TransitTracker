@@ -2,16 +2,21 @@ package app.transittracker.ui.feature.plan
 
 import app.transittracker.model.StopId
 import app.transittracker.model.TransitCore
+import app.transittracker.model.isTicketId
 import app.transittracker.ui.nav.JourneyEnd
 import app.transittracker.ui.places.PlacesStore
 import kotlinx.coroutines.flow.first
 
 /**
  * The two ends of saved route [tripId], to plan it again: its saved places, else the stations it
- * starts and ends at (of any of its ways), found by name among the phone's stops. Null when the
- * route or an end cannot be found.
+ * starts and ends at (of any of its ways), found by name among the phone's stops. For a ticket's
+ * id, the ends the ticket was issued between. Null when the route or an end cannot be found.
  */
 suspend fun routeEnds(core: TransitCore, places: PlacesStore, tripId: String): Pair<JourneyEnd, JourneyEnd>? {
+    if (isTicketId(tripId)) {
+        val ticket = runCatching { core.tickets.first() }.getOrDefault(emptyList()).firstOrNull { it.id == tripId } ?: return null
+        return journeyEndOf(ticket.from) to journeyEndOf(ticket.to)
+    }
     val t = core.trips.first().firstOrNull { it.id == tripId } ?: return null
     val link = runCatching { places.tripPlaces.first()[tripId] }.getOrNull()
     val all = runCatching { places.currentPlaces() }.getOrDefault(emptyList())

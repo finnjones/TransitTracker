@@ -55,7 +55,10 @@ class JourneyMapStateHolder(
     private val tracked: Flow<List<TrackingState>> =
         if (legs.isEmpty()) flowOf(emptyList()) else combine(legs.map { core.track(it.ref) }) { it.toList() }
 
-    private val trip = core.trips.map { list -> list.firstOrNull { it.id == tripId } }.distinctUntilChanged()
+    /** The saved trip, else the ticket (GO), with this id. */
+    private val trip = combine(core.trips, core.tickets.onStart { emit(emptyList()) }) { list, tickets ->
+        list.firstOrNull { it.id == tripId } ?: tickets.firstOrNull { it.id == tripId }?.trip
+    }.distinctUntilChanged()
 
     override val state: StateFlow<JourneyMapUiState> = combine(
         tracked,

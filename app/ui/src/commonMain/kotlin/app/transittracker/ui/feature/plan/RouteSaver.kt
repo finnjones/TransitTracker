@@ -6,6 +6,8 @@ import app.transittracker.model.LegPoint
 import app.transittracker.model.RouteOption
 import app.transittracker.model.TripLeg
 import app.transittracker.model.wayIdFor
+import app.transittracker.model.isTicketId
+import app.transittracker.model.Ticket
 import app.transittracker.ui.feature.follow.isOneOff
 import app.transittracker.ui.nav.TakeFrom
 import app.transittracker.model.SavedTrip
@@ -108,7 +110,8 @@ class RouteSaver(private val core: TransitCore, private val places: PlacesStore)
      * saved way, or a stop is not in the phone's timetable).
      */
     suspend fun wayFromOrigin(from: TakeFrom, itinerary: Itinerary): List<TripLeg>? {
-        if (isOneOff(from.wayId)) return null
+        // A ticket is followed for one trip only: there is no route to add a way to.
+        if (isOneOff(from.wayId) || isTicketId(from.tripId)) return null
         val route = core.trips.first().firstOrNull { it.id == from.tripId } ?: return null
         val way = route.way(from.wayId) ?: route.ways.singleOrNull() ?: return null
         val prefix = way.legs.take(from.rideIndex + 1)
@@ -130,6 +133,17 @@ class RouteSaver(private val core: TransitCore, private val places: PlacesStore)
             prefix.dropLast(1) + last.copy(destinationStopIds = setOf(station)) +
                 found.mapIndexed { i, l -> if (i == 0) l.copy(minConnectionMinutes = change) else l }
         }
+    }
+
+    /**
+     * KEEP AS ROUTE: saves [ticket]'s pattern as a saved route between its two ends (as another
+     * way of the route between the same ends when there is one), then tears the ticket off.
+     * Returns the ids of the routes saved.
+     */
+    suspend fun keepTicket(ticket: Ticket): List<String> {
+        val saved = save(routeOfTicket(ticket), journeyEndOf(ticket.from), journeyEndOf(ticket.to), withReturn = false, join = true)
+        core.closeTicket(ticket.id)
+        return saved
     }
 
     /** Adds [legs] to saved route [tripId] as another way (nothing when it already has that way). */

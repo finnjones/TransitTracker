@@ -42,6 +42,18 @@ interface TransitCore {
     /** Reads saved trips from storage again (after they were restored from the user's account). */
     suspend fun reloadTrips() {}
 
+    // ---- Tickets (stored on the phone only, never synced; see Tickets.kt) ----
+    /**
+     * Tickets not yet expired ([isExpired]), oldest issued first. Expired tickets are dropped
+     * from storage as they expire. Every lookup below that takes a trip id ([upcoming],
+     * [underway], [timetable], [alertsFor]) also takes a ticket's id ([Ticket.id]).
+     */
+    val tickets: Flow<List<Ticket>> get() = kotlinx.coroutines.flow.flowOf(emptyList())
+    /** Issues [ticket], or replaces the ticket with the same id (status changes go through here too). */
+    suspend fun saveTicket(ticket: Ticket) {}
+    /** Tears off ticket [id] (DONE, swiped away, or kept as a route). */
+    suspend fun closeTicket(id: String) {}
+
     // ---- Departures: timetable with the live layer applied ----
     fun upcoming(tripId: String, count: Int = 6): Flow<List<Journey>>
     fun timetable(tripId: String, serviceDate: ServiceDate): Flow<List<Journey>>

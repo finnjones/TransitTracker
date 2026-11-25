@@ -91,6 +91,7 @@ private fun AppBody(
 ) {
     LaunchedEffect(deps) { deps.core.start() }
     LaunchedEffect(deps) { deps.ticketKeeper.run() }
+    LaunchedEffect(deps) { deps.returnTickets.run() }
     DisposableEffect(controller, navigator, deps) {
         controller.navigator = navigator
         controller.core = deps.core

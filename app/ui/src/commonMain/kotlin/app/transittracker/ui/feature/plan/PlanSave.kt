@@ -1,5 +1,6 @@
 package app.transittracker.ui.feature.plan
 
+import app.transittracker.model.DEFAULT_CONNECTION_MINUTES
 import app.transittracker.model.Itinerary
 import app.transittracker.model.ItineraryLeg
 import app.transittracker.model.LegKind
@@ -8,6 +9,7 @@ import app.transittracker.model.SavedTrip
 import app.transittracker.model.StopId
 import app.transittracker.model.TripLeg
 import app.transittracker.model.RouteOption
+import app.transittracker.model.reversedTrip
 import app.transittracker.model.rides
 import app.transittracker.model.routePattern
 import app.transittracker.model.wayIdFor
@@ -22,7 +24,7 @@ import app.transittracker.ui.places.TripPlaces
  */
 
 /** Minimum connection when the planner gives no walk between two rides (same platform or stop). */
-const val NO_WALK_CONNECTION_MINUTES = 3
+const val NO_WALK_CONNECTION_MINUTES = DEFAULT_CONNECTION_MINUTES
 
 private fun modeWord(mode: Mode?) = when (mode) {
     Mode.TRAIN -> "train"
@@ -97,29 +99,8 @@ fun savedTripOf(itinerary: Itinerary, stationOf: Map<StopId, StopId> = emptyMap(
  * A pinned way stays pinned the other way.
  */
 fun returnTripOf(trip: SavedTrip): SavedTrip {
-    val ways = trip.ways.map { w -> reverseLegs(w.legs).let { RouteOption(wayIdFor(it), it, w.label) } }
-    val pinned = trip.ways.indexOfFirst { it.id == trip.pinnedWayId }.takeIf { it >= 0 }?.let { ways[it].id }
-    val legs = ways.first().legs
-    return SavedTrip(
-        id = tripIdFor(legs),
-        originName = trip.destinationName,
-        destinationName = trip.originName,
-        legs = legs,
-        pinnedWayId = pinned,
-    ).withWays(ways)
-}
-
-private fun reverseLegs(forward: List<TripLeg>): List<TripLeg> {
-    val n = forward.size
-    return (0 until n).map { j ->
-        val f = forward[n - 1 - j]
-        TripLeg(
-            originStopIds = f.destinationStopIds,
-            destinationStopIds = f.originStopIds,
-            routeIds = f.routeIds,
-            minConnectionMinutes = if (j == 0) NO_WALK_CONNECTION_MINUTES else forward[n - j].minConnectionMinutes,
-        )
-    }
+    val back = reversedTrip(trip, "")
+    return back.copy(id = tripIdFor(back.legs))
 }
 
 /**

@@ -106,6 +106,9 @@ class HomeStateHolder(
         }
     }
 
+    /** Where the phone is, for the order of the trips (null without a follower or location permission). */
+    private val here: Flow<app.transittracker.model.LatLng?> = (follower?.position ?: flowOf(null)).onStart { emit(null) }
+
     /** Follow my journey, collected once (it asks for the location while collected). */
     private val following: Flow<FollowState> = (follower?.state ?: flowOf(FollowState()))
         .shareIn(scope, SharingStarted.WhileSubscribed(), replay = 1)
@@ -207,8 +210,15 @@ class HomeStateHolder(
         upcoming.onStart { emit(emptyMap()) },
         core.dataStatus.map<_, app.transittracker.model.DataStatus?> { it }.onStart { emit(null) },
         settings.settings.map { it.cardDensity }.distinctUntilChanged(),
-        combine(places.places, places.tripPlaces, tickets.onStart { emit(emptyList()) }) { p, l, k -> Triple(p, l, k) },
-    ) { trips, up, status, density, (p, l, k) -> HomeInputs(trips, up, status, density, p, l, tickets = k) }
+        combine(places.places, places.tripPlaces, tickets.onStart { emit(emptyList()) }, here) { p, l, k, h -> PlaceInputs(p, l, k, h) },
+    ) { trips, up, status, density, pl -> HomeInputs(trips, up, status, density, pl.places, pl.links, tickets = pl.tickets, here = pl.here) }
+
+    private data class PlaceInputs(
+        val places: List<app.transittracker.ui.places.SavedPlace>,
+        val links: Map<String, app.transittracker.ui.places.TripPlaces>,
+        val tickets: List<Ticket>,
+        val here: app.transittracker.model.LatLng?,
+    )
 
     override val state: StateFlow<HomeUiState> = combine(
         inputs, stopNames, firstNextDay, ticker, follow,

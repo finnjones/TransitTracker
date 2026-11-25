@@ -522,6 +522,13 @@ Four steps, each one screen, each skippable where the app can still work.
 - The first trip in each folder is a full card (headline, journey strip, two
   following services); the rest are compact one-line cards. A density setting
   makes every card compact.
+- Trips follow the user's own order, except where they are: within 500 m of a
+  saved place, the trips that start there come first and the trips that end
+  there (they are already there) go last. A trip starts or ends at a place
+  when it is linked to it, or leaves from or arrives at one of the place's
+  switched-on stops. Folders follow their first trip. Location is read only
+  while the app is open and permission was already given; it is never asked
+  for here.
 - Tap a service to open it (vehicle pass); tap a card title for the full
   timetable; long-press a card to reorder or edit.
 - A trip between saved places is titled with the place names, with the
@@ -675,6 +682,15 @@ paper ticket, issued for one trip and then torn off. The user never chooses
 
 Tickets live on the phone only: they are never synced to the account, and
 signing in elsewhere does not bring them along.
+
+**The way back.** A route saved one way is still ridden home again. Follow my
+journey also looks for you on the way back of every saved route whose way back
+is not saved (the same rides in reverse order, on the same lines). Once it
+finds you on one, it issues a ticket for it, as if you had set off with GO:
+the ticket's ends are the route's ends swapped (its saved places, else its
+stations), it shows ON YOUR WAY with the ride you are on and the one you change
+to, and KEEP AS ROUTE on the stub saves it. A way back is never asked about
+with ON BOARD? (it has no card until it is followed).
 
 **Saved routes**
 

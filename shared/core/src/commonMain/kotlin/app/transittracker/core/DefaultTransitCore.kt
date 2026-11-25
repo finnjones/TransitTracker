@@ -18,6 +18,7 @@ import app.transittracker.model.PackStatus
 import app.transittracker.model.PushKeys
 import app.transittracker.model.TestPushResponse
 import app.transittracker.model.Ticket
+import app.transittracker.model.impliedReturn
 import app.transittracker.model.isExpired
 import app.transittracker.model.Route
 import app.transittracker.model.RouteId
@@ -281,10 +282,13 @@ class DefaultTransitCore internal constructor(
 
     override suspend fun closeTicket(id: String) = ticketStore.delete(id)
 
-    /** The saved trip, else the trip of the ticket not yet expired, with id [tripId] (null when neither). */
+    /**
+     * The saved trip, else the trip of the ticket not yet expired, else the way back of a saved
+     * trip ([impliedReturn]), with id [tripId] (null when none).
+     */
     private fun tripById(tripId: String): Flow<SavedTrip?> =
         combine(tripStore.trips, tickets) { trips, tickets ->
-            trips.firstOrNull { it.id == tripId } ?: tickets.firstOrNull { it.id == tripId }?.trip
+            trips.firstOrNull { it.id == tripId } ?: tickets.firstOrNull { it.id == tripId }?.trip ?: impliedReturn(trips, tripId)
         }.distinctUntilChanged()
 
     // ---- Departures ----

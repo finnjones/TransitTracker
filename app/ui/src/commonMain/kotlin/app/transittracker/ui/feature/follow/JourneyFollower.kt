@@ -9,6 +9,8 @@ import app.transittracker.model.TicketStatus
 import app.transittracker.model.TransitCore
 import app.transittracker.model.VehiclePosition
 import app.transittracker.model.WallClock
+import app.transittracker.model.impliedReturns
+import app.transittracker.model.isReturnId
 import app.transittracker.ui.platform.LocationFix
 import app.transittracker.ui.platform.PermissionState
 import app.transittracker.ui.platform.PlatformServices
@@ -52,6 +54,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * one tap ([onBoard]) follows that journey until it arrives or the user takes it back
  * ([notOnThis]), moved along by the fixes that fit it, else by the clock ([progressByClock]).
  *
+ * The way back of each saved trip is looked for too ([impliedReturns]), after the saved trips:
+ * a route saved one way is ridden home again. [ReturnTickets] issues a ticket for a way back once
+ * it is followed, so Home has a card for it.
+ *
  * Tickets not yet arrived are followed like saved trips, by the ticket's id, listed first. Where a
  * ticket's journey and a saved trip's fit alike (they share the vehicle the user is on), the
  * ticket is followed ([isChosen], [preferredFit]): the user said they are making that trip.
@@ -70,6 +76,10 @@ class JourneyFollower(
     private val slowFixMs: Long = 5_000,
     /** A trip stays unsure this long after the last fix that could not rule it out, so the question does not flicker. */
     private val unsureHoldMs: Long = 60_000,
+    /** How often [position] is read again. */
+    private val positionIntervalMs: Long = 60_000,
+    /** A fix this old or newer is reused for [position] instead of asking again. */
+    private val positionMaxAgeMs: Long = 2 * 60_000,
 ) {
     /** False while the app is hidden (set by `AppController`): no location is asked for then. */
     val foreground = MutableStateFlow(true)
@@ -158,6 +168,28 @@ class JourneyFollower(
 
     private data class Gate(val on: Boolean, val permission: PermissionState, val foreground: Boolean)
 
+    /**
+     * Where the phone is, for Home to put the trips that start here first: the last fix while it is
+     * under [positionMaxAgeMs] old (following takes them often while a journey is under way), else
+     * a new one, every [positionIntervalMs]. Only while the app is in the [foreground] and location
+     * permission was already given (it never asks); null otherwise, or while no fix has come.
+     * Independent of the Follow my journey setting.
+     */
+    val position: Flow<LatLng?> = combine(platform.locationPermission, foreground) { p, fg -> p == PermissionState.GRANTED && fg }
+        .distinctUntilChanged()
+        .flatMapLatest { ok ->
+            if (!ok) flowOf<LatLng?>(null)
+            else channelFlow<LatLng?> {
+                while (true) {
+                    val now = clock.nowMillis()
+                    val recent = lastFix.value?.takeIf { now - it.timeMs in 0..positionMaxAgeMs }
+                    send((recent ?: platform.currentFix(now))?.position)
+                    delay(positionIntervalMs)
+                }
+            }
+        }
+        .distinctUntilChanged()
+
     private val latestState = MutableStateFlow(FollowState())
 
     /**
@@ -219,8 +251,9 @@ class JourneyFollower(
             routes.value = underway.flatMap { (_, j) -> j.legs.map { it.routeId } }.toSet()
             val keys = underway.map { it.second.departure.ref }.toSet()
             val trips = underway.map { it.first }.toSet()
-            // The saved journeys under way, by trip: what the user can say they are on.
-            val askable = underway.filterNot { isOneOff(it.second.wayId) }
+            // The saved journeys under way, by trip: what the user can say they are on. A way back
+            // has no card of its own to ask on until it is followed (as a ticket).
+            val askable = underway.filterNot { isOneOff(it.second.wayId) || isReturnId(it.first) }
             // The trips still unsure at [now], each with its journeys under way.
             fun unsure(now: Long): Map<String, List<Journey>> {
                 unsureUntil.entries.removeAll { it.value <= now || it.key !in trips }
@@ -277,13 +310,16 @@ class JourneyFollower(
 
     /**
      * The journeys under way of every ticket not yet arrived (first: the user set off on them),
-     * then of every saved trip, each with its trip or ticket id.
+     * then of every saved trip, then of the way back of every saved trip ([impliedReturns]: the
+     * user rides home on a route saved one way only), each with its trip, ticket or way-back id.
      */
     private suspend fun underwayJourneys(): List<Pair<String, Journey>> {
         val tickets = runCatching { core.tickets.first() }.getOrDefault(emptyList())
             .filter { it.status != TicketStatus.ARRIVED }.map { it.id }
-        val trips = core.trips.first().map { it.id }
-        return (tickets + trips).distinct().flatMap { id -> core.underway(id).first().map { id to it } }
+        val saved = core.trips.first()
+        val trips = saved.map { it.id }
+        val returns = impliedReturns(saved).map { it.id }
+        return (tickets + trips + returns).distinct().flatMap { id -> core.underway(id).first().map { id to it } }
     }
 
     private suspend fun candidate(tripId: String, journey: Journey, vehicles: List<VehiclePosition>): FollowCandidate =

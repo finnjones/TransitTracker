@@ -4,6 +4,7 @@ import app.transittracker.model.DataStatus
 import app.transittracker.model.Departure
 import app.transittracker.model.DepartureStatus
 import app.transittracker.model.Journey
+import app.transittracker.model.LatLng
 import app.transittracker.model.SavedTrip
 import app.transittracker.model.ServiceDate
 import app.transittracker.model.StopId
@@ -14,6 +15,7 @@ import app.transittracker.model.bestRuns
 import app.transittracker.ui.feature.follow.FollowMatch
 import app.transittracker.ui.feature.follow.FollowStage
 import app.transittracker.ui.feature.follow.isOneOff
+import app.transittracker.ui.feature.places.distanceMeters
 import app.transittracker.ui.places.SavedPlace
 import app.transittracker.ui.places.TripPlaces
 import app.transittracker.ui.settings.CardDensity
@@ -409,16 +411,52 @@ data class HomeInputs(
     val unsure: Map<String, List<Journey>> = emptyMap(),
     /** Tickets not torn off yet; their journeys are in [upcoming] under the ticket's id. */
     val tickets: List<Ticket> = emptyList(),
+    /** Where the phone is (null when not known): trips from the saved place the user is at come first. */
+    val here: LatLng? = null,
 )
+
+/** Within this of a saved place the user is at it (a fix indoors can be a street or two out). */
+const val AT_PLACE_M = 500.0
+
+/** The saved place the user is at: the nearest of [places] within [AT_PLACE_M] of [here], or null. */
+fun placeAt(here: LatLng?, places: List<SavedPlace>): SavedPlace? {
+    val h = here ?: return null
+    return places.map { it to distanceMeters(h, it.position) }.filter { it.second <= AT_PLACE_M }.minByOrNull { it.second }?.first
+}
+
+/**
+ * Saved [trips] in the order Home shows them for a user at saved place [at] (null: not at one):
+ * first the trips that start there, then the rest, then the trips that end there (the user is
+ * already there), each group in the user's own order. A trip starts (or ends) at [at] when it is
+ * linked to it ([links]), or, when that end is not linked to a place, when it leaves from (or
+ * arrives at) one of the place's switched-on stops.
+ */
+fun orderForPlace(trips: List<SavedTrip>, links: Map<String, TripPlaces>, at: SavedPlace?): List<SavedTrip> {
+    val byOrder = trips.sortedBy { it.order }
+    if (at == null) return byOrder
+    val stops = at.enabledStops.mapTo(HashSet()) { it.stopId }
+    fun rank(t: SavedTrip): Int {
+        val link = links[t.id]
+        val starts = link?.fromPlaceId?.let { it == at.id } ?: t.ways.any { w -> w.legs.first().originStopIds.any { it in stops } }
+        val ends = link?.toPlaceId?.let { it == at.id } ?: t.ways.any { w -> w.legs.last().destinationStopIds.any { it in stops } }
+        return when {
+            starts && !ends -> 0
+            ends && !starts -> 2
+            else -> 1
+        }
+    }
+    return byOrder.sortedBy { rank(it) }
+}
 
 /** Pure: the home screen for [inputs] at [nowMs]; [today] is the service date `YYYYMMDD`. */
 fun buildHomeState(inputs: HomeInputs, nowMs: Long, today: ServiceDate): HomeUiState {
     val trips = inputs.trips ?: return HomeUiState(loading = true, nowMs = nowMs)
     val placesById = inputs.places.associateBy { it.id }
     val compact = inputs.density == CardDensity.COMPACT
-    // Folders in the order their first trip appears.
+    // Folders in the order their first trip appears: the trips from where the user is first.
     val groups = LinkedHashMap<String?, MutableList<SavedTrip>>()
-    for (t in trips.sortedBy { it.order }) groups.getOrPut(t.folder?.takeIf { it.isNotBlank() }) { mutableListOf() } += t
+    val ordered = orderForPlace(trips, inputs.links, placeAt(inputs.here, inputs.places))
+    for (t in ordered) groups.getOrPut(t.folder?.takeIf { it.isNotBlank() }) { mutableListOf() } += t
     // The trip the user is on (Follow my journey) comes first, on its own, above every folder.
     val followedId = inputs.follow?.match?.tripId?.takeIf { id -> trips.any { it.id == id } }
     val onTheWay = followedId?.let { id -> HomeFolder(null, listOf(card(trips.first { it.id == id }, full = true, inputs, placesById, nowMs))) }

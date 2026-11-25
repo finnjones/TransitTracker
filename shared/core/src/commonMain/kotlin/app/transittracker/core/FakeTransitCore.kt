@@ -7,6 +7,7 @@ import app.transittracker.model.Alert
 import app.transittracker.model.DataStatus
 import app.transittracker.model.DepartureStatus
 import app.transittracker.model.JoinResult
+import app.transittracker.model.impliedReturn
 import app.transittracker.model.Journey
 import app.transittracker.model.LatLng
 import app.transittracker.model.PackStatus
@@ -185,7 +186,7 @@ class FakeTransitCore(
     private val tripsAndTickets: Flow<List<SavedTrip>> = combine(tripsState, ticketsState) { t, k -> t + k.map { it.trip } }
 
     private fun journeys(tripId: String, compute: (JourneyPlanner, SavedTrip, Long) -> List<Journey>): Flow<List<Journey>> =
-        combine(tripsAndTickets, ticker()) { list, _ -> list.firstOrNull { it.id == tripId } }
+        combine(tripsState, tripsAndTickets, ticker()) { trips, list, _ -> list.firstOrNull { it.id == tripId } ?: impliedReturn(trips, tripId) }
             .map { trip ->
                 if (trip == null) return@map emptyList()
                 val now = clock.nowMillis()

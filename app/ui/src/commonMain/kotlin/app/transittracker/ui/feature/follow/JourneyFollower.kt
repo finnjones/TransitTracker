@@ -5,6 +5,7 @@ import app.transittracker.model.LatLng
 import app.transittracker.model.RouteId
 import app.transittracker.model.ServiceDetail
 import app.transittracker.model.ShapeId
+import app.transittracker.model.TicketStatus
 import app.transittracker.model.TransitCore
 import app.transittracker.model.VehiclePosition
 import app.transittracker.model.WallClock
@@ -17,6 +18,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -32,7 +36,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Follow my journey: which journey of a saved trip the phone is on, from its location.
+ * Follow my journey: which journey of a saved trip or a ticket the phone is on, from its location.
  *
  * One per app (`AppDeps.follower`), so what it has worked out survives moving between Home and
  * the journey map. [state] is cold: location is asked for only while a screen collects it, the
@@ -47,6 +51,11 @@ import kotlinx.coroutines.withTimeoutOrNull
  * lists the trips and their journeys under way ([FollowState.unsure]) for Home to ask ON BOARD?;
  * one tap ([onBoard]) follows that journey until it arrives or the user takes it back
  * ([notOnThis]), moved along by the fixes that fit it, else by the clock ([progressByClock]).
+ *
+ * Tickets not yet arrived are followed like saved trips, by the ticket's id, listed first. Where a
+ * ticket's journey and a saved trip's fit alike (they share the vehicle the user is on), the
+ * ticket is followed ([isChosen], [preferredFit]): the user said they are making that trip.
+ * [latest] is the last state a screen saw, for [TicketKeeper], which must not ask for location.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class JourneyFollower(
@@ -149,6 +158,14 @@ class JourneyFollower(
 
     private data class Gate(val on: Boolean, val permission: PermissionState, val foreground: Boolean)
 
+    private val latestState = MutableStateFlow(FollowState())
+
+    /**
+     * The last [state] a screen collected (IDLE before any). Hot, and asks for nothing: for
+     * watchers that should not start location themselves ([TicketKeeper]).
+     */
+    val latest: StateFlow<FollowState> = latestState.asStateFlow()
+
     /** What following is doing; re-emits after every fix. */
     val state: Flow<FollowState> = combine(
         settings.settings.map { it.followJourney }.distinctUntilChanged(),
@@ -176,6 +193,7 @@ class JourneyFollower(
             }
         }
         .distinctUntilChanged()
+        .onEach { latestState.value = it }
 
     private fun polling(): Flow<FollowState> = channelFlow {
         // The live vehicles of every line under way, kept while polling (the core polls them).
@@ -229,7 +247,7 @@ class JourneyFollower(
                 // Two ways sharing a vehicle read alike; per journey, its best reading counts.
                 val evidence = readings.groupBy { it.key }.mapValues { (_, r) -> r.maxOf { it.evidence } }
                 memory.update { m ->
-                    val match = preferredFit(readings.mapNotNull { it.match }, m.pinned, m.scores)
+                    val match = preferredFit(readings.mapNotNull { it.match }, m.pinned, m.scores, tuning)
                     val n = m.next(match, keys, evidence, tuning)
                     // A fix that fits the journey the user said they are on says where on it; else the clock.
                     if (match != null && match.key == n.pinned?.key) n else byClock(n, underway, now)
@@ -257,8 +275,16 @@ class JourneyFollower(
         return m.copy(pinned = progressByClock(p, j, nowMs))
     }
 
-    private suspend fun underwayJourneys(): List<Pair<String, Journey>> =
-        core.trips.first().flatMap { t -> core.underway(t.id).first().map { t.id to it } }
+    /**
+     * The journeys under way of every ticket not yet arrived (first: the user set off on them),
+     * then of every saved trip, each with its trip or ticket id.
+     */
+    private suspend fun underwayJourneys(): List<Pair<String, Journey>> {
+        val tickets = runCatching { core.tickets.first() }.getOrDefault(emptyList())
+            .filter { it.status != TicketStatus.ARRIVED }.map { it.id }
+        val trips = core.trips.first().map { it.id }
+        return (tickets + trips).distinct().flatMap { id -> core.underway(id).first().map { id to it } }
+    }
 
     private suspend fun candidate(tripId: String, journey: Journey, vehicles: List<VehiclePosition>): FollowCandidate =
         FollowCandidate(

@@ -62,7 +62,8 @@ fun statusForDelay(delaySeconds: Int): DepartureStatus = when {
  * - a CANCELLED trip, or one that skips the origin or destination, is [DepartureStatus.CANCELLED];
  * - added / replacement trips not in the timetable come from [TripDelta.addedStops];
  * - the platform is that of [StopDelta.actualStopId] when set ([Departure.platformChanged]);
- * - data is stale when the delta says so or when it is older than 2 × the poll interval;
+ * - data is stale when the delta says so or when it is older than 2 × the poll interval; a trip
+ *   the server says is stale reports the age of its last update, not of the phone's last poll;
  * - a call's [StopCall.position] is that of the stop actually used; [ServiceDetail.shapeId] comes
  *   from the timetable trip (added services have none).
  */
@@ -319,9 +320,25 @@ class Overlay(
         return stop.parentId?.let { timetable.stop(it)?.name } ?: stop.name
     }
 
-    private fun dataAge(t: LiveTrip): Long = (nowMs - t.receivedMs).coerceAtLeast(0)
+    /** How long ago the phone received [t]: what the phone's own staleness rule goes by. */
+    private fun receivedAge(t: LiveTrip): Long = (nowMs - t.receivedMs).coerceAtLeast(0)
 
-    private fun isStale(t: LiveTrip): Boolean = t.delta.stale || dataAge(t) > 2 * live.pollIntervalMs
+    /**
+     * The age reported with [t] ([app.transittracker.model.Departure.dataAgeMs]). Normally how long
+     * ago the phone received it, the same clock as the LIVE chip. When the server marks the trip
+     * stale, the data was already old when it arrived (the feed has not updated this trip for
+     * minutes, even though the phone polled a moment ago), so the age then also counts how old the
+     * trip's update was on arrival. Otherwise a trip flagged stale by the server reads
+     * "STALE · 0S OLD". Both [TripDelta.updatedMs] and [LiveTrip.receivedMs] are on the server's clock.
+     */
+    private fun dataAge(t: LiveTrip): Long {
+        val received = receivedAge(t)
+        val updated = t.delta.updatedMs
+        if (!t.delta.stale || updated <= 0) return received
+        return received + (t.receivedMs - updated).coerceAtLeast(0)
+    }
+
+    private fun isStale(t: LiveTrip): Boolean = t.delta.stale || receivedAge(t) > 2 * live.pollIntervalMs
 
     /** Delay of the closest listed stop before [sequence] (GTFS-R propagation), if any. */
     private fun inheritedDelay(stops: List<StopDelta>, sequence: Int): Int? =

@@ -25,7 +25,7 @@ import app.transittracker.ui.settings.ClockFormat
 enum class TrackPhase {
     /** A fresh reported position: the vehicle in colour, creeping between reports. */
     LIVE,
-    /** Live service data is stale: the vehicle fades and the countdown gets "~". */
+    /** Live service data is stale: the vehicle fades and the countdown says "ABOUT". */
     STALE,
     /** Live service, but no position younger than 2 minutes: the ghost at the timetabled place. */
     POSITION_UNAVAILABLE,
@@ -47,7 +47,8 @@ sealed interface TrackChip {
 }
 
 /** The footer's big countdown: "REACHES STRATHFIELD IN" over "04:12". */
-data class TrackCountdown(val label: String, val targetMs: Long, val prefix: String = "", val spokenVerb: String)
+/** [approximate]: stale data, so the countdown is an estimate (see [countdownLabel]). */
+data class TrackCountdown(val label: String, val targetMs: Long, val approximate: Boolean = false, val spokenVerb: String)
 
 data class TrackingUiState(
     val loading: Boolean = true,
@@ -131,23 +132,23 @@ fun trackPhase(t: TrackingState, alightIndex: Int?, nowMs: Long): TrackPhase {
  * (then "LEAVES <board> IN" while it stands there); after it, "ARRIVES <alight> IN"; without your
  * stops, the next stop. Null when there is nothing ahead.
  */
-fun trackCountdown(calls: List<StopCall>, board: Int?, alight: Int?, next: StopCall?, nowMs: Long, prefix: String): TrackCountdown? {
+fun trackCountdown(calls: List<StopCall>, board: Int?, alight: Int?, next: StopCall?, nowMs: Long, approximate: Boolean): TrackCountdown? {
     fun name(i: Int) = shortName(calls[i].stopName).uppercase()
     if (board != null) {
         val arr = calls[board].arrivalMs()
         val dep = calls[board].departureMs()
-        if (arr != null && arr > nowMs) return TrackCountdown("REACHES ${name(board)} IN", arr, prefix, "reaches ${shortName(calls[board].stopName)} in")
-        if (dep != null && dep > nowMs) return TrackCountdown("LEAVES ${name(board)} IN", dep, prefix, "leaves ${shortName(calls[board].stopName)} in")
+        if (arr != null && arr > nowMs) return TrackCountdown("REACHES ${name(board)} IN", arr, approximate, "reaches ${shortName(calls[board].stopName)} in")
+        if (dep != null && dep > nowMs) return TrackCountdown("LEAVES ${name(board)} IN", dep, approximate, "leaves ${shortName(calls[board].stopName)} in")
     }
     if (alight != null) {
         val arr = calls[alight].arrivalMs()
-        if (arr != null && arr > nowMs) return TrackCountdown("ARRIVES ${name(alight)} IN", arr, prefix, "arrives at ${shortName(calls[alight].stopName)} in")
+        if (arr != null && arr > nowMs) return TrackCountdown("ARRIVES ${name(alight)} IN", arr, approximate, "arrives at ${shortName(calls[alight].stopName)} in")
     }
     if (next != null) {
         val arr = next.arrivalMs() ?: return null
         if (arr > nowMs) {
             val n = shortName(next.stopName)
-            return TrackCountdown("REACHES ${n.uppercase()} IN", arr, prefix, "reaches $n in")
+            return TrackCountdown("REACHES ${n.uppercase()} IN", arr, approximate, "reaches $n in")
         }
     }
     return null
@@ -287,8 +288,8 @@ fun buildTrackingState(
     val scene = MapScene(listOf(line), stations, vehicles, focus = focus, lineWidthDots = 4, schematic = g.schematic)
 
     // ---- footer
-    val prefix = if (phase == TrackPhase.STALE || phase == TrackPhase.POSITION_UNAVAILABLE) "~" else status.countdownPrefix
-    val countdown = if (phase == TrackPhase.ARRIVED || phase == TrackPhase.CANCELLED) null else trackCountdown(calls, board, alight, next, nowMs, prefix)
+    val approximate = phase == TrackPhase.STALE || phase == TrackPhase.POSITION_UNAVAILABLE || status.approximate
+    val countdown = if (phase == TrackPhase.ARRIVED || phase == TrackPhase.CANCELLED) null else trackCountdown(calls, board, alight, next, nowMs, approximate)
     val bigWords = when (phase) {
         TrackPhase.ARRIVED -> "ARRIVED AT " + shortName(calls[endIndex].stopName).uppercase()
         TrackPhase.CANCELLED -> "CANCELLED"

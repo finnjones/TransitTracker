@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -80,7 +81,7 @@ class MapStateHoldersTest {
         val cd = assertNotNull(s.countdown)
         assertTrue(cd.label == "REACHES STRATHFIELD IN" || cd.label == "LEAVES STRATHFIELD IN", cd.label)
         assertTrue(cd.targetMs > now)
-        assertEquals("", cd.prefix)
+        assertFalse(cd.approximate)
         assertEquals("Strathfield", s.nextStop)
         assertTrue(s.description.contains("Strathfield"))
     }
@@ -93,7 +94,7 @@ class MapStateHoldersTest {
         assertEquals(TrackPhase.STALE, s.phase)
         assertEquals(TrackChip.Stale, s.chip)
         assertEquals(SpriteLook.FADED, s.scene.vehicles.single().look)
-        assertEquals("~", s.countdown?.prefix)
+        assertEquals(true, s.countdown?.approximate)
         assertEquals("STALE · 3 MIN OLD", s.status.words)
     }
 

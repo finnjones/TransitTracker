@@ -394,7 +394,7 @@ private fun Headline(d: Departure, journey: Journey, nowMs: Long, card: TripCard
     val tz = TtTheme.time.timeZone
     val fmt = TtTheme.time.clockFormat
     val status = statusPresentation(d)
-    val cd = countdown(d.expectedDepartureMs, nowMs, tz, fmt, status.countdownPrefix)
+    val cd = countdown(d.expectedDepartureMs, nowMs, tz, fmt, status.approximate)
     val spoken = serviceSentence(d, cd, status.spoken) + (card.leaveBy?.let { ", " + leaveBySpoken(it, tz, fmt) } ?: "")
     Column(
         Modifier.fillMaxWidth().serviceTaps({ actions.openService(d) }, actions.manageRoutes, spoken),
@@ -481,7 +481,7 @@ private fun ServiceRow(d: Departure, nowMs: Long, actions: HomeActions) {
     val fmt = TtTheme.time.clockFormat
     val status = statusPresentation(d)
     val cancelled = d.status == DepartureStatus.CANCELLED
-    val cd = countdown(d.expectedDepartureMs, nowMs, tz, fmt, status.countdownPrefix)
+    val cd = countdown(d.expectedDepartureMs, nowMs, tz, fmt, status.approximate)
     val where = d.headsign + (d.originPlatform?.let { " · ${platformWords(it)}" } ?: "")
     Row(
         Modifier
@@ -509,10 +509,14 @@ private fun ServiceRow(d: Departure, nowMs: Long, actions: HomeActions) {
     }
 }
 
-private fun rowCountdown(cd: CountdownText): String = when (cd.kind) {
-    CountdownText.Kind.MINUTES -> cd.value + " min"
-    CountdownText.Kind.NOW -> cd.value.lowercase()
-    CountdownText.Kind.CLOCK -> cd.value
+/** "4 min", "now", "21:40"; "about 36 min" for stale data (never "~36 min": the "~" reads as a minus). */
+internal fun rowCountdown(cd: CountdownText): String {
+    val text = when (cd.kind) {
+        CountdownText.Kind.MINUTES -> cd.value + " min"
+        CountdownText.Kind.NOW -> cd.value.lowercase()
+        CountdownText.Kind.CLOCK -> cd.value
+    }
+    return if (cd.approximate) "about $text" else text
 }
 
 /** "T9 to Gordon, leaves in 4 minutes, platform 3, 4 minutes late" (plan 7). */
@@ -591,7 +595,7 @@ private fun OnTheWayBody(card: TripCard, otw: OnTheWay, nowMs: Long, actions: Ho
     } else {
         Triple("CHANGE" + (otw.legStart?.let { " AT ${it.uppercase()}" } ?: "") + " · $word LEAVES", leg.expectedDepartureMs, "leaves")
     }
-    val cd = countdown(target, nowMs, tz, fmt, status.countdownPrefix, verb)
+    val cd = countdown(target, nowMs, tz, fmt, status.approximate, verb)
     val spoken = "${if (riding) "On the" else "Change to the"} ${leg.routeName} to ${leg.headsign}, ${cd.spoken}, ${status.spoken}"
     Column(
         Modifier.fillMaxWidth().serviceTaps({ actions.openService(leg) }, actions.manageRoutes, spoken),
@@ -646,7 +650,7 @@ private fun NextRide(next: Departure, otw: OnTheWay, nowMs: Long, actions: HomeA
     val fmt = TtTheme.time.clockFormat
     val status = statusPresentation(next)
     val cancelled = next.status == DepartureStatus.CANCELLED
-    val cd = countdown(next.expectedDepartureMs, nowMs, tz, fmt, status.countdownPrefix)
+    val cd = countdown(next.expectedDepartureMs, nowMs, tz, fmt, status.approximate)
     val change = when {
         cancelled -> "CANCELLED · CHECK OTHER SERVICES"
         otw.changeMinutes == null -> null
@@ -920,7 +924,7 @@ private fun CompactTripCard(card: TripCard, nowMs: Long, actions: HomeActions, m
             }
             if (d != null) {
                 val status = statusPresentation(d)
-                Countdown(countdown(d.expectedDepartureMs, nowMs, tz, fmt, status.countdownPrefix), size = CountdownSize.S30)
+                Countdown(countdown(d.expectedDepartureMs, nowMs, tz, fmt, status.approximate), size = CountdownSize.S30)
             }
         }
         if (card.aboard.isNotEmpty()) AboardRow(card, actions, Modifier.padding(top = 8.dp))

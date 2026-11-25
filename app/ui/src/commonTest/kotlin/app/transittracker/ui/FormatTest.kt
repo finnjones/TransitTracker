@@ -9,12 +9,14 @@ import app.transittracker.ui.format.badgeTextColor
 import app.transittracker.ui.format.carCountWords
 import app.transittracker.ui.format.contrastRatio
 import app.transittracker.ui.format.countdown
+import app.transittracker.ui.format.countdownLabel
 import app.transittracker.ui.format.countdownMmSs
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.format.formatDayDate
 import app.transittracker.ui.format.occupancyPresentation
 import app.transittracker.ui.format.parseLineColor
 import app.transittracker.ui.format.platformPresentation
+import app.transittracker.ui.format.staleAgeWords
 import app.transittracker.ui.format.statusPresentation
 import app.transittracker.ui.settings.ClockFormat
 import app.transittracker.ui.theme.ColorRole
@@ -23,6 +25,7 @@ import app.transittracker.ui.theme.NightColors
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -55,9 +58,10 @@ class FormatTest {
     fun staleOverridesLiveButNotCancelled() {
         statusPresentation(DepartureStatus.LATE, 300, stale = true, dataAgeMs = 180_000).let {
             assertEquals(Lamp.RING, it.lamp); assertEquals("STALE · 3 MIN OLD", it.words)
-            assertEquals(ColorRole.SECONDARY, it.role); assertEquals("~", it.countdownPrefix)
+            assertEquals(ColorRole.SECONDARY, it.role); assertTrue(it.approximate)
         }
-        assertEquals("STALE · 45S OLD", statusPresentation(DepartureStatus.ON_TIME, stale = true, dataAgeMs = 45_000).words)
+        // Under a minute the age is left out: stale data is not seconds old.
+        assertEquals("STALE", statusPresentation(DepartureStatus.ON_TIME, stale = true, dataAgeMs = 45_000).words)
         assertEquals("CANCELLED", statusPresentation(DepartureStatus.CANCELLED, stale = true).words)
         assertEquals("TIMETABLE", statusPresentation(DepartureStatus.TIMETABLED, stale = true).words)
     }
@@ -102,7 +106,40 @@ class FormatTest {
         assertEquals("60", countdown(now + 60 * 60_000 + 59_000, now, sydney).value)
         countdown(now + 61 * 60_000, now, sydney).let { assertEquals("08:39", it.value); assertEquals(CountdownText.Kind.CLOCK, it.kind) }
         assertEquals("8:39 AM", countdown(now + 61 * 60_000, now, sydney, ClockFormat.H12).value)
-        countdown(now + 3 * 60_000, now, sydney, prefix = "~").let { assertEquals("~3", it.value); assertEquals("leaves in about 3 minutes", it.spoken) }
+        countdown(now + 3 * 60_000, now, sydney, approximate = true).let {
+            assertEquals("3", it.value); assertTrue(it.approximate); assertEquals("leaves in about 3 minutes", it.spoken)
+        }
+    }
+
+    /** A "~" in the pixel faces reads as a minus: "~36 min" looked like "-36 min". An estimate is said in words. */
+    @Test
+    fun approximateCountdownsCarryNoSymbol() {
+        val status = statusPresentation(DepartureStatus.ON_TIME, stale = true, dataAgeMs = 240_000)
+        assertTrue(status.approximate)
+        for (target in listOf(now + 30_000, now + 36 * 60_000, now + 90 * 60_000)) {
+            val cd = countdown(target, now, sydney, approximate = status.approximate)
+            assertTrue(cd.approximate)
+            assertFalse(cd.value.any { it == '~' || it == '-' || it == '−' }, cd.value)
+            assertTrue(cd.spoken.contains("about"), cd.spoken)
+        }
+        assertFalse(countdown(now + 36 * 60_000, now, sydney).approximate)
+        assertEquals("LEAVES CENTRAL IN ABOUT", countdownLabel("LEAVES CENTRAL IN", approximate = true))
+        assertEquals("LEAVES CENTRAL IN", countdownLabel("LEAVES CENTRAL IN", approximate = false))
+    }
+
+    /** "STALE · 0S OLD" contradicts itself: a stale label never shows an age under a minute. */
+    @Test
+    fun staleLabelNeverShowsSecondsAge() {
+        assertNull(staleAgeWords(0))
+        assertNull(staleAgeWords(59_999))
+        assertEquals("1 MIN", staleAgeWords(60_000))
+        statusPresentation(DepartureStatus.ON_TIME, stale = true, dataAgeMs = 0).let {
+            assertEquals("STALE", it.words); assertEquals("live data is stale", it.spoken)
+        }
+        assertEquals("STALE", statusPresentation(DepartureStatus.LATE, 300, stale = true, dataAgeMs = null).words)
+        statusPresentation(DepartureStatus.ON_TIME, stale = true, dataAgeMs = 4 * 60_000 + 10_000).let {
+            assertEquals("STALE · 4 MIN OLD", it.words); assertEquals("live data is stale, 4 minutes old", it.spoken)
+        }
     }
 
     @Test

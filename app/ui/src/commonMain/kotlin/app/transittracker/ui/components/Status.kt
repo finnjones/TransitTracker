@@ -237,7 +237,8 @@ enum class CountdownSize { XL76, L60, M44, S30 }
 
 /**
  * Countdown numerals (plan 2.5): Doto Black digits with "MIN" in Silkscreen beside them, or "NOW",
- * or a clock time. Build [text] with `countdown(...)`. Read as [CountdownText.spoken].
+ * or a clock time; "ABOUT" before them when [CountdownText.approximate]. Build [text] with
+ * `countdown(...)`. Read as [CountdownText.spoken].
  */
 @Composable
 fun Countdown(
@@ -258,6 +259,8 @@ fun Countdown(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
+        // An estimate is said in words: a "~" before the digits reads as a minus.
+        if (text.approximate) PixelText("ABOUT", Modifier.alignByBaseline(), unit, color, maxLines = 1)
         PixelText(text.value, Modifier.alignByBaseline(), digits, color, maxLines = 1)
         if (text.unit != null) PixelText(text.unit, Modifier.alignByBaseline(), unit, color, maxLines = 1)
     }

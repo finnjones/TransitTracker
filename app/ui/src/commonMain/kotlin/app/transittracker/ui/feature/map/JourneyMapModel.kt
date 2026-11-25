@@ -369,14 +369,14 @@ fun buildJourneyMapState(
     // ---- countdown to the next thing that happens
     val cur = legs[current]
     val word = vehicleWord(rides[current].mode)
-    val prefix = if (rides[current].status.countdownPrefix.isNotEmpty()) rides[current].status.countdownPrefix else ""
+    val approximate = rides[current].status.approximate
     val countdown = when {
         arrived || !cur.known -> null
         stage == FollowStage.CHANGING || (cur.dep != null && nowMs < cur.dep!!) -> cur.dep?.takeIf { it > nowMs }?.let {
-            TrackCountdown("$word LEAVES ${cur.name(cur.b).uppercase()} IN", it, prefix, "the ${word.lowercase()} leaves ${cur.name(cur.b)} in")
+            TrackCountdown("$word LEAVES ${cur.name(cur.b).uppercase()} IN", it, approximate, "the ${word.lowercase()} leaves ${cur.name(cur.b)} in")
         }
         else -> cur.arr?.takeIf { it > nowMs }?.let {
-            TrackCountdown("ARRIVES ${cur.name(cur.a).uppercase()} IN", it, prefix, "arrives at ${cur.name(cur.a)} in")
+            TrackCountdown("ARRIVES ${cur.name(cur.a).uppercase()} IN", it, approximate, "arrives at ${cur.name(cur.a)} in")
         }
     }
     val bigWords = when {

@@ -54,6 +54,7 @@ import app.transittracker.ui.components.SeatPips
 import app.transittracker.ui.components.StatusLine
 import app.transittracker.ui.components.pixelBorder
 import app.transittracker.ui.format.DefaultLineColor
+import app.transittracker.ui.format.countdownLabel
 import app.transittracker.ui.format.countdownMmSs
 import app.transittracker.ui.format.formatClock
 import app.transittracker.ui.format.parseLineColor
@@ -526,11 +527,10 @@ private fun FooterCountdown(f: Footer, nowMs: Long, modifier: Modifier) {
                 else -> "NEXT STOP $name IN"
             }
             val digits = f.targetMs?.let { countdownMmSs(it, nowMs) } ?: "--:--"
-            val shown = (if (f.approximate) "~" else "") + digits
             val spoken = f.targetMs?.let { spokenCountdown(label, it - nowMs) } ?: label.lowercase()
             Column(modifier.clearAndSetSemantics { contentDescription = spoken }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Label(label, size = LabelSize.L10, color = c.textSecondary)
-                Digits(shown, style = TtTheme.type.digits44)
+                Label(countdownLabel(label, f.approximate), size = LabelSize.L10, color = c.textSecondary)
+                Digits(digits, style = TtTheme.type.digits44)
             }
         }
     }

@@ -106,6 +106,25 @@ class OverlayTest {
         assertFalse(ok.stale)
     }
 
+    /**
+     * The server flags a trip stale when its own update is old, though the phone polled a moment
+     * ago. The age said with it is the trip's, not the poll's: never "STALE · 0S OLD".
+     */
+    @Test
+    fun serverStaleTripReportsTheAgeOfItsUpdate() {
+        val oldUpdate = delta("R1-04", DAY, "R1", dep(0), stale = true).copy(updatedMs = now - 4 * 60_000)
+        val d = overlay(oldUpdate, receivedMs = now - 5_000).departure(scheduled())
+        assertTrue(d.stale)
+        assertEquals(4 * 60_000L, d.dataAgeMs)
+
+        // Not flagged: the age stays the time since the poll, like the LIVE chip.
+        val fresh = delta("R1-04", DAY, "R1", dep(0)).copy(updatedMs = now - 90_000)
+        assertEquals(5_000L, overlay(fresh, receivedMs = now - 5_000).departure(scheduled()).dataAgeMs)
+
+        // Flagged but without a trip timestamp: the time since the poll.
+        assertEquals(5_000L, overlay(delta("R1-04", DAY, "R1", dep(0), stale = true), receivedMs = now - 5_000).departure(scheduled()).dataAgeMs)
+    }
+
     @Test
     fun afterMidnightDepartureUsesPreviousServiceDate() {
         val after = at(0, 20, NEXT_DAY)

@@ -41,6 +41,7 @@ import app.transittracker.ui.components.RouteBadge
 import app.transittracker.ui.components.StatusLine
 import app.transittracker.ui.components.StatusSize
 import app.transittracker.ui.format.carCountWords
+import app.transittracker.ui.format.countdownLabel
 import app.transittracker.ui.format.countdownMmSs
 import app.transittracker.ui.format.occupancyPresentation
 import app.transittracker.ui.motion.flapRow
@@ -180,11 +181,11 @@ private fun TrackingFooter(state: TrackingUiState, actions: TrackingActions) {
                     cd != null -> {
                         val left = countdownMmSs(cd.targetMs, state.nowMs)
                         Column(
-                            Modifier.clearAndSetSemantics { contentDescription = "${cd.spokenVerb} ${spokenMmSs(cd.targetMs - state.nowMs, cd.prefix.isNotEmpty())}" },
+                            Modifier.clearAndSetSemantics { contentDescription = "${cd.spokenVerb} ${spokenMmSs(cd.targetMs - state.nowMs, cd.approximate)}" },
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Label(cd.label, color = c.textSecondary, size = LabelSize.L10)
-                            Digits(cd.prefix + left, style = TtTheme.type.digits44)
+                            Label(countdownLabel(cd.label, cd.approximate), color = c.textSecondary, size = LabelSize.L10)
+                            Digits(left, style = TtTheme.type.digits44)
                         }
                     }
                     else -> {

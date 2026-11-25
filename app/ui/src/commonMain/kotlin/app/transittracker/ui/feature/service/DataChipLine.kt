@@ -14,6 +14,7 @@ import app.transittracker.ui.format.Lamp
 import app.transittracker.ui.format.ageSpoken
 import app.transittracker.ui.format.ageWords
 import app.transittracker.ui.format.liveAgeWords
+import app.transittracker.ui.format.staleAgeWords
 import app.transittracker.ui.theme.TtTheme
 
 /**
@@ -29,7 +30,8 @@ fun DataChipLine(kind: ChipKind, ageMs: Long?, modifier: Modifier = Modifier) {
         ChipKind.TIMETABLE -> Triple(Lamp.RING, c.info, "TIMETABLE")
         ChipKind.OFFLINE -> Triple(Lamp.RING, c.info, "OFFLINE")
     }
-    val age = ageMs?.takeIf { kind == ChipKind.LIVE || kind == ChipKind.STALE }
+    // A STALE age under a minute is left out (see [staleAgeWords]): "STALE · 0S OLD" contradicts itself.
+    val age = ageMs?.takeIf { kind == ChipKind.LIVE || (kind == ChipKind.STALE && staleAgeWords(it) != null) }
     val spoken = when (kind) {
         ChipKind.LIVE -> "Live data" + (age?.let { ", updated ${ageSpoken(it)} ago" } ?: "")
         ChipKind.STALE -> "Live data is stale" + (age?.let { ", ${ageSpoken(it)} old" } ?: "")
@@ -43,6 +45,6 @@ fun DataChipLine(kind: ChipKind, ageMs: Long?, modifier: Modifier = Modifier) {
     ) {
         StatusLamp(lamp, color, size = 10.dp)
         Label(word, color = color, bold = true)
-        if (age != null) Label(if (kind == ChipKind.STALE) ageWords(age) + " OLD" else liveAgeWords(age), color = c.textSecondary)
+        if (age != null) Label(if (kind == ChipKind.STALE) staleAgeWords(age) + " OLD" else liveAgeWords(age), color = c.textSecondary)
     }
 }

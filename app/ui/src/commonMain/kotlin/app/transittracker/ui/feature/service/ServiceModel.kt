@@ -105,7 +105,7 @@ data class Footer(
     val targetMs: Long? = null,
     val platform: String? = null,
     val platformChanged: Boolean = false,
-    /** Stale data: the countdown is prefixed with "~". */
+    /** Stale data: the countdown is an estimate, "LEAVES X IN ABOUT" (see [app.transittracker.ui.format.countdownLabel]). */
     val approximate: Boolean = false,
 )
 

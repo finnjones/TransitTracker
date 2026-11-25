@@ -46,6 +46,11 @@ data class CountdownText(
     /** For the screen reader: "leaves in 4 minutes", "leaves now", "leaves at 08:42". */
     val spoken: String,
     val kind: Kind,
+    /**
+     * Stale data: the time is an estimate. Shown as the word "about" beside [value], never as a
+     * symbol in it ("~4" in the pixel faces reads as "-4").
+     */
+    val approximate: Boolean = false,
 ) {
     enum class Kind { NOW, MINUTES, CLOCK }
 }
@@ -53,30 +58,37 @@ data class CountdownText(
 /**
  * Countdown rules (plan 2.5): whole minutes ("4" MIN, rounded down); "NOW" under one minute
  * (and once the time has passed); the clock time instead when more than 60 minutes away.
- * [prefix] is "~" for stale data (see [StatusPresentation.countdownPrefix]).
+ * [approximate] for stale data (see [StatusPresentation.approximate]): the value is unchanged, the
+ * spoken words say "about", and the screen draws "ABOUT" beside the digits.
  */
 fun countdown(
     targetMs: Long,
     nowMs: Long,
     zone: TimeZone,
     format: ClockFormat = ClockFormat.H24,
-    prefix: String = "",
+    approximate: Boolean = false,
     verb: String = "leaves",
 ): CountdownText {
     val diff = targetMs - nowMs
     val minutes = diff / 60_000
-    val approx = if (prefix.isNotEmpty()) "about " else ""
+    val approx = if (approximate) "about " else ""
     return when {
-        diff < 60_000 -> CountdownText(prefix + "NOW", null, "$verb ${approx}now", CountdownText.Kind.NOW)
+        diff < 60_000 -> CountdownText("NOW", null, "$verb ${approx}now", CountdownText.Kind.NOW, approximate)
         minutes <= 60 -> CountdownText(
-            prefix + minutes, "MIN", "$verb in $approx${minutesSpoken(minutes.toInt())}", CountdownText.Kind.MINUTES,
+            minutes.toString(), "MIN", "$verb in $approx${minutesSpoken(minutes.toInt())}", CountdownText.Kind.MINUTES, approximate,
         )
         else -> {
             val clock = formatClock(targetMs, zone, format)
-            CountdownText(prefix + clock, null, "$verb at $approx$clock", CountdownText.Kind.CLOCK)
+            CountdownText(clock, null, "$verb at $approx$clock", CountdownText.Kind.CLOCK, approximate)
         }
     }
 }
+
+/**
+ * The words above a minutes-and-seconds countdown: "LEAVES CENTRAL IN", or "LEAVES CENTRAL IN
+ * ABOUT" when [approximate] (stale data), so the estimate is said in words, not with a "~".
+ */
+fun countdownLabel(label: String, approximate: Boolean): String = if (approximate) "$label ABOUT" else label
 
 /**
  * Minutes-and-seconds countdown for the Service and tracking screens: "04:59", "00:07";

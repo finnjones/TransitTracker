@@ -15,13 +15,17 @@ import app.transittracker.ui.feature.home.dataChip
 import app.transittracker.ui.feature.home.followingOf
 import app.transittracker.ui.feature.home.headlineOf
 import app.transittracker.ui.feature.home.leaveByState
+import app.transittracker.ui.feature.home.rowCountdown
 import app.transittracker.ui.feature.home.walkTo
+import app.transittracker.ui.format.countdown
 import app.transittracker.ui.format.mapStopName
 import app.transittracker.ui.format.shortStopName
+import app.transittracker.ui.format.statusPresentation
 import app.transittracker.ui.places.PlaceIcon
 import app.transittracker.ui.places.PlaceStop
 import app.transittracker.ui.places.SavedPlace
 import app.transittracker.model.LatLng
+import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -115,5 +119,30 @@ class HomeRulesTest {
         assertEquals("Bondi Beach, Campbell Pde", shortStopName("Bondi Beach, Campbell Pde, Stand C"))
         assertEquals("Bondi Beach", mapStopName("Bondi Beach, Campbell Pde, Stand C"))
         assertEquals("Oxford St at Glenmore Rd", mapStopName("Oxford St at Glenmore Rd"))
+    }
+
+    /**
+     * The reported row: a Metro service 36 min away, flagged stale. It read "-36 min" ("~" in the
+     * pixel face) over "STALE · 0S OLD".
+     */
+    @Test
+    fun staleFollowingRowSaysAboutAndNoSecondsAge() {
+        val d = dep("m1", 36).copy(stale = true, dataAgeMs = 0)
+        val status = statusPresentation(d)
+        assertEquals("STALE", status.words)
+        val cd = countdown(d.expectedDepartureMs, now, TimeZone.of("Australia/Sydney"), approximate = status.approximate)
+        assertEquals("about 36 min", rowCountdown(cd))
+        // When the age is known (the trip's update is 4 min old), it is said.
+        assertEquals("STALE · 4 MIN OLD", statusPresentation(d.copy(dataAgeMs = 4 * min)).words)
+    }
+
+    @Test
+    fun rowCountdownWords() {
+        val tz = TimeZone.of("Australia/Sydney")
+        assertEquals("36 min", rowCountdown(countdown(now + 36 * min, now, tz)))
+        assertEquals("now", rowCountdown(countdown(now + 30_000, now, tz)))
+        assertEquals("about now", rowCountdown(countdown(now + 30_000, now, tz, approximate = true)))
+        val clock = countdown(now + 90 * min, now, tz, approximate = true)
+        assertEquals("about " + clock.value, rowCountdown(clock))
     }
 }

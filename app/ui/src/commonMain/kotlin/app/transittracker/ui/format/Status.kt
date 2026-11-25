@@ -22,8 +22,11 @@ data class StatusPresentation(
     val strikeScheduledTime: Boolean = false,
     /** Cancelled: strike the whole row. */
     val strikeRow: Boolean = false,
-    /** "~" when the live data is stale, prefixed to the countdown. */
-    val countdownPrefix: String = "",
+    /**
+     * The live data is stale, so the countdown is an estimate: say "about" beside it (see
+     * [CountdownText.approximate]). Never a "~": in the pixel faces it reads as a minus.
+     */
+    val approximate: Boolean = false,
     /** Words for a screen reader, e.g. "4 minutes late". */
     val spoken: String = words.lowercase(),
 )
@@ -31,7 +34,8 @@ data class StatusPresentation(
 /**
  * Status mapping (plan 2.7). [stale] (live data too old) overrides the live statuses, but never
  * CANCELLED; TIMETABLED services are never stale. [delaySeconds] gives the minutes for LATE / EARLY
- * (rounded to the nearest minute, at least 1). [dataAgeMs] gives "3 MIN OLD" for stale data.
+ * (rounded to the nearest minute, at least 1). [dataAgeMs] gives "3 MIN OLD" for stale data
+ * (see [staleAgeWords]: under a minute it is left out).
  */
 fun statusPresentation(
     status: DepartureStatus,
@@ -43,11 +47,12 @@ fun statusPresentation(
         return StatusPresentation(Lamp.CROSS, "CANCELLED", ColorRole.STOP, strikeRow = true, spoken = "cancelled")
     }
     if (stale && status != DepartureStatus.TIMETABLED) {
-        val age = dataAgeMs?.let { " · " + ageWords(it) + " OLD" } ?: ""
-        val spokenAge = dataAgeMs?.let { ", " + ageSpoken(it) + " old" } ?: ""
+        val shownAge = dataAgeMs?.takeIf { staleAgeWords(it) != null }
+        val age = shownAge?.let { " · " + staleAgeWords(it) + " OLD" } ?: ""
+        val spokenAge = shownAge?.let { ", " + ageSpoken(it) + " old" } ?: ""
         return StatusPresentation(
             Lamp.RING, "STALE$age", ColorRole.SECONDARY,
-            countdownPrefix = "~", spoken = "live data is stale$spokenAge",
+            approximate = true, spoken = "live data is stale$spokenAge",
         )
     }
     return when (status) {
@@ -85,6 +90,13 @@ fun ageWords(ms: Long): String {
     val s = (ms / 1000).coerceAtLeast(0)
     return if (s < 60) "${s}S" else "${s / 60} MIN"
 }
+
+/**
+ * The age beside STALE: "3 MIN", or null under a minute. Stale data is minutes old, so a seconds
+ * age beside STALE ("STALE · 0S OLD") could only be the wrong clock (when the phone fetched it,
+ * not how old the data is); it is left out rather than contradict the word.
+ */
+fun staleAgeWords(ms: Long): String? = if (ms < 60_000) null else ageWords(ms)
 
 /** [ageWords] for a LIVE chip: "NOW" for the first few seconds (never "0S"), then "12S AGO", "3 MIN AGO". */
 fun liveAgeWords(ms: Long): String = if (ms < 5_000) "NOW" else ageWords(ms) + " AGO"

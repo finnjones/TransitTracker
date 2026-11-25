@@ -93,12 +93,16 @@ class HomeStateHolder(
 
     /**
      * KEEP AS ROUTE: saves ticket [id]'s journey as a saved route between its two ends (another
-     * way of the route between the same ends when there is one), then tears the ticket off.
+     * way of the route between the same ends when there is one), then tears the ticket off. When
+     * the user is on the ticket's journey, Follow my journey carries on with it as that route's way.
      */
     fun keepTicket(id: String) {
         scope.launch {
             val ticket = tickets.first().firstOrNull { it.id == id } ?: return@launch
-            runCatching { saver.keepTicket(ticket) }
+            val saved = runCatching { saver.keepTicket(ticket) }.getOrNull() ?: return@launch
+            val route = saved.firstOrNull() ?: return@launch
+            val match = lastFollowed?.match?.takeIf { it.tripId == id } ?: return@launch
+            follower?.switchTo(match.copy(tripId = route, wayId = app.transittracker.model.wayIdFor(ticket.trip.legs)))
         }
     }
 

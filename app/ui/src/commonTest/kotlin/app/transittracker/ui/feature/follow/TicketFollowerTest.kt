@@ -9,6 +9,7 @@ import app.transittracker.model.WallClock
 import app.transittracker.model.ticketIdFor
 import app.transittracker.ui.app.AppDeps
 import app.transittracker.ui.fake.FakeSetup
+import app.transittracker.ui.feature.home.HomeStateHolder
 import app.transittracker.ui.gallery.SampleData
 import app.transittracker.ui.platform.FakePlatformServices
 import kotlinx.coroutines.flow.first
@@ -143,5 +144,25 @@ class TicketFollowerTest {
         val arrived = deps.core.tickets.first { it.single().status == TicketStatus.ARRIVED }.single()
         assertEquals(arrival, arrived.arrivedAtMs)
         assertTrue(f.latest.value.match?.tripId != ticketId)
+    }
+
+    @Test
+    fun keepAsRouteOnTheWayCarriesOnFollowingTheSavedRoute() = runTest {
+        val platform = FakePlatformServices(location = null)
+        val deps = AppDeps.fake(platform = platform)
+        deps.core.saveTicket(ticket())
+        val f = follower(deps, platform)
+        val home = HomeStateHolder(deps.core, deps.places, deps.settings, deps.clock, backgroundScope, follower = f)
+        backgroundScope.launch { home.state.collect {} }
+        val asked = f.state.first { it.unsure.isNotEmpty() }
+        val journey = assertNotNull(asked.unsure[ticketId]).first { SampleData.NOW_MS < it.legs[0].expectedArrivalMs }
+        f.onBoard(ticketId, journey)
+        home.state.first { s -> s.tickets.any { it.card.onTheWay != null } }
+
+        home.keepTicket(ticketId)
+        // The same pattern is a saved route already: the ticket joins it, and following moves there.
+        val m = f.state.first { it.match?.tripId == trip }.match
+        assertEquals(trip, m?.tripId)
+        assertTrue(deps.core.tickets.first { it.isEmpty() }.isEmpty())
     }
 }
